@@ -50,6 +50,11 @@ describe('makeUnit', () => {
     expect(u.symbol).toBe('nmi')
   })
 
+  it('keeps ISO prefixes when the display unit is the SI unit itself', () => {
+    const u = makeUnit('m2', { formula: 'value', symbol: 'm2' })
+    expect(u.format(4.1e9)).toBe('4100 km²')
+  })
+
   it('falls back to SI with prefixes without usable metadata', () => {
     const u = makeUnit('m', { formula: 'oops(', symbol: 'nmi' })
     expect(u.format(12300)).toBe('12.3 km')
