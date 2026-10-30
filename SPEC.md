@@ -149,7 +149,7 @@ subtraction.
 | counter | positions by class | position reports, class A, class B, other |
 | counter | distance bins | position reports per log-spaced distance bin, used to compute window avg, median, p95 and p99 |
 | counter | sector counts | position reports per sector and class |
-| gauge | distance, rolling 1 h | average, p95, p99 and max distance |
+| gauge | distance, rolling 1 h | average, median, p95, p99 and max distance |
 | gauge | sector p99, rolling 1 h | p99 distance per sector and class |
 | gauge | unique vessels, rolling 1 h and 24 h | total and per type group |
 | gauge | coverage | cells and area covered today |
@@ -196,7 +196,7 @@ including when it is embedded in another page such as an infodisplay panel.
 |---|---|
 | `GET /summary?window=24h` | headline figures: messages, positions, vessels by group, distance avg, p95, p99 and max |
 | `GET /series?metric=&resolution=&from=&to=` | time series for the charts, read from history |
-| `GET /radar?window=24h&class=a\|b\|all` | 24 sectors with count and max distance |
+| `GET /radar?window=24h&class=a\|b\|all` | 24 sectors with count and p99 distance (the highest hourly p99 in the window, see 2.6) |
 | `GET /coverage?window=7d` | cell ids, GeoJSON for the map, covered area in km2 |
 | `GET /status` | live state: tracked targets, own position age, history reachable or not |
 
@@ -219,8 +219,8 @@ Counters (monotonic, count since the plugin started):
 - `sectors.<nnn>.<class>.count`, one path per sector and class (48)
 
 Gauges:
-- `distance.avgNm`, `distance.p95Nm`, `distance.p99Nm`, `distance.maxNm`,
-  over the last hour
+- `distance.avgNm`, `distance.medianNm`, `distance.p95Nm`, `distance.p99Nm`,
+  `distance.maxNm`, over the last hour
 - `sectors.<nnn>.<class>.p99Nm`, over the last hour
 - `vessels.last1h` and `vessels.last24h`, and
   `vessels.byGroup.<group>.last1h` and `.last24h`

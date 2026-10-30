@@ -147,9 +147,9 @@ Published path names are the persistence schema, so they are defined once in
 - Spoofed positions are the identified practical risk. Distance figures are
   made robust with percentiles (SPEC 2.3) and coverage with a percentile cap
   (SPEC 2.4).
-- REST routes are all read-only and are registered for read-only users with
-  `registerPluginRoutePermissions` (without it the server falls back to
-  admin-only). The plugin adds no auth of its own, and exposes no write
+- REST routes are all read-only and are registered for read-only users
+  through `router.access('readonly')` (SPEC 6.1). On servers without
+  `router.access` they fall back to admin-only. The plugin adds no auth of its own, and exposes no write
   routes.
 - History reads are History API requests built from a fixed set of queries
   with validated parameters; no user-supplied paths or SQL.
@@ -163,7 +163,7 @@ src/
   config.ts           schema and defaults
   paths.ts            published path names (the persistence schema)
   ingest.ts           sentence reassembly and decode
-  classify.ts         class, type group, rejection rules
+  classify.ts         class and type group
   aggregate.ts        buckets, sectors, vessel sets
   coverage.ts         H3 cells, area, GeoJSON
   publish.ts          SignalK deltas
