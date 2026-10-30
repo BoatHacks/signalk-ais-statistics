@@ -62,6 +62,7 @@
     "node": ">=22"
   },
   "dependencies": {
+    "@canboat/ts-pgns": "^3.1.0",
     "@js-temporal/polyfill": "^0.5.1",
     "ggencoder": "^1.0.13",
     "h3-js": "^4.5.0"

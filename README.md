@@ -58,7 +58,8 @@ restart the server after each build.
 
 ## Requirements
 
-- A SignalK server with raw AIS sentences arriving (any AIS receiver input).
+- A SignalK server with AIS arriving from an NMEA 0183 or NMEA 2000
+  receiver. NMEA 2000 needs no converter plugin.
 - Optional but recommended: a History API provider such as `signalk-questdb`
   for history beyond the running process.
 

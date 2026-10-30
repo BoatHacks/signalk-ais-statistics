@@ -1,4 +1,4 @@
-// Plugin entry and wiring (ARCHITECTURE 1): sentence events and own position
+// Plugin entry and wiring (ARCHITECTURE 1): AIS events and own position
 // in, deltas out every minute, coverage files flushed hourly, REST routes and
 // the plotter overlay served while running.
 import type { Path, Plugin, ServerAPI } from '@signalk/server-api'
@@ -12,6 +12,7 @@ import {
   type HistoryReader,
 } from './history'
 import { Ingest, type IngestStats } from './ingest'
+import { N2kIngest } from './n2k'
 import { OwnPosition } from './ownposition'
 import {
   buildManifest,
@@ -41,8 +42,8 @@ interface EventSource {
 
 interface Running {
   config: Config
-  /** One decoder per sentence event, so multipart messages stay apart. */
-  ingests: Ingest[]
+  /** One decoder per event and input, so multipart messages stay apart. */
+  ingests: { stats: IngestStats }[]
   own: OwnPosition
   agg: Aggregator
   coverage: Coverage
@@ -168,10 +169,12 @@ export function createPlugin(app: ServerAPI): Plugin {
       void findHistory(s)
       void setMetadata()
 
-      const onSentence = (ingest: Ingest, sentence: unknown) => {
+      const onInput = (sentences: Ingest, pgns: N2kIngest, input: unknown) => {
         try {
           const time = Date.now()
-          const msg = ingest.push(sentence as string)
+          // Sentence events carry strings, N2KAnalyzerOut carries PGN objects.
+          const msg =
+            typeof input === 'string' ? sentences.push(input) : pgns.push(input)
           if (!msg) return
           const located = s.agg.add(msg, s.own.at(time), time)
           if (located)
@@ -182,15 +185,16 @@ export function createPlugin(app: ServerAPI): Plugin {
               located.time,
             )
         } catch (err) {
-          // Never let one bad sentence escape into the server.
-          log('processing a sentence failed', err)
+          // Never let one bad sentence or PGN escape into the server.
+          log('processing AIS input failed', err)
         }
       }
       const events = app as unknown as EventSource
       for (const event of config.sentenceEvents) {
-        const ingest = new Ingest()
-        s.ingests.push(ingest)
-        const listener = (sentence: unknown) => onSentence(ingest, sentence)
+        const sentences = new Ingest()
+        const pgns = new N2kIngest()
+        s.ingests.push(sentences, pgns)
+        const listener = (input: unknown) => onInput(sentences, pgns, input)
         events.on(event, listener)
         s.stops.push(() => events.removeListener(event, listener))
       }

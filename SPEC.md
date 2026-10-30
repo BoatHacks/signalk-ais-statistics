@@ -177,16 +177,18 @@ History is not kept by the plugin. See section 8.
 
 ## 5. Sources / Inputs
 
-1. **Raw AIS sentences** from the SignalK server's sentence events
-   (`!AIVDM`), by default `nmea0183` (NMEA 0183 input) and `nmea0183AISout`
-   (where converter plugins such as `signalk-n2kais-to-nmea0183` emit AIS
-   that arrives over NMEA 2000). The events are configurable (9); each has
-   its own decoder so multipart messages from different events never mix.
+1. **AIS messages** from the SignalK server's events, by default
+   `nmea0183` (raw NMEA 0183 input, `!AIVDM`) and `N2KAnalyzerOut` (NMEA
+   2000 input, each PGN as the server's canboatjs decodes it). The events
+   are configurable (9); events carrying raw sentences, such as
+   `nmea0183AISout` from converter plugins like
+   `signalk-n2kais-to-nmea0183`, work too. Each event has its own decoder
+   so multipart messages from different events never mix.
    If the same receiver reaches two events, its messages count twice, so
    the user lists only one of them (see 12). The only source of message counts, message types and class,
    because SignalK's data model does not retain per-message information.
-   `!AIVDO` (the vessel's own transponder) is excluded from reception
-   statistics.
+   `!AIVDO` and NMEA 2000 AIS PGNs marked as own transmissions (the
+   vessel's own transponder) are excluded from reception statistics.
 2. **Own position** from `navigation.position` on self.
 3. **History** from whichever history provider the server has registered,
    read through the SignalK v2 History API, for the web app and for windowed
@@ -399,7 +401,7 @@ directly. Consequences:
 | `ownPositionMaxAgeSeconds` | 60 | staleness limit for own position |
 | `coverageRetentionDays` | 90 | how long daily cell-set files are kept |
 | `publishOverlay` | true | register the plotter extension overlay |
-| `sentenceEvents` | `nmea0183`, `nmea0183AISout` | server events to read raw sentences from; any event names |
+| `sentenceEvents` | `nmea0183`, `N2KAnalyzerOut` | server events to read AIS from: raw sentences or canboat PGNs; any event names |
 
 ## 10. MVP Scope
 
@@ -485,13 +487,16 @@ help of `max` (6.2). Verified across a plugin restart on the test server.
   so distances are published and served in metres and areas in square
   metres, replacing earlier `...Nm` and `...Km2` names. Nothing was
   released, so no stored history needed migrating.
-- **Configurable sentence events (chosen by the maintainer).** AIS from an
-  NMEA 2000 receiver reaches plugins only through a converter on
-  `nmea0183AISout`, and some setups use other events, so the events are an
-  option defaulting to `nmea0183` and `nmea0183AISout`. Cost: a receiver
-  that reaches two listed events is counted twice; the option's description
-  says so. Decoding NMEA 2000 PGNs directly was rejected as a second
-  decoder.
+- **Configurable events (chosen by the maintainer).** Some setups carry AIS
+  on other events, so the events are an option defaulting to `nmea0183` and
+  `N2KAnalyzerOut`. Cost: a receiver that reaches two listed events is
+  counted twice; the option's description says so.
+- **NMEA 2000 AIS from `N2KAnalyzerOut`, not through a converter.** The
+  server already decodes every PGN with canboatjs and emits the result on
+  `N2KAnalyzerOut`, so reading AIS PGNs there needs no second decoder, only
+  a field mapping; it spares users the `signalk-n2kais-to-nmea0183` round
+  trip. Lookup fields arrive as canboat names and are turned back into AIS
+  codes with `@canboat/ts-pgns`, the lookup tables n2k-signalk uses.
 
 ## 13. Open Questions
 
