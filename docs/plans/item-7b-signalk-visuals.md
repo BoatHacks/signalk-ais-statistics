@@ -58,7 +58,7 @@ SPEC 6.1, 6.2, 7, 12; ARCHITECTURE 2.11 and 4.
   grids with `auto-fit` and `clamp()`; map at `calc(100vh - 140px)` on
   desktop and `min-height: 50vh` on phones, Leaflet controls restyled as
   floating dark panels.
-- **Icon.** Tobi's graphic as a 512 px PNG at `public/icon.png` (built
+- **Icon.** Tobi's graphic as a 256 px PNG (23 KB) at `public/icon.png` (built
   from `web/static/icon.png`), referenced by `signalk.appIcon` and used as
   the favicon from the same file, plus `favicon.ico` and a touch icon.
 - **Licensing.** No change; all runtime and bundled dependencies are

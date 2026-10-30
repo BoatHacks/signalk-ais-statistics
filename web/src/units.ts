@@ -108,7 +108,11 @@ export function formatSI(v: number | null | undefined, unit: SIUnit): string {
 }
 
 export function makeUnit(si: SIUnit, meta: DisplayUnits | undefined): Unit {
-  const f = meta?.formula ? compileFormula(meta.formula) : undefined
+  // A display unit that is the SI unit itself adds nothing over SI with
+  // ISO prefixes, which reads better for large values.
+  const identity = meta?.formula?.replace(/\s/g, '').toLowerCase() === 'value'
+  const f =
+    meta?.formula && !identity ? compileFormula(meta.formula) : undefined
   if (f && meta?.symbol) {
     const symbol = meta.symbol
     return {
