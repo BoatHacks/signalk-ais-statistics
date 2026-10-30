@@ -373,6 +373,10 @@ svg.radar .axis {
   border: 1px solid rgba(var(--theme-color-rgb), 0.5);
   padding: 4px;
 }
+/* Layer toggles sit below the basemap switch. */
+.map-layers {
+  top: 72px;
+}
 .leaflet-bar,
 .leaflet-touch .leaflet-bar {
   border: 1px solid rgba(var(--theme-color-rgb), 0.5);

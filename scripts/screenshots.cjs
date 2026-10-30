@@ -18,6 +18,7 @@ const { Query } = require(path.join(root, 'dist/query'))
 const { nullHistoryReader } = require(path.join(root, 'dist/history'))
 const { registerRoutes } = require(path.join(root, 'dist/api'))
 const { destination } = require(path.join(root, 'dist/geo'))
+const { radarFeatures } = require(path.join(root, 'dist/overlay'))
 
 const API = '/plugins/signalk-ais-statistics'
 const APP = '/signalk-ais-statistics'
@@ -63,11 +64,14 @@ function synthetic() {
 
 function serve({ agg, cov }) {
   const routes = new Map()
+  const query = new Query(agg, () => nullHistoryReader)
   registerRoutes(
     { access: () => ({ get: (p, h) => routes.set(p, h) }) },
     {
-      query: () => new Query(agg, () => nullHistoryReader),
+      query: () => query,
       coverage: () => cov,
+      overlayExtras: async () =>
+        radarFeatures(await query.radar('24h', 'all', Date.now()), OWN),
       status: () => ({
         running: true,
         noData: false,
