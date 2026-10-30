@@ -7,7 +7,8 @@
   "types": "dist/index.d.ts",
   "files": [
     "dist",
-    "public"
+    "public",
+    "docs/screenshots"
   ],
   "scripts": {
     "build": "npm run build:plugin && npm run build:web",
@@ -33,6 +34,14 @@
   ],
   "signalk": {
     "displayName": "AIS Statistics",
+    "appIcon": "./public/icon.png",
+    "screenshots": [
+      "./docs/screenshots/overview.png",
+      "./docs/screenshots/charts.png",
+      "./docs/screenshots/radar.png",
+      "./docs/screenshots/map.png",
+      "./docs/screenshots/overview-phone.png"
+    ],
     "recommends": [
       "signalk-questdb",
       "@meri-imperiumi/signalk-internet",
