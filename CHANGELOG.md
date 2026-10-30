@@ -6,6 +6,12 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- The plotter overlay draws coverage cells on a magenta to purple ramp with
+  outlines. The blue ramp was almost invisible over chart water.
+- The npm package includes this changelog.
+
 ## [0.1.0] - 2026-10-30
 
 First release.

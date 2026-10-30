@@ -23,6 +23,10 @@ server; the open points are in SPEC section 13.
 - Offer the coverage footprint as an overlay layer for chart plotters that
   support Plotter Extensions, such as Freeboard-SK 3.4.0 or later.
 
+In Freeboard-SK the overlay is listed as "AIS coverage" under the layers
+button. If it is missing after a server update, reload the Freeboard page:
+a tab opened on an older Freeboard skips the overlay without a message.
+
 ## Documents
 
 | Document | Purpose |

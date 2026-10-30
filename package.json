@@ -8,7 +8,8 @@
   "files": [
     "dist",
     "public",
-    "docs/screenshots"
+    "docs/screenshots",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "build": "npm run build:plugin && npm run build:web",

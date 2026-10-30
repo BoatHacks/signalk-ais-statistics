@@ -26,6 +26,18 @@ export function overlayUrls(pluginId: string): OverlayUrls {
   }
 }
 
+// Magenta to purple stands out from both chart water and land; a blue ramp
+// disappears over the sea.
+const CELL_RAMP = [
+  'interpolate',
+  ['linear'],
+  ['get', 'intensity'],
+  0,
+  '#f768a1',
+  1,
+  '#7a0177',
+]
+
 export function overlayStyle(dataUrl: string): object {
   return {
     version: 8,
@@ -38,18 +50,14 @@ export function overlayStyle(dataUrl: string): object {
         type: 'fill',
         source: OVERLAY_SOURCE,
         filter: ['==', ['get', 'kind'], 'cell'],
-        paint: {
-          'fill-color': [
-            'interpolate',
-            ['linear'],
-            ['get', 'intensity'],
-            0,
-            '#9ecae1',
-            1,
-            '#08519c',
-          ],
-          'fill-opacity': 0.35,
-        },
+        paint: { 'fill-color': CELL_RAMP, 'fill-opacity': 0.45 },
+      },
+      {
+        id: 'cell-outlines',
+        type: 'line',
+        source: OVERLAY_SOURCE,
+        filter: ['==', ['get', 'kind'], 'cell'],
+        paint: { 'line-color': CELL_RAMP, 'line-width': 1 },
       },
       {
         id: 'radar',
