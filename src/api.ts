@@ -2,6 +2,7 @@
 // the query layer, serialize. Every route is read-only and registered
 // through router.access('readonly') where the server has it, so read-only
 // users can open the web app; older servers keep them admin-only.
+import { M_PER_NM } from './geo'
 import type { Request, RequestHandler, Response } from 'express'
 import { DAY_MS } from './aggregate'
 import { footprintGeoJson, type Coverage } from './coverage'
@@ -159,8 +160,8 @@ export function registerRoutes(router: RouterLike, deps: ApiDeps): void {
         resolution: f.resolution,
         cells: f.cells.length,
         cappedCells: f.cappedCells,
-        capNm: f.capNm,
-        areaKm2: Math.round(f.areaKm2),
+        capM: f.capNm === null ? null : Math.round(f.capNm * M_PER_NM),
+        areaM2: Math.round(f.areaKm2 * 1e6),
         cellIds: f.cells.map((c) => c.id),
         geojson: footprintGeoJson(f),
       }

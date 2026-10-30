@@ -4,6 +4,7 @@
 // window percentiles come from the increments of the distance bin
 // counters. Without history (live-only mode) the same figures come from
 // the aggregator's minute and hour buckets, which reach back 24 hours.
+import { M_PER_NM } from './geo'
 import {
   DAY_MS,
   HOUR_MS,
@@ -47,12 +48,13 @@ export type Source = 'history' | 'live'
 
 export interface DistanceFigures {
   count: number
-  avgNm: number | null
-  medianNm: number | null
-  p95Nm: number | null
-  p99Nm: number | null
+  /** Metres, like every distance the queries return. */
+  avgM: number | null
+  medianM: number | null
+  p95M: number | null
+  p99M: number | null
   /** Untrusted: one bogus position sets it (SPEC 2.3). */
-  maxNm: number | null
+  maxM: number | null
 }
 
 export interface Summary {
@@ -72,7 +74,7 @@ export interface RadarSector {
   fromDeg: number
   toDeg: number
   count: number
-  p99Nm: number | null
+  p99M: number | null
 }
 
 export interface Radar {
@@ -93,15 +95,25 @@ export interface SeriesResult {
 const nul = (v: number | undefined): number | null =>
   v === undefined || !Number.isFinite(v) ? null : v
 
+/** Nautical miles, as kept internally, to metres or null. */
+const metres = (nm: number | undefined): number | null => {
+  const v = nul(nm)
+  return v === null ? null : Math.round(v * M_PER_NM)
+}
+
+/** A distance read back from history (metres) to nautical miles. */
+const toNm = (m: number | undefined | null): number | undefined =>
+  m === undefined || m === null ? undefined : m / M_PER_NM
+
 function distanceFigures(bins: number[], maxNm?: number): DistanceFigures {
   const s = summarize(bins, maxNm)
   return {
     count: s.count,
-    avgNm: nul(s.avgNm),
-    medianNm: nul(s.medianNm),
-    p95Nm: nul(s.p95Nm),
-    p99Nm: nul(s.p99Nm),
-    maxNm: nul(maxNm),
+    avgM: metres(s.avgNm),
+    medianM: metres(s.medianNm),
+    p95M: metres(s.p95Nm),
+    p99M: metres(s.p99Nm),
+    maxM: metres(maxNm),
   }
 }
 
@@ -186,7 +198,7 @@ export class Query {
       const res = w.resolution
       const [counters, max] = await Promise.all([
         counterIncrements(h, COUNTER_PATHS, from, now, res),
-        h.series([paths.distanceMaxNm], 'max', from, now, w.ms / 1000),
+        h.series([paths.distanceMax], 'max', from, now, w.ms / 1000),
       ])
       const totals = counters.increments.map(sum)
       return {
@@ -198,7 +210,10 @@ export class Query {
           classB: totals[2] ?? 0,
           other: totals[3] ?? 0,
         },
-        distance: distanceFigures(totals.slice(4), maxOf(max.values[0] ?? [])),
+        distance: distanceFigures(
+          totals.slice(4),
+          toNm(maxOf(max.values[0] ?? [])),
+        ),
       }
     }
 
@@ -243,7 +258,7 @@ export class Query {
       for (const c of classes)
         for (let s = 0; s < SECTOR_COUNT; s++) {
           countPaths.push(paths.sectorCount(s, c))
-          p99Paths.push(paths.sectorP99Nm(s, c))
+          p99Paths.push(paths.sectorP99(s, c))
         }
       const res = w.resolution
       const [cs, ps] = await Promise.all([
@@ -253,7 +268,7 @@ export class Query {
       cs.increments.forEach((col, i) => {
         counts[i % SECTOR_COUNT]! += sum(col)
       })
-      ps.values.forEach((col, i) => raise(i % SECTOR_COUNT, maxOf(col)))
+      ps.values.forEach((col, i) => raise(i % SECTOR_COUNT, toNm(maxOf(col))))
     } else {
       source = 'live'
       const ci = classes.map((c) => SECTOR_CLASSES.indexOf(c))
@@ -282,7 +297,7 @@ export class Query {
         fromDeg: s * SECTOR_WIDTH_DEG,
         toDeg: (s + 1) * SECTOR_WIDTH_DEG,
         count,
-        p99Nm: nul(p99[s]),
+        p99M: metres(p99[s]),
       })),
     }
   }
@@ -342,7 +357,7 @@ export class Query {
         classB: inc[1] ?? [],
         other: inc[2] ?? [],
       }
-    const max = await h.series([paths.distanceMaxNm], 'max', from, to, res)
+    const max = await h.series([paths.distanceMax], 'max', from, to, res)
     const maxAt = new Map(
       max.times.map((t, i) => [t, max.values[0]?.[i] ?? null]),
     )
@@ -353,7 +368,10 @@ export class Query {
       ...base,
       times,
       ...cols,
-      maxNm: s.times.slice(1).map((t) => maxAt.get(t) ?? null),
+      maxM: s.times.slice(1).map((t) => {
+        const v = maxAt.get(t)
+        return v === undefined || v === null ? null : Math.round(v)
+      }),
     }
   }
 
@@ -406,7 +424,7 @@ export class Query {
         return {
           ...base,
           ...distanceColumns(buckets.map((b) => b.distanceBins)),
-          maxNm: buckets.map((b) => nul(b.maxNm)),
+          maxM: buckets.map((b) => metres(b.maxNm)),
         }
     }
   }
@@ -420,9 +438,9 @@ function distanceColumns(rows: number[][]) {
   })
   return {
     count: f.map((x) => x.count),
-    avgNm: f.map((x) => x.avgNm),
-    medianNm: f.map((x) => x.medianNm),
-    p95Nm: f.map((x) => x.p95Nm),
-    p99Nm: f.map((x) => x.p99Nm),
+    avgM: f.map((x) => x.avgM),
+    medianM: f.map((x) => x.medianM),
+    p95M: f.map((x) => x.p95M),
+    p99M: f.map((x) => x.p99M),
   }
 }

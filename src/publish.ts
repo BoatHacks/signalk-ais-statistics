@@ -2,6 +2,7 @@
 // changed or not; a gauge without data (for example no position in the last
 // hour) is left out rather than published as zero or null, so only numeric
 // values ever reach the history provider.
+import { M_PER_NM } from './geo'
 import { DAY_MS, HOUR_MS, sectorP99, type Aggregator } from './aggregate'
 import { summarize } from './histogram'
 import {
@@ -20,6 +21,59 @@ export interface PathValue {
 export interface CoverageToday {
   cells: number
   areaKm2: number
+}
+
+const m = (nm: number | undefined) =>
+  nm === undefined ? undefined : nm * M_PER_NM
+
+export interface PathMeta {
+  path: string
+  meta: { units: string; description: string; displayUnits?: object }
+}
+
+/**
+ * Default metadata for the published gauges in SI units, so the server's
+ * unit preferences can convert them for display (SPEC 6.2). Counters and
+ * vessel counts are plain numbers and get none.
+ */
+export function defaultMetadata(): PathMeta[] {
+  const distance = (path: string, description: string): PathMeta => ({
+    path,
+    meta: { units: 'm', description, displayUnits: { category: 'distance' } },
+  })
+  const out = [
+    distance(paths.distanceAvg, 'Average AIS reception distance, last hour'),
+    distance(paths.distanceMedian, 'Median AIS reception distance, last hour'),
+    distance(
+      paths.distanceP95,
+      '95th percentile AIS reception distance, last hour',
+    ),
+    distance(
+      paths.distanceP99,
+      '99th percentile AIS reception distance, last hour',
+    ),
+    distance(
+      paths.distanceMax,
+      'Maximum AIS reception distance, last hour (untrusted)',
+    ),
+  ]
+  SECTOR_CLASSES.forEach((cls) => {
+    for (let s = 0; s < SECTOR_COUNT; s++)
+      out.push(
+        distance(
+          paths.sectorP99(s, cls),
+          `99th percentile class ${cls.toUpperCase()} reception distance in this sector, last hour`,
+        ),
+      )
+  })
+  out.push({
+    path: paths.coverageAreaToday,
+    meta: {
+      units: 'm2',
+      description: 'Area of AIS coverage cells, today (UTC)',
+    },
+  })
+  return out
 }
 
 export function buildValues(
@@ -46,15 +100,15 @@ export function buildValues(
 
   const hour = agg.lastHour(time)
   const d = summarize(hour.distanceBins, hour.maxNm)
-  put(paths.distanceAvgNm, d.avgNm)
-  put(paths.distanceMedianNm, d.medianNm)
-  put(paths.distanceP95Nm, d.p95Nm)
-  put(paths.distanceP99Nm, d.p99Nm)
-  put(paths.distanceMaxNm, hour.maxNm)
+  put(paths.distanceAvg, m(d.avgNm))
+  put(paths.distanceMedian, m(d.medianNm))
+  put(paths.distanceP95, m(d.p95Nm))
+  put(paths.distanceP99, m(d.p99Nm))
+  put(paths.distanceMax, m(hour.maxNm))
   const p99 = sectorP99(hour)
   SECTOR_CLASSES.forEach((cls, c) => {
     for (let s = 0; s < SECTOR_COUNT; s++)
-      put(paths.sectorP99Nm(s, cls), p99[c]![s])
+      put(paths.sectorP99(s, cls), m(p99[c]![s]))
   })
 
   const v1 = agg.uniqueVessels(time, HOUR_MS)
@@ -68,7 +122,7 @@ export function buildValues(
 
   if (coverage) {
     put(paths.coverageCellsToday, coverage.cells)
-    put(paths.coverageAreaKm2Today, coverage.areaKm2)
+    put(paths.coverageAreaToday, coverage.areaKm2 * 1e6)
   }
   return out
 }

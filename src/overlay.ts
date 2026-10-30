@@ -3,7 +3,7 @@
 // plugin runs. The data overlay's MapLibre style is inline in the manifest;
 // its GeoJSON source is a read-only plugin route fetched with the user's
 // credentials, and a background page refreshes it hourly.
-import { destination } from './geo'
+import { destination, M_PER_NM } from './geo'
 import type { LatLon } from './ownposition'
 import type { Radar } from './query'
 
@@ -102,10 +102,10 @@ export function radarFeatures(radar: Radar, own: LatLon | undefined): object[] {
   if (!own) return []
   const out: object[] = []
   for (const s of radar.sectors) {
-    if (s.p99Nm === null || s.p99Nm <= 0) continue
+    if (s.p99M === null || s.p99M <= 0) continue
     const ring: number[][] = [[own.lon, own.lat]]
     for (let b = s.fromDeg; b <= s.toDeg; b += 2.5) {
-      const p = destination(own, b, s.p99Nm)
+      const p = destination(own, b, s.p99M / M_PER_NM)
       ring.push([round(p.lon), round(p.lat)])
     }
     ring.push([own.lon, own.lat])
@@ -115,7 +115,7 @@ export function radarFeatures(radar: Radar, own: LatLon | undefined): object[] {
       properties: {
         kind: 'radar',
         sector: s.sector,
-        p99Nm: Math.round(s.p99Nm * 10) / 10,
+        p99M: s.p99M,
       },
       geometry: { type: 'Polygon', coordinates: [ring] },
     })

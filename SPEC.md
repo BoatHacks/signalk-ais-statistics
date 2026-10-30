@@ -213,12 +213,13 @@ including when it is embedded in another page such as an infodisplay panel.
 | `GET /summary?window=24h` | headline figures: messages, positions, vessels by group, distance avg, p95, p99 and max |
 | `GET /series?metric=&resolution=&from=&to=` | time series for the charts, read from history; `metric` is `messages`, `positions`, `distance` or `vessels`, `resolution` in seconds (at least 60, at most 2000 points) |
 | `GET /radar?window=24h&class=a\|b\|all` | 24 sectors with count and p99 distance (the highest hourly p99 in the window, see 2.6) |
-| `GET /coverage?window=7d` | cell ids, GeoJSON for the map, covered area in km2; windows `24h` (today), `7d`, `30d` |
+| `GET /coverage?window=7d` | cell ids, GeoJSON for the map, covered area in m²; windows `24h` (today), `7d`, `30d` |
 | `GET /overlay/coverage.geojson` | the plotter overlay's GeoJSON: the 7 day footprint and the 24 hour radar wedges |
 | `GET /status` | live state: tracked targets, own position age, history reachable or not |
 
-Windows accept `1h`, `24h`, `7d`, `30d`. Responses are JSON with explicit
-units (`nm`, `km2`) in field names, and say whether they came from history
+Windows accept `1h`, `24h`, `7d`, `30d`. Responses are JSON in SI units
+named in the field (`p99M` in metres, `areaM2` in square metres); the web
+app converts them to the user's display units (section 7). Responses and say whether they came from history
 or from live data (`source`). Unique vessel counts are given for windows up
 to 24 hours and are null beyond, since unique counts are not additive.
 
@@ -240,13 +241,20 @@ Counters (monotonic, count since the plugin started):
 - `distance.bin.<nn>`, one path per distance bin (32 bins)
 - `sectors.<nnn>.<class>.count`, one path per sector and class (48)
 
-Gauges:
-- `distance.avgNm`, `distance.medianNm`, `distance.p95Nm`, `distance.p99Nm`,
-  `distance.maxNm`, over the last hour
-- `sectors.<nnn>.<class>.p99Nm`, over the last hour
+Gauges, in SI units like every SignalK path:
+- `distance.avg`, `distance.median`, `distance.p95`, `distance.p99`,
+  `distance.max` in metres, over the last hour
+- `sectors.<nnn>.<class>.p99` in metres, over the last hour
 - `vessels.last1h` and `vessels.last24h`, and
   `vessels.byGroup.<group>.last1h` and `.last24h`
-- `coverage.areaKm2.today` and `coverage.cells.today`
+- `coverage.area.today` in square metres, and `coverage.cells.today`
+
+On start the plugin suggests default metadata for the distance and area
+gauges (`units` `m` or `m2`, and the `distance` display unit category) with
+`app.setDefaultMetadata`, so the server's unit preferences apply and a
+user's own metadata is never overwritten. Internally distances stay in
+nautical miles (the histogram bins in 2.3 are defined in nm) and are
+converted at the edges.
 
 Windows longer than 24 hours cannot report unique vessels as one number,
 because unique counts are not additive; the web app shows the daily
@@ -455,6 +463,11 @@ help of `max` (6.2). Verified across a plugin restart on the test server.
   threshold, time the plugin was down), and the MVP is more useful with
   range and coverage first.
 
+- **SI units on paths and in the REST API (chosen by the maintainer).**
+  SignalK paths carry SI values and display units come from path metadata,
+  so distances are published and served in metres and areas in square
+  metres, replacing earlier `...Nm` and `...Km2` names. Nothing was
+  released, so no stored history needed migrating.
 - **Configurable sentence events (chosen by the maintainer).** AIS from an
   NMEA 2000 receiver reaches plugins only through a converter on
   `nmea0183AISout`, and some setups use other events, so the events are an

@@ -56,3 +56,6 @@ export function destination(
     )
   return { lat: deg(φ2), lon: ((deg(λ2) + 540) % 360) - 180 }
 }
+
+/** Metres per nautical mile. Statistics are kept in nm and served in SI. */
+export const M_PER_NM = 1852

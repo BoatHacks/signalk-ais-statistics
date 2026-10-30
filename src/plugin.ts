@@ -18,7 +18,7 @@ import {
   radarFeatures,
   registerOverlayProvider,
 } from './overlay'
-import { buildValues, publish } from './publish'
+import { buildValues, defaultMetadata, publish } from './publish'
 import { Query } from './query'
 
 export const PLUGIN_ID = 'signalk-ais-statistics'
@@ -57,6 +57,19 @@ export function createPlugin(app: ServerAPI): Plugin {
 
   const log = (msg: string, err?: unknown) =>
     app.error(`${msg}${err instanceof Error ? `: ${err.message}` : ''}`)
+
+  async function setMetadata(): Promise<void> {
+    const set = (app as Partial<ServerAPI>).setDefaultMetadata
+    if (typeof set !== 'function') return
+    for (const { path, meta } of defaultMetadata()) {
+      try {
+        await set.call(app, path, meta as never)
+      } catch (err) {
+        log(`setting metadata for ${path} failed`, err)
+        return
+      }
+    }
+  }
 
   async function findHistory(s: Running): Promise<void> {
     const reader = await connectHistory(app)
@@ -153,6 +166,7 @@ export function createPlugin(app: ServerAPI): Plugin {
         .load(now)
         .catch((err: unknown) => log('reading coverage failed', err))
       void findHistory(s)
+      void setMetadata()
 
       const onSentence = (ingest: Ingest, sentence: unknown) => {
         try {

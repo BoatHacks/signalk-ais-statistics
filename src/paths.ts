@@ -46,21 +46,21 @@ export const paths = {
   sectorCount: (sector: number, cls: SectorClass) =>
     p(`sectors.${sectorLabel(sector)}.${cls}.count`),
 
-  // Gauges.
-  distanceAvgNm: p('distance.avgNm'),
-  distanceMedianNm: p('distance.medianNm'),
-  distanceP95Nm: p('distance.p95Nm'),
-  distanceP99Nm: p('distance.p99Nm'),
-  distanceMaxNm: p('distance.maxNm'),
-  sectorP99Nm: (sector: number, cls: SectorClass) =>
-    p(`sectors.${sectorLabel(sector)}.${cls}.p99Nm`),
+  // Gauges, in SI units: distances in metres, areas in square metres.
+  distanceAvg: p('distance.avg'),
+  distanceMedian: p('distance.median'),
+  distanceP95: p('distance.p95'),
+  distanceP99: p('distance.p99'),
+  distanceMax: p('distance.max'),
+  sectorP99: (sector: number, cls: SectorClass) =>
+    p(`sectors.${sectorLabel(sector)}.${cls}.p99`),
   vesselsLast1h: p('vessels.last1h'),
   vesselsLast24h: p('vessels.last24h'),
   vesselsByGroupLast1h: (group: TypeGroup) =>
     p(`vessels.byGroup.${group}.last1h`),
   vesselsByGroupLast24h: (group: TypeGroup) =>
     p(`vessels.byGroup.${group}.last24h`),
-  coverageAreaKm2Today: p('coverage.areaKm2.today'),
+  coverageAreaToday: p('coverage.area.today'),
   coverageCellsToday: p('coverage.cells.today'),
 }
 

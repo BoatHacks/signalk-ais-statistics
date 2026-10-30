@@ -74,6 +74,9 @@ Emits the SignalK deltas of SPEC 6.2 through the plugin API's delta handler,
 with the plugin id as source, at the end of every minute. Counters are
 running totals since the plugin started; gauges are rolling one-hour or
 24-hour figures. Gauges without data are left out (SPEC 6.2).
+Distances and areas are converted from the internal nautical miles and
+square kilometres to metres and square metres here and at the REST
+boundary, and default SI metadata is suggested on start.
 
 ### 2.7 HistoryReader
 The only component that reads history. A small interface

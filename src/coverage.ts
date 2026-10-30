@@ -4,6 +4,7 @@
 // and the number of reports seen there, plus the day's distance histogram.
 // The histogram lets a window's percentile cap be computed from the files
 // alone, with or without a history provider.
+import { M_PER_NM } from './geo'
 import { promises as fs } from 'node:fs'
 import { join } from 'node:path'
 import {
@@ -260,7 +261,8 @@ export interface CellFeature {
     id: string
     intensity: number
     reports: number
-    minDistanceNm: number
+    /** Metres. */
+    minDistanceM: number
   }
   geometry: { type: 'Polygon'; coordinates: number[][][] }
 }
@@ -284,7 +286,7 @@ export function footprintGeoJson(f: Footprint): {
         id: c.id,
         intensity: Math.round((Math.log1p(c.reports) / maxLog) * 1000) / 1000,
         reports: c.reports,
-        minDistanceNm: Math.round(c.minDistanceNm * 100) / 100,
+        minDistanceM: Math.round(c.minDistanceNm * M_PER_NM),
       },
       geometry: {
         type: 'Polygon',
