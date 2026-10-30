@@ -3,10 +3,12 @@
 A SignalK server plugin that turns the AIS traffic your server already
 receives into reception statistics for your own AIS station.
 
-**Status: design phase.** The design documents are written and there is no
-code yet. Nothing is published to npm.
+**Status: MVP implemented, not yet released.** The plugin, its REST API,
+the web app and the plotter overlay are written and unit tested; the checks
+against a live server (SPEC section 13) are still open. Nothing is
+published to npm yet.
 
-## What it will do
+## What it does
 
 - Count vessels (by type group and class A/B), positions and messages per
   minute and hour.
@@ -35,7 +37,23 @@ code yet. Nothing is published to npm.
 | [docs/release.md](docs/release.md) | first release and plugin registry checklist |
 | [CLAUDE.md](CLAUDE.md) | orientation for AI coding agents working in this repository |
 
-## Requirements (planned)
+## Development
+
+```bash
+npm install
+npm test            # unit tests
+npm run typecheck   # plugin and web app
+npm run lint
+npm run format:check
+npm run build       # dist/ (plugin) and public/ (web app)
+npm run smoke       # loads the built plugin with require()
+```
+
+To try it on a SignalK development server, add the checkout as a `file:`
+dependency of the server (do not bind-mount it into `node_modules`) and
+restart the server after each build.
+
+## Requirements
 
 - A SignalK server with raw AIS sentences arriving (any AIS receiver input).
 - Optional but recommended: a History API provider such as `signalk-questdb`

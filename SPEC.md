@@ -1,8 +1,9 @@
 # signalk-ais-statistics Specification
 
-Status: draft 3. Revised after the scoping answers of 2026-10-30, then
+Status: draft 4, implemented by the MVP code. Revised after the scoping answers of 2026-10-30, then
 changed to keep all positions and report percentiles instead of rejecting
-outliers. Items still unconfirmed are in section 13.
+outliers, then aligned with the MVP implementation. Items still unconfirmed
+are in section 13.
 
 ## 1. Introduction
 
@@ -70,7 +71,11 @@ service.
   70-79 cargo, 80-89 tanker, everything else other. Targets whose type is
   not yet known are counted as "unknown" for that bucket.
 - A target counts once per bucket in "vessels", however many messages it
-  sent.
+  sent. Vessels are the senders of class A and class B messages; base
+  stations, aids to navigation and SAR aircraft are not counted as vessels.
+- Type 9 (SAR aircraft) position reports count as `positions.other`. They
+  count toward distance and coverage but have no class, so they are not in
+  the per-class sectors.
 
 ### 2.2 Distance and bearing
 
@@ -92,7 +97,12 @@ Distance statistics are made robust by reporting percentiles instead of
 trusting the maximum:
 
 - average, median, p95 and p99 distance, computed from a fixed log-spaced
-  histogram of distances per bucket (cheap, and mergeable across buckets);
+  histogram of distances per bucket (cheap, and mergeable across buckets).
+  Bin 0 is [0, 0.5) nm, bins 1 to 30 step by a factor of 2^(1/3) (about
+  26 percent) up to 512 nm, and bin 31 holds everything from 512 nm. The
+  layout is part of the persistence schema. Percentiles interpolate within
+  a bin; the average uses bin centres, with the overflow bin counted as
+  512 nm, so live and history-derived figures agree;
 - the maximum is still reported, labelled as untrusted, because it can be
   wildly wrong (thousands of nm) when a single bad position arrives.
 
@@ -122,7 +132,8 @@ positions, and the count of unique vessels per hour and per type group.
 ### 2.6 Sectors
 
 For each of 24 sectors and for each class: number of position reports and
-the p99 distance, per hour bucket, from a coarse per-sector histogram. The
+the p99 distance, per hour bucket, from a coarse per-sector histogram (the
+distance bins merged in pairs, 16 bins). The
 radar for a longer window shows, per sector, the highest hourly p99 in the
 window (a conservative figure, since percentiles do not merge exactly from
 hourly values).
@@ -195,13 +206,16 @@ including when it is embedded in another page such as an infodisplay panel.
 | Route | Returns |
 |---|---|
 | `GET /summary?window=24h` | headline figures: messages, positions, vessels by group, distance avg, p95, p99 and max |
-| `GET /series?metric=&resolution=&from=&to=` | time series for the charts, read from history |
+| `GET /series?metric=&resolution=&from=&to=` | time series for the charts, read from history; `metric` is `messages`, `positions`, `distance` or `vessels`, `resolution` in seconds (at least 60, at most 2000 points) |
 | `GET /radar?window=24h&class=a\|b\|all` | 24 sectors with count and p99 distance (the highest hourly p99 in the window, see 2.6) |
-| `GET /coverage?window=7d` | cell ids, GeoJSON for the map, covered area in km2 |
+| `GET /coverage?window=7d` | cell ids, GeoJSON for the map, covered area in km2; windows `24h` (today), `7d`, `30d` |
+| `GET /overlay/coverage.geojson` | the plotter overlay's GeoJSON: the 7 day footprint and the 24 hour radar wedges |
 | `GET /status` | live state: tracked targets, own position age, history reachable or not |
 
 Windows accept `1h`, `24h`, `7d`, `30d`. Responses are JSON with explicit
-units (`nm`, `km2`) in field names.
+units (`nm`, `km2`) in field names, and say whether they came from history
+or from live data (`source`). Unique vessel counts are given for windows up
+to 24 hours and are null beyond, since unique counts are not additive.
 
 ### 6.2 SignalK paths
 
@@ -209,8 +223,11 @@ The plugin publishes deltas under `sensors.ais.statistics.*` on the own
 vessel (source label `signalk-ais-statistics`). History is whatever the
 server's history provider records of these, so the paths are part of the
 persistence contract (section 8). All published values are numeric, so any
-History API provider can store and return them. Every value is published
-every minute, whether or not it changed.
+History API provider can store and return them. Every counter is published
+every minute, whether or not it changed. A gauge with no data (for example
+no position with a known own position in the last hour) is left out of the
+delta rather than published as zero or null; the web app's distance series
+come from the bin counters, not from these gauges.
 
 Counters (monotonic, count since the plugin started):
 - `messages.total`
@@ -250,17 +267,23 @@ button:
 
 - The plugin registers a read-only resource provider for the
   `plotterExtensions` resource type, serving one manifest keyed by the
-  plugin id, and only while the plugin is running.
+  plugin id, and only while the plugin is running with `publishOverlay`
+  on. The server cannot unregister a provider, so it is registered once and
+  answers empty while the plugin is stopped.
 - The manifest declares `apiVersion: "1"`, requires `overlays.data`, and
   lists one data overlay (`type: "data"`, band `aboveCharts`) whose `style`
-  is a MapLibre style served by the plugin. The style has a GeoJSON source
-  (H3 cell polygons, one feature per cell with an `id` and a coverage
-  `intensity` property, plus the sector radar as polygons) and a fill layer
-  coloured by `intensity`.
+  is an inline MapLibre version 8 style. The style has one GeoJSON source,
+  `/plugins/signalk-ais-statistics/overlay/coverage.geojson`, which the
+  plotter fetches with the user's credentials: H3 cell polygons for the last
+  7 days (`kind: "cell"`, with `id`, a coverage `intensity` from 0 to 1 and
+  the report count), plus the 24 hour sector radar as wedges from the last
+  known own position (`kind: "radar"`). A fill layer colours cells by
+  `intensity` and a line layer outlines the radar.
 - Live updates need a context that calls `overlay.refresh`, so the manifest
-  also declares an optional `background.iframe` page that does so hourly.
-  Without it the overlay still shows, and refreshes when the plotter
-  reloads it.
+  also declares an optional `background.iframe` page,
+  `/signalk-ais-statistics/plotterext/refresh.html` (part of the web app
+  bundle), that does so hourly. Without it the overlay still shows, and
+  refreshes when the plotter reloads it.
 - The overlay is a plotter feature, so it works wherever the plotter
   supports Plotter Extensions; other plotters (for example OpenCPN) are not
   covered.
@@ -319,9 +342,14 @@ directly. Consequences:
   cumulative counters (4.1).
 - The one thing the History API cannot carry is the set of covered H3
   cells. The plugin therefore writes one small cell-set file per UTC day in
-  its own data directory (a few KB), pruned by `coverageRetentionDays`
-  (default 90). Everything else is stateless across restarts, apart from the
-  open bucket at shutdown, which is flushed on stop.
+  its own data directory (a few KB), `coverage-YYYY-MM-DD.json`, pruned by
+  `coverageRetentionDays` (default 90). Per cell it holds the shortest
+  distance seen and the report count; it also holds that day's distance
+  histogram, so a window's coverage cap is computed from the files alone. A
+  day holds at most 20000 cells. Files are written atomically every hour,
+  at the UTC day change and on stop, and today's file is merged back in on
+  start. Everything else is stateless across restarts; the last counter
+  values are published once more on stop.
 
 ## 9. Configuration
 
@@ -424,3 +452,10 @@ are what is still unverified.
    live data, so the background iframe page is needed for live refresh. How
    large a GeoJSON source the plotter handles smoothly (hundreds of cells
    over 30 days) is untested.
+3. **Radar robustness in sparse sectors.** The radar for a window shows the
+   highest hourly p99 per sector (2.6). In a sector-hour with fewer than
+   about 100 reports, p99 is close to that hour's maximum, so a single bogus
+   position can set a sector's radius for the whole window. Synthetic data
+   with 0.2 percent bogus positions showed this. Options: require a minimum
+   report count per sector-hour, or publish per-sector bin counters and
+   merge them like the distance bins (more paths). Needs a decision.

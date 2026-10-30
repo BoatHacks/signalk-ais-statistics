@@ -11,8 +11,9 @@ It publishes numeric paths under `sensors.ais.statistics.*`, reads history
 back through the SignalK History API, serves a web app, and offers the
 coverage footprint as a Freeboard-SK plotter overlay.
 
-**Current state: design phase, no code.** The next step is the remaining
-spikes and then the plugin scaffold in
+**Current state: MVP implemented (roadmap items 1 to 8), not released.**
+The next steps are the two remaining spikes and the Freeboard-SK check on
+the development server, then the first release (item 9) in
 [docs/plans/mvp-roadmap.md](docs/plans/mvp-roadmap.md).
 
 ## Read in this order
@@ -69,5 +70,10 @@ spikes and then the plugin scaffold in
 
 ## Commands
 
-None yet. The scaffold item in the roadmap adds the package scripts (build,
-test, type check, lint) and this section should then list them.
+- `npm test`: Vitest unit tests (`test/`, fakes in `test/fixtures/`)
+- `npm run typecheck`: plugin and web app
+- `npm run lint`, `npm run format:check` (Prettier; `npm run format` fixes)
+- `npm run build`: `dist/` from `src/` and `public/` from `web/`
+- `npm run smoke`: loads the built package with `require()`
+
+CI runs all of them on Node 22 and 24.
