@@ -390,7 +390,7 @@ directly. Consequences:
 | Option | Default | Notes |
 |---|---|---|
 | `targetExpirySeconds` | 3600 | live tracking expiry |
-| `h3Resolution` | 5 | coverage cell size |
+| `h3Resolution` | 6 | coverage cell size: 6 is about 7 km across (36 km²); 5 was too coarse (chosen by the maintainer) |
 | `coverageDistancePercentile` | 99 | coverage skips cells beyond this percentile of the window's distances; 100 disables the cap |
 | `ownPositionMaxAgeSeconds` | 60 | staleness limit for own position |
 | `coverageRetentionDays` | 90 | how long daily cell-set files are kept |

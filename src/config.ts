@@ -14,7 +14,7 @@ export interface Config {
 
 export const DEFAULT_CONFIG: Config = {
   targetExpirySeconds: 3600,
-  h3Resolution: 5,
+  h3Resolution: 6,
   coverageDistancePercentile: 99,
   ownPositionMaxAgeSeconds: 60,
   coverageRetentionDays: 90,
@@ -37,7 +37,7 @@ export const configSchema = {
       type: 'number',
       title: 'Coverage cell resolution (H3)',
       description:
-        'H3 resolution of coverage cells. 5 is about 8 km per edge, 6 about 3 km.',
+        'H3 resolution of coverage cells. 5 is about 20 km across (10 km edges), 6 about 7 km (3.7 km edges), 7 about 3 km (1.4 km edges). Finer cells make larger files and overlays.',
       default: DEFAULT_CONFIG.h3Resolution,
       minimum: 3,
       maximum: 8,
