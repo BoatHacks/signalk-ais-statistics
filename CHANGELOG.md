@@ -6,6 +6,10 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-30
+
+First release.
+
 ### Added
 
 - AIS reception statistics from raw sentences: message and position counts
@@ -18,3 +22,8 @@ uses [Semantic Versioning](https://semver.org/).
 - A web app with overview, charts, radar and coverage map.
 - A Freeboard-SK plotter extension data overlay of the coverage and radar
   (Freeboard-SK 3.4.0 or later).
+- A dark tactical web app theme following day and night mode, with
+  distances in the server's display units and the plugin's app icon.
+
+[Unreleased]: https://github.com/BoatHacks/signalk-ais-statistics/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/BoatHacks/signalk-ais-statistics/releases/tag/v0.1.0
