@@ -184,7 +184,8 @@ export function createPlugin(app: ServerAPI): Plugin {
       const unsubscribe = app.streambundle
         .getSelfStream('navigation.position' as Path)
         .onValue((pos: unknown) => s.own.update(pos, Date.now()))
-      s.stops.push(unsubscribe)
+      // Some hosts return the stream itself rather than an unsubscribe.
+      if (typeof unsubscribe === 'function') s.stops.push(unsubscribe)
 
       // Publish at the end of each minute so every value lands in its bucket.
       const delay = MINUTE_MS - (now % MINUTE_MS) - 1000

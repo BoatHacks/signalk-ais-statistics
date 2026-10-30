@@ -1,0 +1,16 @@
+name: SignalK Plugin CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  plugin-ci:
+    # Pinned to a server release commit; bump with each server release.
+    uses: SignalK/signalk-server/.github/workflows/plugin-ci.yml@1bf8c461ca47a735fc3e8d4a1c4e8f20614aa9fd # v2.35.1
+    with:
+      format-check-command: npm run format:check
