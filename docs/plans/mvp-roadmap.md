@@ -32,7 +32,8 @@ the answer differs from the assumption, to SPEC.md or ARCHITECTURE.md.
 - [ ] TypeScript project, plugin entry, config schema (SPEC section 9)
 - [ ] Vitest, type check, lint and format scripts; CI running them
 - [ ] `paths.ts` with every published path name
-- [ ] Release workflow (npm trusted publishing)
+- [ ] Release workflow (npm trusted publishing), package metadata and
+      registry items from [docs/release.md](../release.md)
 
 ## 2. Ingest, decode, classify
 
@@ -89,6 +90,8 @@ the answer differs from the assumption, to SPEC.md or ARCHITECTURE.md.
 
 ## 9. First release
 
+- [ ] Work through [docs/release.md](../release.md): package metadata,
+      registry score items, first manual publish, trusted publisher
 - [ ] README with install, configuration and screenshots that contain no
       real vessel data
 - [ ] Review SPEC.md and ARCHITECTURE.md against the code and resolve or
