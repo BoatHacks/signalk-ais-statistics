@@ -94,7 +94,7 @@ const nul = (v: number | undefined): number | null =>
   v === undefined || !Number.isFinite(v) ? null : v
 
 function distanceFigures(bins: number[], maxNm?: number): DistanceFigures {
-  const s = summarize(bins)
+  const s = summarize(bins, maxNm)
   return {
     count: s.count,
     avgNm: nul(s.avgNm),
@@ -125,6 +125,38 @@ function maxOf(xs: (number | null)[]): number | undefined {
   return m
 }
 
+/**
+ * Per-bucket increments of counters, from their `last` and `max` series.
+ * The range starts one bucket early so the first bucket has a baseline.
+ */
+async function counterIncrements(
+  h: HistoryReader,
+  counterPaths: string[],
+  from: number,
+  to: number,
+  res: number,
+): Promise<{ times: number[]; increments: number[][] }> {
+  const start = from - res * 1000
+  const [last, max] = await Promise.all([
+    h.series(counterPaths, 'last', start, to, res),
+    h.series(counterPaths, 'max', start, to, res),
+  ])
+  // Align max on the times of last; providers answer the same buckets.
+  const index = new Map(max.times.map((t, i) => [t, i]))
+  return {
+    times: last.times,
+    increments: last.values.map((col, c) =>
+      increments(
+        col,
+        last.times.map((t) => {
+          const i = index.get(t)
+          return i === undefined ? null : (max.values[c]?.[i] ?? null)
+        }),
+      ),
+    ),
+  }
+}
+
 export class Query {
   constructor(
     private readonly agg: Aggregator,
@@ -153,10 +185,10 @@ export class Query {
       const h = this.history()
       const res = w.resolution
       const [counters, max] = await Promise.all([
-        h.series(COUNTER_PATHS, 'last', from - res * 1000, now, res),
+        counterIncrements(h, COUNTER_PATHS, from, now, res),
         h.series([paths.distanceMaxNm], 'max', from, now, w.ms / 1000),
       ])
-      const totals = counters.values.map((col) => sum(increments(col)))
+      const totals = counters.increments.map(sum)
       return {
         ...base,
         source: 'history',
@@ -215,11 +247,11 @@ export class Query {
         }
       const res = w.resolution
       const [cs, ps] = await Promise.all([
-        h.series(countPaths, 'last', now - w.ms - res * 1000, now, res),
+        counterIncrements(h, countPaths, now - w.ms, now, res),
         h.series(p99Paths, 'max', now - w.ms, now, w.ms / 1000),
       ])
-      cs.values.forEach((col, i) => {
-        counts[i % SECTOR_COUNT]! += sum(increments(col))
+      cs.increments.forEach((col, i) => {
+        counts[i % SECTOR_COUNT]! += sum(col)
       })
       ps.values.forEach((col, i) => raise(i % SECTOR_COUNT, maxOf(col)))
     } else {
@@ -298,8 +330,8 @@ export class Query {
         : metric === 'positions'
           ? [paths.positionsClassA, paths.positionsClassB, paths.positionsOther]
           : distanceBinPaths
-    const s = await h.series(counterPaths, 'last', from - res * 1000, to, res)
-    const inc = s.values.map(increments)
+    const s = await counterIncrements(h, counterPaths, from, to, res)
+    const inc = s.increments
     const times = s.times.slice(1).map((t) => new Date(t).toISOString())
     if (metric === 'messages') return { ...base, times, messages: inc[0] ?? [] }
     if (metric === 'positions')

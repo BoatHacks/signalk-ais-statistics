@@ -22,7 +22,13 @@ import { buildValues, publish } from './publish'
 import { Query } from './query'
 
 export const PLUGIN_ID = 'signalk-ais-statistics'
-/** How often to look for a history provider again while in live-only mode. */
+/**
+ * How often to look for a history provider again while in live-only mode.
+ * Providers often register after the plugins start, so the first minutes
+ * retry quickly.
+ */
+const HISTORY_RETRY_FAST_MS = 15 * 1000
+const HISTORY_RETRY_FAST_FOR_MS = 5 * MINUTE_MS
 const HISTORY_RETRY_MS = 10 * MINUTE_MS
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -185,10 +191,19 @@ export function createPlugin(app: ServerAPI): Plugin {
       s.stops.push(() => clearTimeout(first))
       const hourly = setInterval(() => hour(s), HOUR_MS)
       s.stops.push(() => clearInterval(hourly))
-      const retry = setInterval(() => {
-        if (!s.history.available) void findHistory(s)
-      }, HISTORY_RETRY_MS)
-      s.stops.push(() => clearInterval(retry))
+      let retry: ReturnType<typeof setTimeout> | undefined
+      const scheduleRetry = () => {
+        const fast = Date.now() - now < HISTORY_RETRY_FAST_FOR_MS
+        retry = setTimeout(
+          () => {
+            if (!s.history.available) void findHistory(s)
+            scheduleRetry()
+          },
+          fast ? HISTORY_RETRY_FAST_MS : HISTORY_RETRY_MS,
+        )
+      }
+      scheduleRetry()
+      s.stops.push(() => clearTimeout(retry))
 
       if (config.publishOverlay && !providerRegistered) {
         try {

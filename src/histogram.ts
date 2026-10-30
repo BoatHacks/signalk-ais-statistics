@@ -120,12 +120,22 @@ export interface DistanceSummary {
   p99Nm?: number
 }
 
-export function summarize(bins: readonly number[]): DistanceSummary {
+/**
+ * Distance figures of a histogram. Interpolation within a bin can land above
+ * the largest distance actually seen, so when the measured maximum is known
+ * every figure is capped at it.
+ */
+export function summarize(
+  bins: readonly number[],
+  maxNm?: number,
+): DistanceSummary {
+  const cap = (v: number | undefined) =>
+    v !== undefined && maxNm !== undefined ? Math.min(v, maxNm) : v
   return {
     count: total(bins),
-    avgNm: averageNm(bins),
-    medianNm: percentileNm(bins, 0.5),
-    p95Nm: percentileNm(bins, 0.95),
-    p99Nm: percentileNm(bins, 0.99),
+    avgNm: cap(averageNm(bins)),
+    medianNm: cap(percentileNm(bins, 0.5)),
+    p95Nm: cap(percentileNm(bins, 0.95)),
+    p99Nm: cap(percentileNm(bins, 0.99)),
   }
 }

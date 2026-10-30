@@ -45,7 +45,7 @@ export function buildValues(
   })
 
   const hour = agg.lastHour(time)
-  const d = summarize(hour.distanceBins)
+  const d = summarize(hour.distanceBins, hour.maxNm)
   put(paths.distanceAvgNm, d.avgNm)
   put(paths.distanceMedianNm, d.medianNm)
   put(paths.distanceP95Nm, d.p95Nm)

@@ -119,16 +119,26 @@ export function mergeSeries(parts: Series[]): Series {
  * The first bucket is the baseline and gets no increment. A null before the
  * first sample counts as zero, a null later as unchanged, and a value lower
  * than its predecessor means the counter restarted from zero (SPEC 6.2).
+ *
+ * With the `max` series of the same buckets, a restart inside a bucket also
+ * counts what the old counter reached in that bucket before it restarted:
+ * the bucket's max minus the previous last, plus the new last.
  */
-export function increments(series: (number | null)[]): number[] {
+export function increments(
+  last: (number | null)[],
+  max?: (number | null)[],
+): number[] {
   const out: number[] = []
   let prev: number | undefined
-  for (let i = 0; i < series.length; i++) {
-    const raw = series[i]
-    const v = raw ?? prev ?? 0
+  for (let i = 0; i < last.length; i++) {
+    const v = last[i] ?? prev ?? 0
     if (i > 0) {
       const p = prev ?? 0
-      out.push(v >= p ? v - p : v)
+      if (v >= p) out.push(v - p)
+      else {
+        const m = max?.[i]
+        out.push((m !== null && m !== undefined && m > p ? m - p : 0) + v)
+      }
     }
     prev = v
   }
