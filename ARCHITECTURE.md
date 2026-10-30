@@ -142,7 +142,9 @@ Published path names are the persistence schema, so they are defined once in
 ## 5. Integration Points
 
 - **SignalK sentence events**: input for all message statistics, via
-  `app.on('nmea0183', handler)`, removed again on stop. The handler receives the raw sentence as a
+  `app.on(event, handler)` for each event in `sentenceEvents` (default
+  `nmea0183` and `nmea0183AISout`), each with its own `Ingest`, removed
+  again on stop. The handler receives the raw sentence as a
   plain string, with no source or timestamp, so `!AIVDO` is told apart by
   its prefix and reception time is the time of the call.
 - **`navigation.position` (self)**: via

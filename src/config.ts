@@ -9,6 +9,7 @@ export interface Config {
   ownPositionMaxAgeSeconds: number
   coverageRetentionDays: number
   publishOverlay: boolean
+  sentenceEvents: string[]
 }
 
 export const DEFAULT_CONFIG: Config = {
@@ -18,6 +19,7 @@ export const DEFAULT_CONFIG: Config = {
   ownPositionMaxAgeSeconds: 60,
   coverageRetentionDays: 90,
   publishOverlay: true,
+  sentenceEvents: ['nmea0183', 'nmea0183AISout'],
 }
 
 export const configSchema = {
@@ -71,6 +73,15 @@ export const configSchema = {
         'Registers a Plotter Extensions overlay, for example for Freeboard-SK.',
       default: DEFAULT_CONFIG.publishOverlay,
     },
+    sentenceEvents: {
+      type: 'array',
+      title: 'Sentence events to read AIS from',
+      description:
+        'Server events that carry raw NMEA 0183 sentences. nmea0183 is NMEA 0183 input; nmea0183AISout is what converter plugins such as signalk-n2kais-to-nmea0183 emit for AIS from NMEA 2000. If the same receiver reaches two of these events, every message counts twice.',
+      items: { type: 'string' },
+      uniqueItems: true,
+      default: DEFAULT_CONFIG.sentenceEvents,
+    },
   },
 }
 
@@ -111,5 +122,15 @@ export function resolveConfig(options: unknown): Config {
       typeof o.publishOverlay === 'boolean'
         ? o.publishOverlay
         : d.publishOverlay,
+    sentenceEvents: Array.isArray(o.sentenceEvents)
+      ? [
+          ...new Set(
+            o.sentenceEvents
+              .filter((e): e is string => typeof e === 'string')
+              .map((e) => e.trim())
+              .filter((e) => e !== ''),
+          ),
+        ]
+      : [...d.sentenceEvents],
   }
 }

@@ -12,8 +12,8 @@ Small throwaway experiments, each ending in an update to section 13 and, if
 the answer differs from the assumption, to SPEC.md or ARCHITECTURE.md.
 Items 1 to 8 are implemented, each with a plan in this directory
 (`item-<n>-<slug>.md`); the counter reset spike ran against the
-development server; the Freeboard-SK check and the NMEA 2000 question
-remain.
+development server; the Freeboard-SK check
+remains.
 
 - [x] **`nmea0183` event payload.** The event delivers the raw sentence as a
       plain string with no source or timestamp (checked in an existing
@@ -30,8 +30,8 @@ remain.
       inside a bucket needed `max` as well as `last` (SPEC 6.2).
 - [ ] **Overlay size.** The overlay is served and small (SPEC 6.3); whether
       it stays smooth in Freeboard-SK needs a look in the plotter. (13.1)
-- [ ] **NMEA 2000 AIS.** Decide whether to also listen on
-      `nmea0183AISout`. (13.2)
+- [x] **NMEA 2000 AIS.** It only arrives on `nmea0183AISout` from a
+      converter plugin; the sentence events are configurable (SPEC 5).
 
 ## 1. Plugin scaffold
 

@@ -52,9 +52,10 @@ the aggregates above.
 - The handler gets the sentence as a plain string. There is no source label
   and no timestamp, so own-transponder sentences (`!AIVDO`) are told apart by
   prefix and reception time is the time of the call.
-- AIS from an NMEA 2000 receiver does not reach `nmea0183`. The server
-  re-encodes it as NMEA 0183 and emits it on `nmea0183AISout`, also as a
-  plain string.
+- AIS from an NMEA 2000 receiver does not reach `nmea0183`. The converter
+  plugin `signalk-n2kais-to-nmea0183` re-encodes it as NMEA 0183 VDM
+  sentences and emits them on `nmea0183AISout` and `nmea0183out`, also as
+  plain strings.
 - The server's AIS decoding dependency is `ggencoder` (version 1.0.13 with the
   tested server), pulled in by `@signalk/nmea0183-signalk`.
 
@@ -106,5 +107,4 @@ the aggregates above.
 
 ## Not yet verified
 
-See SPEC section 13: how smoothly Freeboard-SK draws the coverage layer, and
-how to receive AIS that arrives over NMEA 2000.
+See SPEC section 13: how smoothly Freeboard-SK draws the coverage layer.

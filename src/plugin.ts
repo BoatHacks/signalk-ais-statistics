@@ -11,7 +11,7 @@ import {
   nullHistoryReader,
   type HistoryReader,
 } from './history'
-import { Ingest } from './ingest'
+import { Ingest, type IngestStats } from './ingest'
 import { OwnPosition } from './ownposition'
 import {
   buildManifest,
@@ -41,7 +41,8 @@ interface EventSource {
 
 interface Running {
   config: Config
-  ingest: Ingest
+  /** One decoder per sentence event, so multipart messages stay apart. */
+  ingests: Ingest[]
   own: OwnPosition
   agg: Aggregator
   coverage: Coverage
@@ -94,6 +95,8 @@ export function createPlugin(app: ServerAPI): Plugin {
     const now = Date.now()
     const last = s.agg.lastMessageTime()
     const ownAge = s.own.ageMs(now)
+    const total = (pick: (st: IngestStats) => number) =>
+      s.ingests.reduce((sum, i) => sum + pick(i.stats), 0)
     return {
       running: true,
       version: VERSION,
@@ -107,10 +110,10 @@ export function createPlugin(app: ServerAPI): Plugin {
       ownPositionAgeSeconds: ownAge === undefined ? null : ownAge / 1000,
       ownPositionFresh: s.own.at(now) !== undefined,
       historyAvailable: s.history.available,
-      sentences: s.ingest.stats.sentences,
-      ownSentencesSkipped: s.ingest.stats.ownSkipped,
-      decodeErrors: s.ingest.stats.decodeErrors,
-      incompleteDropped: s.ingest.stats.incompleteDropped,
+      sentences: total((st) => st.sentences),
+      ownSentencesSkipped: total((st) => st.ownSkipped),
+      decodeErrors: total((st) => st.decodeErrors),
+      incompleteDropped: total((st) => st.incompleteDropped),
       coverageCellsDropped: s.coverage.droppedCells,
       config: s.config,
     }
@@ -129,7 +132,7 @@ export function createPlugin(app: ServerAPI): Plugin {
       const agg = new Aggregator(now)
       const s: Running = {
         config,
-        ingest: new Ingest(),
+        ingests: [],
         own: new OwnPosition(config.ownPositionMaxAgeSeconds * 1000),
         agg,
         coverage: new Coverage(
@@ -151,10 +154,10 @@ export function createPlugin(app: ServerAPI): Plugin {
         .catch((err: unknown) => log('reading coverage failed', err))
       void findHistory(s)
 
-      const onSentence = (sentence: unknown) => {
+      const onSentence = (ingest: Ingest, sentence: unknown) => {
         try {
           const time = Date.now()
-          const msg = s.ingest.push(sentence as string)
+          const msg = ingest.push(sentence as string)
           if (!msg) return
           const located = s.agg.add(msg, s.own.at(time), time)
           if (located)
@@ -170,8 +173,13 @@ export function createPlugin(app: ServerAPI): Plugin {
         }
       }
       const events = app as unknown as EventSource
-      events.on('nmea0183', onSentence)
-      s.stops.push(() => events.removeListener('nmea0183', onSentence))
+      for (const event of config.sentenceEvents) {
+        const ingest = new Ingest()
+        s.ingests.push(ingest)
+        const listener = (sentence: unknown) => onSentence(ingest, sentence)
+        events.on(event, listener)
+        s.stops.push(() => events.removeListener(event, listener))
+      }
 
       const unsubscribe = app.streambundle
         .getSelfStream('navigation.position' as Path)
