@@ -45,7 +45,8 @@ in the repository:
       `npm ci --ignore-scripts`, without network and within 60 s; the
       `registry-harness` job in `test.yml` does the same
 - [ ] Screenshots regenerated with `npm run build && node
-      scripts/screenshots.cjs` after visible changes
+      scripts/screenshots.cjs && python3 scripts/compress-screenshots.py`
+      after visible changes
 
 ## GitHub repository
 
