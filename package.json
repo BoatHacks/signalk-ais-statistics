@@ -1,0 +1,83 @@
+{
+  "name": "signalk-ais-statistics",
+  "version": "0.1.0",
+  "description": "AIS reception statistics for SignalK: counts, distance percentiles, bearing radar and coverage, with a web app and a chart plotter overlay",
+  "author": "Tobias Rosenstock",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "public",
+    "docs/screenshots"
+  ],
+  "scripts": {
+    "build": "npm run build:plugin && npm run build:web",
+    "build:plugin": "tsc -p tsconfig.build.json",
+    "build:web": "node web/build.mjs",
+    "prepare": "npm run build",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p web",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "smoke": "node scripts/smoke.cjs"
+  },
+  "keywords": [
+    "signalk-node-server-plugin",
+    "signalk-webapp",
+    "signalk-category-ais",
+    "signalk-category-utility",
+    "signalk-category-plotter-extensions",
+    "ais",
+    "statistics",
+    "coverage"
+  ],
+  "signalk": {
+    "displayName": "AIS Statistics",
+    "appIcon": "./public/icon.png",
+    "screenshots": [
+      "./docs/screenshots/overview.png",
+      "./docs/screenshots/charts.png",
+      "./docs/screenshots/radar.png",
+      "./docs/screenshots/map.png",
+      "./docs/screenshots/overview-phone.png"
+    ],
+    "recommends": [
+      "signalk-questdb",
+      "@meri-imperiumi/signalk-internet",
+      "@signalk/freeboard-sk"
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/BoatHacks/signalk-ais-statistics.git"
+  },
+  "homepage": "https://github.com/BoatHacks/signalk-ais-statistics#readme",
+  "bugs": {
+    "url": "https://github.com/BoatHacks/signalk-ais-statistics/issues"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@js-temporal/polyfill": "^0.5.1",
+    "ggencoder": "^1.0.13",
+    "h3-js": "^4.5.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@signalk/server-api": "^2.35.0",
+    "@types/express": "^5.0.6",
+    "@types/geojson": "^7946.0.16",
+    "@types/leaflet": "^1.9.22",
+    "@types/node": "^22.20.5",
+    "esbuild": "^0.28.2",
+    "eslint": "^10.13.0",
+    "leaflet": "^1.9.4",
+    "prettier": "^3.9.10",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.72.1",
+    "vitest": "^5.0.5"
+  }
+}

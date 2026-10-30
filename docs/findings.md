@@ -37,6 +37,12 @@ curl -s "$SK/signalk/v2/api/history/values?paths=<path>:last&from=<iso>&to=<iso>
 - The response shape is `{ context, range, values: [{ path, method }], data:
   [[timestamp, value], ...] }`.
 
+- Buckets start at the query's `from`, not at a rounded boundary.
+- A counter that drops to zero when the plugin restarts appears as a plain
+  drop between two buckets, with no `null` and no gap. When the restart
+  falls inside a bucket, `last` only shows the value after it; `max` of the
+  same bucket still holds the value before it.
+
 Only this one provider has been checked. The plugin must not assume more than
 the aggregates above.
 
@@ -46,6 +52,10 @@ the aggregates above.
 - The handler gets the sentence as a plain string. There is no source label
   and no timestamp, so own-transponder sentences (`!AIVDO`) are told apart by
   prefix and reception time is the time of the call.
+- AIS from an NMEA 2000 receiver does not reach `nmea0183`. The converter
+  plugin `signalk-n2kais-to-nmea0183` re-encodes it as NMEA 0183 VDM
+  sentences and emits them on `nmea0183AISout` and `nmea0183out`, also as
+  plain strings.
 - The server's AIS decoding dependency is `ggencoder` (version 1.0.13 with the
   tested server), pulled in by `@signalk/nmea0183-signalk`.
 
@@ -62,6 +72,13 @@ the aggregates above.
 
 ## Chart plotter overlay (Freeboard-SK)
 
+- Data overlays (`overlays.data`) arrived in Freeboard-SK 3.4.0. Version
+  3.3.0 supports widgets, panels, buttons and background iframes only, and
+  silently skips an extension whose `requires` lists a capability it lacks,
+  so this plugin's overlay does not appear there. Freeboard-SK 3.4.0 loads
+  it: on start it fetches the manifest, the overlay GeoJSON and the
+  background refresh page. Compare the capability
+  table in the Plotter Extensions API page at each release tag.
 - Freeboard-SK reads plugin-provided extensions from the `plotterExtensions`
   resource type. A plugin registers a read-only resource provider for that
   type serving one manifest keyed by the plugin id, and returns nothing while
@@ -70,6 +87,9 @@ the aggregates above.
 - A data overlay needs `requires: ["overlays.data"]` and an `overlays` entry
   with `type: "data"`, a `band` and a MapLibre `style`. The style can point at
   a GeoJSON file served by the plugin.
+- The plugin's overlay manifest, GeoJSON and refresh page answered HTTP 200
+  without authentication on a server that allows read-only access. A few
+  hours of traffic made a GeoJSON of about 8 KB.
 - Live updates need a context that calls `overlay.refresh` or
   `overlay.setData`. The documentation describes no server-only way, so a
   background iframe page is needed.
@@ -94,5 +114,4 @@ the aggregates above.
 
 ## Not yet verified
 
-See SPEC section 13: counter reset across a plugin restart, and the size of a
-coverage layer Freeboard-SK handles smoothly.
+See SPEC section 13: how smoothly Freeboard-SK draws the coverage layer.

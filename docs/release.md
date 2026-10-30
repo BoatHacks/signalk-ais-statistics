@@ -35,10 +35,18 @@ in the repository:
       the direct dependency that pulls in a vulnerable one
 - [ ] **Plugin CI (10):** `.github/workflows/plugin-ci.yml` calls SignalK's
       reusable plugin CI workflow pinned to a release commit SHA with the
-      version in a trailing comment, never to a branch
+      version in a trailing comment, never to a branch. Bump the pin to the
+      latest server release before each release; it also runs the format
+      check on Windows, which is why `.gitattributes` forces LF
 - [ ] **Install, load, activate, schema, tests (80):** run in the registry's
       own harness; the plugin must install cleanly, load, activate with the
-      default configuration, expose a valid config schema, and pass `npm test`
+      default configuration, expose a valid config schema, and pass `npm test`.
+      The harness runs the tests from a clone at the `v<version>` tag after
+      `npm ci --ignore-scripts`, without network and within 60 s; the
+      `registry-harness` job in `test.yml` does the same
+- [ ] Screenshots regenerated with `npm run build && node
+      scripts/screenshots.cjs && python3 scripts/compress-screenshots.py`
+      after visible changes
 
 ## GitHub repository
 

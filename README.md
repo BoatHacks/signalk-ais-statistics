@@ -3,10 +3,11 @@
 A SignalK server plugin that turns the AIS traffic your server already
 receives into reception statistics for your own AIS station.
 
-**Status: design phase.** The design documents are written and there is no
-code yet. Nothing is published to npm.
+**Status: 0.1.0, the first release.** The plugin, its REST API, the web
+app and the plotter overlay are unit tested and run on a development
+server; the open points are in SPEC section 13.
 
-## What it will do
+## What it does
 
 - Count vessels (by type group and class A/B), positions and messages per
   minute and hour.
@@ -20,7 +21,7 @@ code yet. Nothing is published to npm.
 - Show graphs, a radar and a coverage map in a SignalK web app that works on
   a phone and offline.
 - Offer the coverage footprint as an overlay layer for chart plotters that
-  support Plotter Extensions, such as Freeboard-SK.
+  support Plotter Extensions, such as Freeboard-SK 3.4.0 or later.
 
 ## Documents
 
@@ -35,7 +36,23 @@ code yet. Nothing is published to npm.
 | [docs/release.md](docs/release.md) | first release and plugin registry checklist |
 | [CLAUDE.md](CLAUDE.md) | orientation for AI coding agents working in this repository |
 
-## Requirements (planned)
+## Development
+
+```bash
+npm install
+npm test            # unit tests
+npm run typecheck   # plugin and web app
+npm run lint
+npm run format:check
+npm run build       # dist/ (plugin) and public/ (web app)
+npm run smoke       # loads the built plugin with require()
+```
+
+To try it on a SignalK development server, add the checkout as a `file:`
+dependency of the server (do not bind-mount it into `node_modules`) and
+restart the server after each build.
+
+## Requirements
 
 - A SignalK server with raw AIS sentences arriving (any AIS receiver input).
 - Optional but recommended: a History API provider such as `signalk-questdb`

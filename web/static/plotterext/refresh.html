@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>AIS coverage refresh</title>
+  </head>
+  <body>
+    <script>
+      // Background runtime of the plotter extension: asks the host to fetch
+      // the coverage GeoJSON again every hour (Plotter Extensions API,
+      // data overlays, overlay.refresh). Speaks JSON-RPC 2.0 inside the
+      // plotterExt/1 envelope over postMessage.
+      ;(function () {
+        var BUS = 'plotterExt/1'
+        var REFRESH_MS = 3600 * 1000
+        var nextId = 1
+        var connected = false
+
+        function send(msg) {
+          window.parent.postMessage({ bus: BUS, msg: msg }, '*')
+        }
+
+        function refresh() {
+          send({
+            jsonrpc: '2.0',
+            id: 'refresh-' + nextId++,
+            method: 'overlay.refresh',
+            params: { overlayId: 'coverage', source: 'coverage' },
+          })
+        }
+
+        window.addEventListener('message', function (event) {
+          if (event.source !== window.parent) return
+          var data = event.data
+          if (!data || data.bus !== BUS || !data.msg) return
+          if (data.msg.method === 'bus.handshake' && !connected) {
+            connected = true
+            clearInterval(ready)
+            setInterval(refresh, REFRESH_MS)
+          }
+        })
+
+        var ready = setInterval(function () {
+          send({ jsonrpc: '2.0', method: 'bus.ready', params: {} })
+        }, 500)
+        send({ jsonrpc: '2.0', method: 'bus.ready', params: {} })
+      })()
+    </script>
+  </body>
+</html>

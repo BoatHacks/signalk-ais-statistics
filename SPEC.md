@@ -1,8 +1,9 @@
 # signalk-ais-statistics Specification
 
-Status: draft 3. Revised after the scoping answers of 2026-10-30, then
+Status: draft 4, implemented by the MVP code. Revised after the scoping answers of 2026-10-30, then
 changed to keep all positions and report percentiles instead of rejecting
-outliers. Items still unconfirmed are in section 13.
+outliers, then aligned with the MVP implementation. Items still unconfirmed
+are in section 13.
 
 ## 1. Introduction
 
@@ -70,7 +71,11 @@ service.
   70-79 cargo, 80-89 tanker, everything else other. Targets whose type is
   not yet known are counted as "unknown" for that bucket.
 - A target counts once per bucket in "vessels", however many messages it
-  sent.
+  sent. Vessels are the senders of class A and class B messages; base
+  stations, aids to navigation and SAR aircraft are not counted as vessels.
+- Type 9 (SAR aircraft) position reports count as `positions.other`. They
+  count toward distance and coverage but have no class, so they are not in
+  the per-class sectors.
 
 ### 2.2 Distance and bearing
 
@@ -92,7 +97,12 @@ Distance statistics are made robust by reporting percentiles instead of
 trusting the maximum:
 
 - average, median, p95 and p99 distance, computed from a fixed log-spaced
-  histogram of distances per bucket (cheap, and mergeable across buckets);
+  histogram of distances per bucket (cheap, and mergeable across buckets).
+  Bin 0 is [0, 0.5) nm, bins 1 to 30 step by a factor of 2^(1/3) (about
+  26 percent) up to 512 nm, and bin 31 holds everything from 512 nm. The
+  layout is part of the persistence schema. Percentiles interpolate within
+  a bin; the average uses bin centres, with the overflow bin counted as
+  512 nm, so live and history-derived figures agree;
 - the maximum is still reported, labelled as untrusted, because it can be
   wildly wrong (thousands of nm) when a single bad position arrives.
 
@@ -122,7 +132,8 @@ positions, and the count of unique vessels per hour and per type group.
 ### 2.6 Sectors
 
 For each of 24 sectors and for each class: number of position reports and
-the p99 distance, per hour bucket, from a coarse per-sector histogram. The
+the p99 distance, per hour bucket, from a coarse per-sector histogram (the
+distance bins merged in pairs, 16 bins). The
 radar for a longer window shows, per sector, the highest hourly p99 in the
 window (a conservative figure, since percentiles do not merge exactly from
 hourly values).
@@ -149,7 +160,7 @@ subtraction.
 | counter | positions by class | position reports, class A, class B, other |
 | counter | distance bins | position reports per log-spaced distance bin, used to compute window avg, median, p95 and p99 |
 | counter | sector counts | position reports per sector and class |
-| gauge | distance, rolling 1 h | average, p95, p99 and max distance |
+| gauge | distance, rolling 1 h | average, median, p95, p99 and max distance |
 | gauge | sector p99, rolling 1 h | p99 distance per sector and class |
 | gauge | unique vessels, rolling 1 h and 24 h | total and per type group |
 | gauge | coverage | cells and area covered today |
@@ -167,7 +178,12 @@ History is not kept by the plugin. See section 8.
 ## 5. Sources / Inputs
 
 1. **Raw AIS sentences** from the SignalK server's sentence events
-   (`!AIVDM`). The only source of message counts, message types and class,
+   (`!AIVDM`), by default `nmea0183` (NMEA 0183 input) and `nmea0183AISout`
+   (where converter plugins such as `signalk-n2kais-to-nmea0183` emit AIS
+   that arrives over NMEA 2000). The events are configurable (9); each has
+   its own decoder so multipart messages from different events never mix.
+   If the same receiver reaches two events, its messages count twice, so
+   the user lists only one of them (see 12). The only source of message counts, message types and class,
    because SignalK's data model does not retain per-message information.
    `!AIVDO` (the vessel's own transponder) is excluded from reception
    statistics.
@@ -195,13 +211,17 @@ including when it is embedded in another page such as an infodisplay panel.
 | Route | Returns |
 |---|---|
 | `GET /summary?window=24h` | headline figures: messages, positions, vessels by group, distance avg, p95, p99 and max |
-| `GET /series?metric=&resolution=&from=&to=` | time series for the charts, read from history |
-| `GET /radar?window=24h&class=a\|b\|all` | 24 sectors with count and max distance |
-| `GET /coverage?window=7d` | cell ids, GeoJSON for the map, covered area in km2 |
+| `GET /series?metric=&resolution=&from=&to=` | time series for the charts, read from history; `metric` is `messages`, `positions`, `distance` or `vessels`, `resolution` in seconds (at least 60, at most 2000 points) |
+| `GET /radar?window=24h&class=a\|b\|all` | 24 sectors with count and p99 distance (the highest hourly p99 in the window, see 2.6) |
+| `GET /coverage?window=7d` | cell ids, GeoJSON for the map, covered area in m²; windows `24h` (today), `7d`, `30d` |
+| `GET /overlay/coverage.geojson` | the plotter overlay's GeoJSON: the 7 day footprint and the 24 hour radar wedges |
 | `GET /status` | live state: tracked targets, own position age, history reachable or not |
 
-Windows accept `1h`, `24h`, `7d`, `30d`. Responses are JSON with explicit
-units (`nm`, `km2`) in field names.
+Windows accept `1h`, `24h`, `7d`, `30d`. Responses are JSON in SI units
+named in the field (`p99M` in metres, `areaM2` in square metres); the web
+app converts them to the user's display units (section 7). Responses and say whether they came from history
+or from live data (`source`). Unique vessel counts are given for windows up
+to 24 hours and are null beyond, since unique counts are not additive.
 
 ### 6.2 SignalK paths
 
@@ -209,8 +229,11 @@ The plugin publishes deltas under `sensors.ais.statistics.*` on the own
 vessel (source label `signalk-ais-statistics`). History is whatever the
 server's history provider records of these, so the paths are part of the
 persistence contract (section 8). All published values are numeric, so any
-History API provider can store and return them. Every value is published
-every minute, whether or not it changed.
+History API provider can store and return them. Every counter is published
+every minute, whether or not it changed. A gauge with no data (for example
+no position with a known own position in the last hour) is left out of the
+delta rather than published as zero or null; the web app's distance series
+come from the bin counters, not from these gauges.
 
 Counters (monotonic, count since the plugin started):
 - `messages.total`
@@ -218,13 +241,20 @@ Counters (monotonic, count since the plugin started):
 - `distance.bin.<nn>`, one path per distance bin (32 bins)
 - `sectors.<nnn>.<class>.count`, one path per sector and class (48)
 
-Gauges:
-- `distance.avgNm`, `distance.p95Nm`, `distance.p99Nm`, `distance.maxNm`,
-  over the last hour
-- `sectors.<nnn>.<class>.p99Nm`, over the last hour
+Gauges, in SI units like every SignalK path:
+- `distance.avg`, `distance.median`, `distance.p95`, `distance.p99`,
+  `distance.max` in metres, over the last hour
+- `sectors.<nnn>.<class>.p99` in metres, over the last hour
 - `vessels.last1h` and `vessels.last24h`, and
   `vessels.byGroup.<group>.last1h` and `.last24h`
-- `coverage.areaKm2.today` and `coverage.cells.today`
+- `coverage.area.today` in square metres, and `coverage.cells.today`
+
+On start the plugin suggests default metadata for the distance and area
+gauges (`units` `m` or `m2`, and the `distance` display unit category) with
+`app.setDefaultMetadata`, so the server's unit preferences apply and a
+user's own metadata is never overwritten. Internally distances stay in
+nautical miles (the histogram bins in 2.3 are defined in nm) and are
+converted at the edges.
 
 Windows longer than 24 hours cannot report unique vessels as one number,
 because unique counts are not additive; the web app shows the daily
@@ -232,10 +262,15 @@ series instead.
 
 A counter resets to zero when the plugin restarts. Readers detect a value
 lower than its predecessor and treat the new value as counted from zero. A
-`last` query returns `null` for buckets before the first recorded sample,
-which readers treat as zero, and the one provider checked repeats the
-previous value for buckets with no new sample. History queries must always
-pass a `resolution` (without one the provider returned no rows).
+restart inside a bucket would lose the count before it, so readers also
+query `max` for each counter: when a bucket's `last` dropped, its increment
+is the rise from the previous bucket up to that `max`, plus the new `last`.
+On the provider checked, a restart shows as a plain drop with no `null` or
+gap, and buckets start at the query's `from`. A `last` query returns `null`
+for buckets before the first recorded sample, which readers treat as zero,
+and the one provider checked repeats the previous value for buckets with
+no new sample. History queries must always pass a `resolution` (without one
+the provider returned no rows).
 
 The cell ids themselves are not published, because the History API is built
 around numeric values and a provider is not required to store text; see
@@ -244,23 +279,32 @@ section 8 for where cell sets live.
 ### 6.3 Chart plotter overlay
 
 The plugin exposes the reception footprint through the Plotter Extensions
-API that Freeboard-SK (3.3.0 at the time of writing) reads, the same
+API that Freeboard-SK reads (data overlays need Freeboard-SK 3.4.0 or later), the same
 mechanism the `@meri-imperiumi/signalk-internet` plugin uses for its toolbar
 button:
 
 - The plugin registers a read-only resource provider for the
   `plotterExtensions` resource type, serving one manifest keyed by the
-  plugin id, and only while the plugin is running.
+  plugin id, and only while the plugin is running with `publishOverlay`
+  on. The server cannot unregister a provider, so it is registered once and
+  answers empty while the plugin is stopped.
 - The manifest declares `apiVersion: "1"`, requires `overlays.data`, and
   lists one data overlay (`type: "data"`, band `aboveCharts`) whose `style`
-  is a MapLibre style served by the plugin. The style has a GeoJSON source
-  (H3 cell polygons, one feature per cell with an `id` and a coverage
-  `intensity` property, plus the sector radar as polygons) and a fill layer
-  coloured by `intensity`.
+  is an inline MapLibre version 8 style. The style has one GeoJSON source,
+  `/plugins/signalk-ais-statistics/overlay/coverage.geojson`, which the
+  plotter fetches with the user's credentials: H3 cell polygons for the last
+  7 days (`kind: "cell"`, with `id`, a coverage `intensity` from 0 to 1 and
+  the report count), plus the 24 hour sector radar as wedges from the last
+  known own position (`kind: "radar"`). A fill layer colours cells by
+  `intensity` and a line layer outlines the radar.
 - Live updates need a context that calls `overlay.refresh`, so the manifest
-  also declares an optional `background.iframe` page that does so hourly.
-  Without it the overlay still shows, and refreshes when the plotter
-  reloads it.
+  also declares an optional `background.iframe` page,
+  `/signalk-ais-statistics/plotterext/refresh.html` (part of the web app
+  bundle), that does so hourly. Without it the overlay still shows, and
+  refreshes when the plotter reloads it.
+- On the test server the GeoJSON for a few hours of traffic was about 8 KB
+  (12 cells, 15 radar wedges), and all overlay routes answered without
+  authentication on a server that allows read-only access.
 - The overlay is a plotter feature, so it works wherever the plotter
   supports Plotter Extensions; other plotters (for example OpenCPN) are not
   covered.
@@ -289,8 +333,21 @@ A SignalK web app, listed in the admin UI, with:
 It must work on a phone, since the boat server is often viewed remotely
 over a metered link, so the app's own assets are bundled locally (no CDN)
 and payloads stay small; only the optional OSM tiles come from the internet,
-and only when the basemap rules above allow it. It follows the SignalK
-admin UI look.
+and only when the basemap rules above allow it.
+
+It follows the SignalK plugin UI guideline the maintainer adopted (a dark
+"tactical" console look):
+- A dark canvas in day and night, with day or night intensity from
+  `environment.mode`; flat panels with corner brackets, uppercase labels
+  and large monospace values; touch targets of at least 48 px.
+- Distances and areas in the user's display units from the path metadata
+  (`meta.displayUnits`), otherwise SI with ISO prefixes (`12.3 km`).
+- Ship time without a zone suffix when `environment.time.timezoneOffset`
+  is published, otherwise UTC with `Z`; dates as `YYYY-MM-DD`.
+- Views selected by hash routes (`#/charts?window=7d`); one WebSocket for
+  mode, time offset and internet state, throttled to one update per 5 s,
+  reconnecting with backoff and showing an offline banner while down.
+- The plugin's app icon (`signalk.appIcon`) is also the favicon.
 
 ## 8. Persistence
 
@@ -319,20 +376,26 @@ directly. Consequences:
   cumulative counters (4.1).
 - The one thing the History API cannot carry is the set of covered H3
   cells. The plugin therefore writes one small cell-set file per UTC day in
-  its own data directory (a few KB), pruned by `coverageRetentionDays`
-  (default 90). Everything else is stateless across restarts, apart from the
-  open bucket at shutdown, which is flushed on stop.
+  its own data directory (a few KB), `coverage-YYYY-MM-DD.json`, pruned by
+  `coverageRetentionDays` (default 90). Per cell it holds the shortest
+  distance seen and the report count; it also holds that day's distance
+  histogram, so a window's coverage cap is computed from the files alone. A
+  day holds at most 20000 cells. Files are written atomically every hour,
+  at the UTC day change and on stop, and today's file is merged back in on
+  start. Everything else is stateless across restarts; the last counter
+  values are published once more on stop.
 
 ## 9. Configuration
 
 | Option | Default | Notes |
 |---|---|---|
 | `targetExpirySeconds` | 3600 | live tracking expiry |
-| `h3Resolution` | 5 | coverage cell size |
+| `h3Resolution` | 6 | coverage cell size: 6 is about 7 km across (36 km²); 5 was too coarse (chosen by the maintainer) |
 | `coverageDistancePercentile` | 99 | coverage skips cells beyond this percentile of the window's distances; 100 disables the cap |
 | `ownPositionMaxAgeSeconds` | 60 | staleness limit for own position |
 | `coverageRetentionDays` | 90 | how long daily cell-set files are kept |
 | `publishOverlay` | true | register the plotter extension overlay |
+| `sentenceEvents` | `nmea0183`, `nmea0183AISout` | server events to read raw sentences from; any event names |
 
 ## 10. MVP Scope
 
@@ -387,7 +450,8 @@ directly. Consequences:
   useless.
 - **Counts as cumulative counters (chosen by the maintainer).** History
   providers lack sum and count aggregates; a window total is `last(end)`
-  minus `last(start)`, and counter resets are detected by the reader.
+  minus `last(start)`, and counter resets are detected by the reader with the
+help of `max` (6.2). Verified across a plugin restart on the test server.
 - **Published under `sensors.ais.statistics.*` (chosen by the maintainer).**
   It sits next to `sensors.ais.class`. The SignalK schema defines a sensor
   as an object with `name`, `sensorType`, `sensorData`, `fromBow`,
@@ -400,27 +464,39 @@ directly. Consequences:
 - **Read-only users may use the web app (chosen by the maintainer).** Needs
   explicit route permissions, since SignalK defaults plugin routes to
   admin-only.
+- **Radar keeps the highest hourly p99 per sector (chosen by the
+  maintainer).** In a sector-hour with fewer than about 100 reports, p99 is
+  close to that hour's maximum, so one bogus position can set a sector's
+  radius for a whole window. Accepted for its simplicity and conservative
+  reading, over a minimum report count per hour, a lower percentile, or 768
+  per-sector bin counters.
 - **Bucket-based statistics, not rolling all-time figures.** Conditions
   such as ducting change daily; one all-time max would hide that.
 - **Availability deferred.** Its definition needs care (window, gap
   threshold, time the plugin was down), and the MVP is more useful with
   range and coverage first.
 
+- **SI units on paths and in the REST API (chosen by the maintainer).**
+  SignalK paths carry SI values and display units come from path metadata,
+  so distances are published and served in metres and areas in square
+  metres, replacing earlier `...Nm` and `...Km2` names. Nothing was
+  released, so no stored history needed migrating.
+- **Configurable sentence events (chosen by the maintainer).** AIS from an
+  NMEA 2000 receiver reaches plugins only through a converter on
+  `nmea0183AISout`, and some setups use other events, so the events are an
+  option defaulting to `nmea0183` and `nmea0183AISout`. Cost: a receiver
+  that reaches two listed events is counted twice; the option's description
+  says so. Decoding NMEA 2000 PGNs directly was rejected as a second
+  decoder.
+
 ## 13. Open Questions
 
-Checked on 2026-10-30 against a test server (SignalK server 2.35.1) and the
-Freeboard-SK plotter extensions documentation. Resolved findings are
-recorded in 4.1, 6.1, 6.3 and 8 and in ARCHITECTURE.md; the points below
-are what is still unverified.
+Checked on 2026-10-30 against a test server (SignalK server 2.35.1) with
+the plugin installed. Resolved findings are recorded in 4.1, 6.1, 6.2, 6.3
+5, 8 and 12 and in ARCHITECTURE.md; the points below are what is still
+unverified.
 
-1. **Counter reset across a plugin restart.** On the test server (default
-   provider `signalk-questdb` 2.3.2) `last` queries work, return `null`
-   before the first sample and repeat the previous value for buckets
-   without a new sample. Not yet tested with the plugin's own counters:
-   the restart reset and its detection by the reader. Only this provider
-   has been seen; others may behave differently.
-2. **Plotter extension data overlay.** The Freeboard-SK doc describes
-   `overlay.setData` and `overlay.refresh` but not a server-only way to push
-   live data, so the background iframe page is needed for live refresh. How
-   large a GeoJSON source the plotter handles smoothly (hundreds of cells
-   over 30 days) is untested.
+1. **Overlay smoothness in Freeboard-SK.** The overlay is served and
+   small, but nobody has yet looked at it in the plotter, and how large a
+   GeoJSON source it handles smoothly (hundreds of cells over 30 days) is
+   untested.
