@@ -6,6 +6,18 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-10-30
+
+### Added
+
+- Map view toggles to show or hide the coverage cells and the 24 hour radar
+  wedges, remembered per browser.
+
+### Changed
+
+- The web app map draws cells and radar in the plotter overlay's colours,
+  defined once and shared by both.
+
 ## [0.1.1] - 2026-10-30
 
 ### Changed
@@ -33,6 +45,7 @@ First release.
 - A dark tactical web app theme following day and night mode, with
   distances in the server's display units and the plugin's app icon.
 
-[Unreleased]: https://github.com/BoatHacks/signalk-ais-statistics/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/BoatHacks/signalk-ais-statistics/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/BoatHacks/signalk-ais-statistics/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/BoatHacks/signalk-ais-statistics/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/BoatHacks/signalk-ais-statistics/releases/tag/v0.1.0
