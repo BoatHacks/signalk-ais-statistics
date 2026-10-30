@@ -61,9 +61,9 @@ covered area and produces the GeoJSON used by the map and the overlay.
 
 ### 2.6 Publisher
 Emits the SignalK deltas of SPEC 6.2 through the plugin API's delta handler,
-with the plugin id as source: minute values every minute, closed-hour values
-(vessel groups, distance histogram bins, sectors) once per hour, coverage
-counts and area hourly.
+with the plugin id as source. Every value in SPEC 4.1 and 6.2 is published
+every minute, counters as running totals since the plugin started and gauges
+as rolling one-hour or 24-hour figures, whether or not it changed.
 
 ### 2.7 HistoryReader
 The only component that reads history. A small interface
@@ -75,7 +75,10 @@ every provider is expected to have, and never talks to a database directly
 
 ### 2.8 Query layer
 Combines the live state (current open bucket) with HistoryReader results to
-answer windowed queries. All REST handlers go through it.
+answer windowed queries. All REST handlers go through it. A window total is
+`last(end)` minus `last(start)` of a counter, with reset detection (a value
+lower than its predecessor starts a new segment counted from zero); window
+percentiles come from the difference of the distance bin counters.
 
 ### 2.9 REST API
 Express router registered through the plugin API. Thin: parse and validate
@@ -120,8 +123,9 @@ Published path names are the persistence schema, so they are defined once in
 ## 5. Integration Points
 
 - **SignalK sentence events**: input for all message statistics, via
-  `app.on('nmea0183', handler)`, the event installed plugins already use.
-  Verify the payload shape before coding (SPEC 13.4).
+  `app.on('nmea0183', handler)`. The handler receives the raw sentence as a
+  plain string, with no source or timestamp, so `!AIVDO` is told apart by
+  its prefix and reception time is the time of the call.
 - **`navigation.position` (self)**: via a stream subscription.
 - **Plugin router and delta handler**: output (2.6, 2.9).
 - **History provider** (for example `signalk-questdb` here): records the
@@ -188,5 +192,6 @@ live-only (SPEC 8).
   injectable clock, publishing a few more paths; nothing in the MVP blocks it.
 - Optional position filtering with counters, if unfiltered coverage proves
   unusable.
-- Multiple AIS sources: keep source labels from Ingest so a `source`
-  dimension can be added to the published paths later.
+- Multiple AIS sources: the sentence event carries no source label, so
+  per-receiver statistics would need another input (for example a provider
+  specific stream). Not designed for now.

@@ -136,17 +136,23 @@ diagram is needed.
 
 ## 4. Data Model
 
-### 4.1 Hour summary (what gets published, see 6.2)
+### 4.1 Published statistics (see 6.2)
 
-| Field | Meaning |
-|---|---|
-| `start` | UTC hour start |
-| `messages` | all decoded messages |
-| `positions.a`, `positions.b`, `positions.other` | position reports by class |
-| `vessels.total`, `vessels.byGroup` | unique MMSIs in the hour |
-| `distance.avgNm`, `.medianNm`, `.p95Nm`, `.p99Nm`, `.maxNm` | over all reports with a usable position |
-| `distance.histogram` | counts per log-spaced bin, used to merge windows |
-| `sectors[24].a`, `.b` | count and p99 distance per class |
+History providers do not offer sum or count aggregates (the one checked
+accepts only average, min, max, first, last and a few smoothing methods), so
+counts are published as cumulative counters and windows are derived by
+subtraction.
+
+| Kind | Quantity | Meaning |
+|---|---|---|
+| counter | messages | all decoded messages since the plugin started |
+| counter | positions by class | position reports, class A, class B, other |
+| counter | distance bins | position reports per log-spaced distance bin, used to compute window avg, median, p95 and p99 |
+| counter | sector counts | position reports per sector and class |
+| gauge | distance, rolling 1 h | average, p95, p99 and max distance |
+| gauge | sector p99, rolling 1 h | p99 distance per sector and class |
+| gauge | unique vessels, rolling 1 h and 24 h | total and per type group |
+| gauge | coverage | cells and area covered today |
 
 ### 4.2 Live state (kept in memory)
 
@@ -199,25 +205,37 @@ units (`nm`, `km2`) in field names.
 
 ### 6.2 SignalK paths
 
-The plugin publishes deltas under `plugins.aisStatistics.*` (source label
-`signalk-ais-statistics`). History is whatever the server's history provider
-records of these, so the paths are part of the persistence contract
-(section 8). All published values are numeric, so any History API provider
-can store and return them.
+The plugin publishes deltas under `sensors.ais.statistics.*` on the own
+vessel (source label `signalk-ais-statistics`). History is whatever the
+server's history provider records of these, so the paths are part of the
+persistence contract (section 8). All published values are numeric, so any
+History API provider can store and return them. Every value is published
+every minute, whether or not it changed.
 
-- Every minute: `messagesPerMinute`, `positionsPerMinute.classA`, `.classB`
-- Every minute: `vessels.last1h`, `distance.avgNm.last1h`,
-  `distance.p95Nm.last1h`, `distance.p99Nm.last1h`, `distance.maxNm.last1h`
-- Every hour for the closed hour: `vessels.byGroup.<group>`,
-  `distance.histogram.<bin>` (one path per bin, so windows can be merged
-  from history), `sectors.<nnn>.<class>.count`,
-  `sectors.<nnn>.<class>.p99Nm`
-- Hourly: `coverage.areaKm2.today` and `coverage.cells.today` (counts).
-  The cell ids themselves are not published, because the History API is
-  built around numeric values and a provider is not required to store text;
-  see section 8 for where cell sets live.
+Counters (monotonic, count since the plugin started):
+- `messages.total`
+- `positions.classA`, `positions.classB`, `positions.other`
+- `distance.bin.<nn>`, one path per distance bin (32 bins)
+- `sectors.<nnn>.<class>.count`, one path per sector and class (48)
 
-(Final path naming is subject to a check against SignalK conventions; 13.)
+Gauges:
+- `distance.avgNm`, `distance.p95Nm`, `distance.p99Nm`, `distance.maxNm`,
+  over the last hour
+- `sectors.<nnn>.<class>.p99Nm`, over the last hour
+- `vessels.last1h` and `vessels.last24h`, and
+  `vessels.byGroup.<group>.last1h` and `.last24h`
+- `coverage.areaKm2.today` and `coverage.cells.today`
+
+Windows longer than 24 hours cannot report unique vessels as one number,
+because unique counts are not additive; the web app shows the daily
+series instead.
+
+A counter resets to zero when the plugin restarts. Readers detect a value
+lower than its predecessor and treat the new value as counted from zero.
+
+The cell ids themselves are not published, because the History API is built
+around numeric values and a provider is not required to store text; see
+section 8 for where cell sets live.
 
 ### 6.3 Chart plotter overlay
 
@@ -289,7 +307,12 @@ directly. Consequences:
 - Providers differ in sampling and in whether they re-record unchanged
   values, so the plugin publishes every value at its interval and readers
   must treat a missing sample as "unchanged", not as a gap. The provider's
-  path filters must allow `plugins.aisStatistics.*`.
+  path filters must allow `sensors.ais.statistics.*`.
+- Readers may only rely on aggregates every provider is expected to have.
+  The provider checked offers `average`, `min`, `max`, `first`, `last`,
+  `mid`, `middle_index`, `sma` and `ema`, with no `sum` or `count`. The
+  plugin uses `last` and `max` only, which is why counts are published as
+  cumulative counters (4.1).
 - The one thing the History API cannot carry is the set of covered H3
   cells. The plugin therefore writes one small cell-set file per UTC day in
   its own data directory (a few KB), pruned by `coverageRetentionDays`
@@ -359,6 +382,12 @@ directly. Consequences:
   anything derived from it is untrusted. Coverage is the exception and gets
   a configurable percentile cap, because bogus cells would make the overlay
   useless.
+- **Counts as cumulative counters (chosen by the maintainer).** History
+  providers lack sum and count aggregates; a window total is `last(end)`
+  minus `last(start)`, and counter resets are detected by the reader.
+- **Published under `sensors.ais.statistics.*` (chosen by the maintainer).**
+  It sits next to `sensors.ais.class`. Not yet checked against the SignalK
+  schema for conflicts (13.4).
 - **Publish distance histogram bins as paths (chosen by the maintainer).**
   About 30 extra paths per hour, in exchange for exact window percentiles
   from merged history.
@@ -373,30 +402,27 @@ directly. Consequences:
 
 ## 13. Open Questions
 
-Checked on 2026-10-30 against a test server (SignalK server 2.35.1) and the Freeboard-SK
-plotter extensions documentation; the points below are what is still
-unverified. Resolved findings are recorded in 6.1, 6.3 and 8 and in
-ARCHITECTURE.md.
+Checked on 2026-10-30 against a test server (SignalK server 2.35.1) and the
+Freeboard-SK plotter extensions documentation. Resolved findings are
+recorded in 4.1, 6.1, 6.3 and 8 and in ARCHITECTURE.md; the points below are
+what is still unverified.
 
-1. **History API use.** `values` queries have not been exercised against a
-   live server (`signalk-questdb` 2.3.2 was the provider on the test server, but any
-   provider should work), and it is not checked whether a default provider
-   is selected (`historyApi.defaultProvider`). Confirm that aggregate queries
-   over `plugins.aisStatistics.*` return what section 8 assumes, and which
-   aggregates are guaranteed across providers.
+1. **Counters through the History API.** On the test server (default
+   provider `signalk-questdb` 2.3.2) `values` queries work and accept the
+   aggregates listed in section 8. Not yet tested: a published counter read
+   back with `last`, behavior across a plugin restart (reset detection), and
+   whether a provider that skips unchanged samples returns an empty bucket
+   or the previous value. Any provider should work, but only this one has
+   been seen.
 2. **Cell sets in a plugin file.** Section 8 adds a small data-directory
    file for covered cells because the History API is numeric. Confirm this is
    acceptable, or choose between dropping coverage history beyond one day or
-   encoding cells as numeric paths (far more paths than the 30 per hour for
-   histogram bins).
+   encoding cells as numeric paths (far more paths than the 84 counters per
+   minute already published).
 3. **Plotter extension data overlay.** The Freeboard-SK doc describes
    `overlay.setData` and `overlay.refresh` but not a server-only way to push
    live data, so the background iframe page is needed for live refresh. How
    large a GeoJSON source the plotter handles smoothly (hundreds of cells
    over 30 days) is untested.
-4. **Raw sentence event payload.** Existing plugins listen with
-   `app.on('nmea0183', handler)`, which is the event the plugin should use.
-   The payload shape (sentence string versus object with source
-   information) and `!AIVDO` handling have not been inspected.
-5. **Path naming** under `plugins.*` against SignalK conventions for derived
-   data.
+4. **Path namespace.** `sensors.ais.statistics.*` is chosen, but not yet
+   checked against the SignalK schema or other plugins for conflicts.
