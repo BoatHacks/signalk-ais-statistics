@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { DEFAULT_CONFIG, configSchema, resolveConfig } from '../src/config'
 
 describe('resolveConfig', () => {
+  it('defaults to H3 resolution 6, cells about 7 km across', () => {
+    expect(DEFAULT_CONFIG.h3Resolution).toBe(6)
+  })
+
   it('returns the defaults for missing options', () => {
     expect(resolveConfig(undefined)).toEqual(DEFAULT_CONFIG)
     expect(resolveConfig({})).toEqual(DEFAULT_CONFIG)
