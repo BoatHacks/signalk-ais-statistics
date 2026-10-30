@@ -7,6 +7,7 @@ import { paths } from '../src/paths'
 import { PLUGIN_ID, createPlugin } from '../src/plugin'
 import { asOwn, classA, classB, OWN, staticA } from './fixtures/ais'
 import { fakeApp } from './fixtures/app'
+import { classAPgn, staticAPgn } from './fixtures/n2k'
 import { FakeHistory } from './fixtures/history'
 import { fakeRouter } from './fixtures/router'
 
@@ -89,12 +90,45 @@ describe('plugin', () => {
     expect(f.errors).toEqual([])
   })
 
-  it('also counts AIS from nmea0183AISout, decoding each source apart', async () => {
+  it('counts AIS from NMEA 2000 by default', async () => {
     const f = fakeApp(await mkdtemp(join(tmpdir(), 'ais-plugin-')))
     const plugin = createPlugin(f.app as never)
     const r = fakeRouter()
     plugin.registerWithRouter!(r.router as never)
     await plugin.start({}, () => undefined)
+    f.position(OWN.lat, OWN.lon)
+    const p = destination(OWN, 90, 10)
+    f.app.emit('N2KAnalyzerOut', classAPgn(999000001, p.lat, p.lon))
+    f.app.emit('N2KAnalyzerOut', staticAPgn(999000001, 'Tanker'))
+    f.app.emit(
+      'N2KAnalyzerOut',
+      classAPgn(999000002, p.lat, p.lon, 'Channel A VDL transmission'),
+    )
+    f.app.emit('N2KAnalyzerOut', { pgn: 127250, fields: {} })
+    await vi.advanceTimersByTimeAsync(60_000)
+    const values = new Map(
+      f.deltas[0]!.delta.updates[0]!.values.map((v) => [v.path, v.value]),
+    )
+    expect(values.get(paths.messagesTotal)).toBe(2)
+    expect(values.get(paths.distanceMax)).toBeCloseTo(10 * 1852, -1)
+    expect((await r.call('/status')).body).toMatchObject({
+      sentences: 3,
+      ownSentencesSkipped: 1,
+      decodeErrors: 0,
+    })
+    await plugin.stop()
+    expect(f.app.listenerCount('N2KAnalyzerOut')).toBe(0)
+  })
+
+  it('also counts AIS from nmea0183AISout, decoding each source apart', async () => {
+    const f = fakeApp(await mkdtemp(join(tmpdir(), 'ais-plugin-')))
+    const plugin = createPlugin(f.app as never)
+    const r = fakeRouter()
+    plugin.registerWithRouter!(r.router as never)
+    await plugin.start(
+      { sentenceEvents: ['nmea0183', 'nmea0183AISout'] },
+      () => undefined,
+    )
     f.app.emit('nmea0183AISout', sentenceAt(999000001, 50, 12))
     // The same multipart message on both events, interleaved.
     const [a1, a2] = staticA(999000002, 70)
