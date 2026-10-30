@@ -333,8 +333,21 @@ A SignalK web app, listed in the admin UI, with:
 It must work on a phone, since the boat server is often viewed remotely
 over a metered link, so the app's own assets are bundled locally (no CDN)
 and payloads stay small; only the optional OSM tiles come from the internet,
-and only when the basemap rules above allow it. It follows the SignalK
-admin UI look.
+and only when the basemap rules above allow it.
+
+It follows the SignalK plugin UI guideline the maintainer adopted (a dark
+"tactical" console look):
+- A dark canvas in day and night, with day or night intensity from
+  `environment.mode`; flat panels with corner brackets, uppercase labels
+  and large monospace values; touch targets of at least 48 px.
+- Distances and areas in the user's display units from the path metadata
+  (`meta.displayUnits`), otherwise SI with ISO prefixes (`12.3 km`).
+- Ship time without a zone suffix when `environment.time.timezoneOffset`
+  is published, otherwise UTC with `Z`; dates as `YYYY-MM-DD`.
+- Views selected by hash routes (`#/charts?window=7d`); one WebSocket for
+  mode, time offset and internet state, throttled to one update per 5 s,
+  reconnecting with backoff and showing an offline banner while down.
+- The plugin's app icon (`signalk.appIcon`) is also the favicon.
 
 ## 8. Persistence
 

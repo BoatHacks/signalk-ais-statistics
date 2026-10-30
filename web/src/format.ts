@@ -1,8 +1,3 @@
-export function nm(v: number | null | undefined): string {
-  if (v === null || v === undefined) return 'no data'
-  return `${v < 10 && v !== 0 ? v.toFixed(1) : Math.round(v)} nm`
-}
-
 export function int(v: number | null | undefined): string {
   if (v === null || v === undefined) return 'no data'
   return Math.round(v).toLocaleString()

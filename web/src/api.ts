@@ -1,15 +1,17 @@
 // Client for the plugin's REST API (SPEC 6.1).
 export const API = '/plugins/signalk-ais-statistics'
 
-export type WindowName = '1h' | '24h' | '7d' | '30d'
+import type { WindowName } from './route'
+export type { WindowName }
 
 export interface Distance {
   count: number
-  avgNm: number | null
-  medianNm: number | null
-  p95Nm: number | null
-  p99Nm: number | null
-  maxNm: number | null
+  /** Distances are in metres throughout the API. */
+  avgM: number | null
+  medianM: number | null
+  p95M: number | null
+  p99M: number | null
+  maxM: number | null
 }
 
 export interface Summary {
@@ -28,7 +30,7 @@ export interface Radar {
     fromDeg: number
     toDeg: number
     count: number
-    p99Nm: number | null
+    p99M: number | null
   }[]
 }
 
@@ -42,8 +44,8 @@ export interface Series {
 export interface CoverageResponse {
   cells: number
   cappedCells: number
-  capNm: number | null
-  areaKm2: number
+  capM: number | null
+  areaM2: number
   geojson: GeoJSON.FeatureCollection
 }
 

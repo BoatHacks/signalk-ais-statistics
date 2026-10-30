@@ -13,6 +13,8 @@ export interface Unit {
   symbol: string
   toDisplay(si: number): number
   format(si: number | null | undefined): string
+  /** Formats a value already converted with `toDisplay`. */
+  formatDisplay(v: number): string
 }
 
 type Fn = (value: number) => number
@@ -116,11 +118,13 @@ export function makeUnit(si: SIUnit, meta: DisplayUnits | undefined): Unit {
         v === null || v === undefined || !Number.isFinite(v)
           ? 'no data'
           : `${short(f(v))} ${symbol}`,
+      formatDisplay: (v) => `${short(v)} ${symbol}`,
     }
   }
   return {
     symbol: si === 'm' ? 'm' : 'm²',
     toDisplay: (v) => v,
     format: (v) => formatSI(v, si),
+    formatDisplay: (v) => formatSI(v, si),
   }
 }

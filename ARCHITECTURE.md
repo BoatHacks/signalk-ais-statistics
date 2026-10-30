@@ -115,8 +115,12 @@ Nothing is written into the package directory at run time.
 
 ### 2.11 Web app
 Static bundle under `public/`, served by the server as a SignalK web app.
-Talks only to the REST API. No external CDNs for its own assets. Views per
-SPEC 7. The map has a basemap switch (OSM/OpenSeaMap or the server's chart
+Statistics come from the REST API; a single SignalK WebSocket carries
+`environment.mode`, the ship's time offset and the internet state. No
+external CDNs for its own assets. Views per SPEC 7, each a custom element
+that builds its DOM once and then updates text and attributes only;
+charts reuse their SVG paths and rects. Pure helpers (`units.ts`,
+`time.ts`, `route.ts`, `backoff.ts`) are unit tested under `test/web`. The map has a basemap switch (OSM/OpenSeaMap or the server's chart
 provider); its default follows the internet-status plugin's online and
 metered state when present, and a manual choice is remembered in
 `localStorage`.

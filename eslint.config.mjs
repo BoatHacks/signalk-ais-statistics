@@ -12,6 +12,10 @@ export default tseslint.config(
         console: 'readonly',
         process: 'readonly',
         require: 'readonly',
+        __dirname: 'readonly',
+        URL: 'readonly',
+        // Used inside page scripts that run in the browser.
+        localStorage: 'readonly',
       },
     },
     rules: { '@typescript-eslint/no-require-imports': 'off' },

@@ -10,21 +10,31 @@ import {
   type Basemap,
 } from './basemap'
 import { el } from './format'
+import type { Unit } from './units'
 
 export interface MapView {
   element: HTMLElement
-  show(window: '24h' | '7d' | '30d'): Promise<void>
+  show(
+    window: '24h' | '7d' | '30d',
+    units: { distance: Unit; area: Unit },
+  ): Promise<void>
+  /** Re-reads the theme colours, after a day or night change. */
+  restyle(): void
 }
+
+const cssVar = (name: string) =>
+  getComputedStyle(document.documentElement).getPropertyValue(name).trim()
 
 const OSM = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
 const SEAMARK = 'https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png'
 
 export function createMap(): MapView {
   const element = el('div', { class: 'map-view' })
-  const info = el('p', { class: 'muted' })
-  const switcher = el('div', { class: 'segmented', role: 'group' })
+  const info = el('p', { class: 'muted small' })
+  const switcher = el('div', { class: 'map-switcher', role: 'group' })
   const mapEl = el('div', { class: 'map' })
-  element.append(switcher, mapEl, info)
+  const card = el('div', { class: 'map-card sk-card' }, mapEl, switcher)
+  element.append(card, info)
 
   let map: L.Map | undefined
   let base: L.Layer[] = []
@@ -84,26 +94,32 @@ export function createMap(): MapView {
     await setBasemap(chosen)
   }
 
+  const cellStyle = (f?: GeoJSON.Feature): L.PathOptions => {
+    const t = Number(f?.properties?.intensity ?? 0)
+    const color = cssVar('--color-teal') || '#66c6db'
+    return {
+      color,
+      weight: 0.5,
+      fillColor: color,
+      fillOpacity: 0.15 + 0.5 * t,
+    }
+  }
+
   return {
     element,
-    async show(window) {
+    restyle() {
+      cells?.setStyle(cellStyle)
+    },
+    async show(window, units) {
       await ensureMap()
       map!.invalidateSize()
       const c = await get<CoverageResponse>('/coverage', { window })
       cells?.remove()
       cells = L.geoJSON(c.geojson, {
-        style: (f) => {
-          const t = Number(f?.properties?.intensity ?? 0)
-          return {
-            color: '#185fa8',
-            weight: 0.5,
-            fillColor: '#2a78d6',
-            fillOpacity: 0.15 + 0.5 * t,
-          }
-        },
+        style: cellStyle,
         onEachFeature: (f, layer) =>
           layer.bindTooltip(
-            `${f.properties.reports} reports, nearest ${f.properties.minDistanceNm} nm`,
+            `${f.properties?.reports} reports, nearest ${units.distance.format(f.properties?.minDistanceM)}`,
           ),
       }).addTo(map!)
       if (!fitted && c.cells > 0) {
@@ -113,10 +129,10 @@ export function createMap(): MapView {
       info.textContent =
         c.cells === 0
           ? 'No coverage recorded in this window yet.'
-          : `${c.cells.toLocaleString()} cells, about ${c.areaKm2.toLocaleString()} km² covered.` +
-            (c.capNm === null
+          : `${c.cells.toLocaleString()} cells, about ${units.area.format(c.areaM2)} covered.` +
+            (c.capM === null
               ? ''
-              : ` ${c.cappedCells} cells beyond ${c.capNm.toFixed(0)} nm (the distance percentile cap) are not shown.`) +
+              : ` ${c.cappedCells} cells beyond ${units.distance.format(c.capM)} (the distance percentile cap) are not shown.`) +
             ` Basemap: ${current === 'osm' ? 'OpenStreetMap and OpenSeaMap' : 'server charts'}.`
     },
   }
