@@ -14,9 +14,9 @@ describe('paths', () => {
     expect(paths.distanceBin(0)).toBe(`${PATH_PREFIX}.distance.bin.00`)
     expect(paths.distanceBin(31)).toBe(`${PATH_PREFIX}.distance.bin.31`)
     expect(paths.sectorCount(0, 'a')).toBe(`${PATH_PREFIX}.sectors.000.a.count`)
-    expect(paths.sectorP99Nm(23, 'b')).toBe(
-      `${PATH_PREFIX}.sectors.345.b.p99Nm`,
-    )
+    expect(paths.sectorP99(23, 'b')).toBe(`${PATH_PREFIX}.sectors.345.b.p99`)
+    expect(paths.distanceP99).toBe(`${PATH_PREFIX}.distance.p99`)
+    expect(paths.coverageAreaToday).toBe(`${PATH_PREFIX}.coverage.area.today`)
   })
 
   it('has one path per bin and per sector and class', () => {
@@ -32,7 +32,7 @@ describe('paths', () => {
       paths.messagesTotal,
       ...distanceBinPaths,
       ...TYPE_GROUPS.map(paths.vesselsByGroupLast24h),
-      paths.coverageAreaKm2Today,
+      paths.coverageAreaToday,
     ]
     for (const p of all) {
       expect(p.startsWith(`${PATH_PREFIX}.`)).toBe(true)

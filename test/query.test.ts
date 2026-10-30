@@ -7,6 +7,7 @@ import { Query } from '../src/query'
 import { OWN } from './fixtures/ais'
 import { FakeHistory } from './fixtures/history'
 
+const NM = 1852
 const T0 = Date.UTC(2030, 0, 1)
 
 function report(mmsi: number, bearing: number, nm: number, type = 1) {
@@ -48,11 +49,11 @@ describe('Query with history', () => {
     expect(s.messages).toBe(1200)
     expect(s.positions).toEqual({ classA: 600, classB: 600, other: 0 })
     expect(s.distance.count).toBe(1200)
-    expect(s.distance.medianNm).toBeGreaterThan(7)
-    expect(s.distance.medianNm).toBeLessThan(21)
-    expect(s.distance.p99Nm).toBeGreaterThan(15)
-    expect(s.distance.p99Nm).toBeLessThan(26)
-    expect(s.distance.maxNm).toBeCloseTo(20, 3)
+    expect(s.distance.medianM).toBeGreaterThan(7 * NM)
+    expect(s.distance.medianM).toBeLessThan(21 * NM)
+    expect(s.distance.p99M).toBeGreaterThan(15 * NM)
+    expect(s.distance.p99M).toBeLessThan(26 * NM)
+    expect(s.distance.maxM).toBeCloseTo(20 * NM, -1)
     expect(s.vessels?.total).toBe(2)
   })
 
@@ -76,7 +77,7 @@ describe('Query with history', () => {
     const r = await q.radar('24h', 'a', T0 + 180 * MINUTE_MS)
     expect(r.sectors).toHaveLength(24)
     expect(r.sectors[3]!.count).toBe(180)
-    expect(r.sectors[3]!.p99Nm).toBeGreaterThan(7)
+    expect(r.sectors[3]!.p99M).toBeGreaterThan(7 * NM)
     expect(r.sectors[13]!.count).toBe(0)
     const all = await q.radar('24h', 'all', T0 + 180 * MINUTE_MS)
     expect(all.sectors[13]!.count).toBe(180)
@@ -92,7 +93,7 @@ describe('Query with history', () => {
     expect(s.classA).toEqual([60, 60, 60])
     const d = await q.series('distance', 3600, T0, T0 + 3 * HOUR_MS)
     expect((d.count as number[])[1]).toBe(120)
-    expect((d.maxNm as number[])[1]).toBeCloseTo(20, 3)
+    expect((d.maxM as number[])[1]).toBeCloseTo(20 * NM, -1)
   })
 })
 
@@ -119,7 +120,7 @@ describe('Query in live-only mode', () => {
     const q = new Query(new Aggregator(T0), () => nullHistoryReader)
     const s = await q.summary('1h', T0 + 1000)
     expect(s.messages).toBe(0)
-    expect(s.distance.p99Nm).toBeNull()
-    expect(s.distance.maxNm).toBeNull()
+    expect(s.distance.p99M).toBeNull()
+    expect(s.distance.maxM).toBeNull()
   })
 })

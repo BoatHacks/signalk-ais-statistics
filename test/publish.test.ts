@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { Aggregator } from '../src/aggregate'
 import { destination } from '../src/geo'
 import { PATH_PREFIX, paths } from '../src/paths'
-import { buildValues, publish } from '../src/publish'
+import { buildValues, defaultMetadata, publish } from '../src/publish'
 import { OWN } from './fixtures/ais'
 
 const T0 = Date.UTC(2030, 0, 1)
@@ -15,7 +15,7 @@ describe('buildValues', () => {
     expect(byPath.get(paths.distanceBin(31))).toBe(0)
     expect(byPath.get(paths.sectorCount(23, 'b'))).toBe(0)
     expect(byPath.get(paths.vesselsLast24h)).toBe(0)
-    expect(byPath.has(paths.distanceP99Nm)).toBe(false)
+    expect(byPath.has(paths.distanceP99)).toBe(false)
     expect(byPath.has(paths.coverageCellsToday)).toBe(false)
     // 4 counters + 32 bins + 48 sectors + 2 + 14 vessel gauges
     expect(values).toHaveLength(4 + 32 + 48 + 2 + 14)
@@ -32,10 +32,12 @@ describe('buildValues', () => {
       expect(Number.isFinite(v.value)).toBe(true)
     }
     const byPath = new Map(values.map((v) => [v.path, v.value]))
-    expect(byPath.get(paths.distanceMaxNm)).toBeCloseTo(25, 3)
-    expect(byPath.get(paths.distanceP99Nm)).toBeGreaterThan(20)
-    expect(byPath.get(paths.sectorP99Nm(2, 'a'))).toBeGreaterThan(14)
+    // Gauges are published in SI units (SPEC 6.2).
+    expect(byPath.get(paths.distanceMax)).toBeCloseTo(25 * 1852, 0)
+    expect(byPath.get(paths.distanceP99)).toBeGreaterThan(20 * 1852)
+    expect(byPath.get(paths.sectorP99(2, 'a'))).toBeGreaterThan(14 * 1852)
     expect(byPath.get(paths.coverageCellsToday)).toBe(3)
+    expect(byPath.get(paths.coverageAreaToday)).toBe(750e6)
     expect(new Set(values.map((v) => v.path)).size).toBe(values.length)
   })
 })
@@ -54,5 +56,15 @@ describe('publish', () => {
     })
     publish(sink, 'plugin', [], T0)
     expect(sent).toHaveLength(1)
+  })
+
+  it('suggests SI metadata for every distance and area gauge', () => {
+    const meta = defaultMetadata()
+    const byPath = new Map(meta.map((m) => [m.path, m.meta]))
+    expect(byPath.get(paths.distanceP99)?.units).toBe('m')
+    expect(byPath.get(paths.sectorP99(23, 'b'))?.units).toBe('m')
+    expect(byPath.get(paths.coverageAreaToday)?.units).toBe('m2')
+    expect(byPath.has(paths.messagesTotal)).toBe(false)
+    expect(meta).toHaveLength(5 + 48 + 1)
   })
 })

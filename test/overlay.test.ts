@@ -51,7 +51,7 @@ describe('radarFeatures', () => {
       fromDeg: s * 15,
       toDeg: s * 15 + 15,
       count: s === 2 ? 5 : 0,
-      p99Nm: s === 2 ? 20 : null,
+      p99M: s === 2 ? 20 * 1852 : null,
     })),
   }
 

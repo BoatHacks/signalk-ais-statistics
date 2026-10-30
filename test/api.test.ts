@@ -62,8 +62,8 @@ describe('REST API', () => {
     expect(status).toBe(200)
     expect(body).toMatchObject({ window: '1h', messages: 20, source: 'live' })
     expect(
-      (body as { distance: { p99Nm: number } }).distance.p99Nm,
-    ).toBeGreaterThan(20)
+      (body as { distance: { p99M: number } }).distance.p99M,
+    ).toBeGreaterThan(20 * 1852)
   })
 
   it('rejects bad parameters with 400', async () => {
@@ -101,9 +101,15 @@ describe('REST API', () => {
     expect(series.classA).toEqual([20])
     const cov = (await call('/coverage', { window: '7d' })).body as {
       cells: number
-      geojson: { features: unknown[] }
+      areaM2: number
+      capM: number | null
+      geojson: { features: { properties: { minDistanceM: number } }[] }
     }
     expect(cov.cells).toBeGreaterThan(0)
+    expect(cov.areaM2).toBeGreaterThan(1e6)
+    expect(cov.geojson.features[0]!.properties.minDistanceM).toBeGreaterThan(
+      1000,
+    )
     expect(cov.geojson.features).toHaveLength(cov.cells)
     expect((await call('/status')).body).toEqual({ history: false })
   })

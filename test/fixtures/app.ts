@@ -15,6 +15,7 @@ export function fakeApp(dataDir: string, history?: FakeHistory) {
     methods: Record<string, (...a: unknown[]) => Promise<unknown>>
   }[] = []
   const statuses: string[] = []
+  const metadata = new Map<string, { units?: string }>()
   const errors: string[] = []
   const app = {
     on: emitter.on.bind(emitter),
@@ -36,6 +37,10 @@ export function fakeApp(dataDir: string, history?: FakeHistory) {
     getDataDirPath: () => dataDir,
     registerResourceProvider: (p: never) => providers.push(p),
     setPluginStatus: (s: string) => statuses.push(s),
+    setDefaultMetadata: async (path: string, meta: { units?: string }) => {
+      metadata.set(path, meta)
+      return true
+    },
     error: (s: string) => errors.push(s),
     debug: () => undefined,
     ...(history ? { getHistoryApi: async () => history } : {}),
@@ -45,6 +50,7 @@ export function fakeApp(dataDir: string, history?: FakeHistory) {
     deltas,
     providers,
     statuses,
+    metadata,
     errors,
     position(lat: number, lon: number) {
       for (const f of positionListeners) f({ latitude: lat, longitude: lon })

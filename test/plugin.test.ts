@@ -56,7 +56,8 @@ describe('plugin', () => {
     expect(values.get(paths.messagesTotal)).toBe(2)
     expect(values.get(paths.positionsClassB)).toBe(1)
     expect(values.get(paths.coverageCellsToday)).toBe(2)
-    expect(values.get(paths.distanceMaxNm)).toBeCloseTo(25, 2)
+    expect(values.get(paths.distanceMax)).toBeCloseTo(25 * 1852, -1)
+    expect(f.metadata.get(paths.distanceMax)?.units).toBe('m')
 
     await vi.advanceTimersByTimeAsync(60_000)
     expect(f.deltas.length).toBe(2)
@@ -169,7 +170,7 @@ describe('plugin', () => {
       f.deltas[0]!.delta.updates[0]!.values.map((v) => [v.path, v.value]),
     )
     expect(values.get(paths.positionsClassA)).toBe(1)
-    expect(values.has(paths.distanceP99Nm)).toBe(false)
+    expect(values.has(paths.distanceP99)).toBe(false)
     expect(values.get(paths.coverageCellsToday)).toBe(0)
     await plugin.stop()
   })
