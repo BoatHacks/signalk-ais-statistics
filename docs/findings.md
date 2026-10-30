@@ -72,6 +72,11 @@ the aggregates above.
 
 ## Chart plotter overlay (Freeboard-SK)
 
+- Data overlays (`overlays.data`) arrived in Freeboard-SK 3.4.0. Version
+  3.3.0 supports widgets, panels, buttons and background iframes only, and
+  silently skips an extension whose `requires` lists a capability it lacks,
+  so this plugin's overlay does not appear there. Compare the capability
+  table in the Plotter Extensions API page at each release tag.
 - Freeboard-SK reads plugin-provided extensions from the `plotterExtensions`
   resource type. A plugin registers a read-only resource provider for that
   type serving one manifest keyed by the plugin id, and returns nothing while

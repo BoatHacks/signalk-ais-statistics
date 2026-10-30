@@ -22,7 +22,7 @@ published to npm yet.
 - Show graphs, a radar and a coverage map in a SignalK web app that works on
   a phone and offline.
 - Offer the coverage footprint as an overlay layer for chart plotters that
-  support Plotter Extensions, such as Freeboard-SK.
+  support Plotter Extensions, such as Freeboard-SK 3.4.0 or later.
 
 ## Documents
 

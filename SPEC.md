@@ -271,7 +271,7 @@ section 8 for where cell sets live.
 ### 6.3 Chart plotter overlay
 
 The plugin exposes the reception footprint through the Plotter Extensions
-API that Freeboard-SK (3.3.0 at the time of writing) reads, the same
+API that Freeboard-SK reads (data overlays need Freeboard-SK 3.4.0 or later), the same
 mechanism the `@meri-imperiumi/signalk-internet` plugin uses for its toolbar
 button:
 
