@@ -59,6 +59,18 @@ describe('Coverage', () => {
     expect(again.today(T0 + 1000).cells).toBe(2)
   })
 
+  it('keeps reports that arrive while the day file is loading', async () => {
+    const d = await dir()
+    const first = new Coverage(d, 5, 90, 100, T0)
+    addAt(first, 0, 5)
+    await first.flush()
+    const c = new Coverage(d, 5, 90, 100, T0)
+    const loading = c.load(T0)
+    addAt(c, 180, 8)
+    await loading
+    expect(c.today(T0).cells).toBe(2)
+  })
+
   it('unions days for a window and starts a new day at UTC midnight', async () => {
     const d = await dir()
     const c = new Coverage(d, 5, 90, 100, T0)

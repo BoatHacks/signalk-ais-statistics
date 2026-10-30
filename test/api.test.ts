@@ -29,7 +29,7 @@ async function setup(withAccess = true) {
   }
   const f = fakeRouter(withAccess)
   registerRoutes(f.router, {
-    query: new Query(agg, () => nullHistoryReader),
+    query: () => new Query(agg, () => nullHistoryReader),
     coverage: () => coverage,
     status: () => ({ history: false }),
     now: () => T0 + 1000,
@@ -42,6 +42,7 @@ describe('REST API', () => {
     const { routes } = await setup()
     expect([...routes.keys()].sort()).toEqual([
       '/coverage',
+      '/overlay/coverage.geojson',
       '/radar',
       '/series',
       '/status',
