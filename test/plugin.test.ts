@@ -103,6 +103,28 @@ describe('plugin', () => {
     await plugin.stop()
   })
 
+  it('finds a history provider that registers after the plugin starts', async () => {
+    const f = fakeApp(await mkdtemp(join(tmpdir(), 'ais-plugin-')))
+    let ready = false
+    const history = new FakeHistory()
+    ;(f.app as Record<string, unknown>).getHistoryApi = () =>
+      ready ? Promise.resolve(history) : Promise.reject(new Error('none'))
+    const plugin = createPlugin(f.app as never)
+    const r = fakeRouter()
+    plugin.registerWithRouter!(r.router as never)
+    await plugin.start({}, () => undefined)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect((await r.call('/status')).body).toMatchObject({
+      historyAvailable: false,
+    })
+    ready = true
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect((await r.call('/status')).body).toMatchObject({
+      historyAvailable: true,
+    })
+    await plugin.stop()
+  })
+
   it('serves the overlay manifest only while running', async () => {
     const f = fakeApp(await mkdtemp(join(tmpdir(), 'ais-plugin-')))
     const plugin = createPlugin(f.app as never)

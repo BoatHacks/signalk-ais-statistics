@@ -22,6 +22,21 @@ describe('increments', () => {
     expect(increments([100, 120, 7, 10])).toEqual([20, 7, 3])
   })
 
+  it('counts the part before a restart inside a bucket from its max', () => {
+    // 5 minute buckets: the counter reached 716 and restarted at 0 inside
+    // the third bucket, ending it at 68.
+    expect(increments([0, 320, 68, 477], [0, 320, 716, 477])).toEqual([
+      320,
+      396 + 68,
+      409,
+    ])
+  })
+
+  it('ignores max where it adds nothing', () => {
+    expect(increments([0, 5, 9], [null, 5, 9])).toEqual([5, 4])
+    expect(increments([100, 120, 7], [100, 120, null])).toEqual([20, 7])
+  })
+
   it('is empty for one bucket', () => {
     expect(increments([5])).toEqual([])
   })

@@ -56,6 +56,18 @@ describe('Query with history', () => {
     expect(s.vessels?.total).toBe(2)
   })
 
+  it('totals a restart inside a summary bucket', async () => {
+    const history = new FakeHistory()
+    run(new Aggregator(T0), history, T0, 7)
+    const restart = T0 + 7 * MINUTE_MS + 20_000
+    const agg = new Aggregator(restart)
+    run(agg, history, restart, 6)
+    const now = restart + 6 * MINUTE_MS
+    const q = new Query(agg, () => new HistoryApiReader(history))
+    const s = await q.summary('24h', now)
+    expect(s.messages).toBe(26)
+  })
+
   it('builds the radar from sector counters and the highest p99', async () => {
     const history = new FakeHistory()
     const agg = new Aggregator(T0)

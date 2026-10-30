@@ -77,6 +77,12 @@ describe('percentiles', () => {
     expect(percentileNm(histogramOf([9000, 9000]), 0.5)).toBe(OVERFLOW_NM)
   })
 
+  it('never reports a figure above the measured maximum', () => {
+    const s = summarize(histogramOf([10, 10, 10, 10.1]), 10.1)
+    for (const v of [s.avgNm, s.medianNm, s.p95Nm, s.p99Nm])
+      expect(v).toBeLessThanOrEqual(10.1)
+  })
+
   it('averages with bin centres', () => {
     const avg = averageNm(histogramOf([10, 10, 10]))!
     expect(avg).toBeGreaterThan(binLowerNm(binOf(10)))
