@@ -39,6 +39,24 @@ describe('overlay manifest', () => {
     for (const l of o.style.layers) expect(l.source).toBe(OVERLAY_SOURCE)
     expect(m.background[0]!.url).toBe('/plugin-id/plotterext/refresh.html')
   })
+
+  it('fills and outlines cells, and outlines the radar', () => {
+    const m = buildManifest('plugin-id', '1.2.3') as {
+      overlays: {
+        style: { layers: { id: string; type: string; filter: unknown[] }[] }
+      }[]
+    }
+    const layers = m.overlays[0]!.style.layers.map((l) => [
+      l.id,
+      l.type,
+      l.filter[2],
+    ])
+    expect(layers).toEqual([
+      ['cells', 'fill', 'cell'],
+      ['cell-outlines', 'line', 'cell'],
+      ['radar', 'line', 'radar'],
+    ])
+  })
 })
 
 describe('radarFeatures', () => {
