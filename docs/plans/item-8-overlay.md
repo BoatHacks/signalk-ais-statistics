@@ -34,14 +34,14 @@ the GeoJSON route returning cells and radar features.
 ## Implementation Steps
 - [x] `overlay.ts`, route, background page
 - [x] Tests
-- [ ] Checked in Freeboard-SK on the development server (spike 13.2)
+- [ ] Checked in Freeboard-SK on the development server (SPEC 13.1)
 
 ## Files to Create/Modify
 `src/overlay.ts`, `src/api.ts`, `src/plugin.ts`,
 `web/static/plotterext/refresh.html`, `package.json`, tests.
 
 ## Open Points
-SPEC 13.2: how many cells the plotter draws smoothly. The Freeboard-SK
+SPEC 13.1: how many cells the plotter draws smoothly. The Freeboard-SK
 provider guide warns that `/plugins/*` routes are admin-only; this plugin
 relies on `router.access('readonly')` (verified on server 2.35.1) for the
 GeoJSON route. Older servers would need an admin login for the overlay

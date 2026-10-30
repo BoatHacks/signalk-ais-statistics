@@ -37,6 +37,12 @@ curl -s "$SK/signalk/v2/api/history/values?paths=<path>:last&from=<iso>&to=<iso>
 - The response shape is `{ context, range, values: [{ path, method }], data:
   [[timestamp, value], ...] }`.
 
+- Buckets start at the query's `from`, not at a rounded boundary.
+- A counter that drops to zero when the plugin restarts appears as a plain
+  drop between two buckets, with no `null` and no gap. When the restart
+  falls inside a bucket, `last` only shows the value after it; `max` of the
+  same bucket still holds the value before it.
+
 Only this one provider has been checked. The plugin must not assume more than
 the aggregates above.
 
@@ -46,6 +52,9 @@ the aggregates above.
 - The handler gets the sentence as a plain string. There is no source label
   and no timestamp, so own-transponder sentences (`!AIVDO`) are told apart by
   prefix and reception time is the time of the call.
+- AIS from an NMEA 2000 receiver does not reach `nmea0183`. The server
+  re-encodes it as NMEA 0183 and emits it on `nmea0183AISout`, also as a
+  plain string.
 - The server's AIS decoding dependency is `ggencoder` (version 1.0.13 with the
   tested server), pulled in by `@signalk/nmea0183-signalk`.
 
@@ -70,6 +79,9 @@ the aggregates above.
 - A data overlay needs `requires: ["overlays.data"]` and an `overlays` entry
   with `type: "data"`, a `band` and a MapLibre `style`. The style can point at
   a GeoJSON file served by the plugin.
+- The plugin's overlay manifest, GeoJSON and refresh page answered HTTP 200
+  without authentication on a server that allows read-only access. A few
+  hours of traffic made a GeoJSON of about 8 KB.
 - Live updates need a context that calls `overlay.refresh` or
   `overlay.setData`. The documentation describes no server-only way, so a
   background iframe page is needed.
@@ -94,5 +106,5 @@ the aggregates above.
 
 ## Not yet verified
 
-See SPEC section 13: counter reset across a plugin restart, and the size of a
-coverage layer Freeboard-SK handles smoothly.
+See SPEC section 13: how smoothly Freeboard-SK draws the coverage layer, and
+how to receive AIS that arrives over NMEA 2000.

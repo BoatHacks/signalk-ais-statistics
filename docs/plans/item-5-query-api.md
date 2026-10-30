@@ -44,8 +44,9 @@ parameters.
 `src/history.ts`, `src/query.ts`, `src/api.ts`, test fixtures and tests.
 
 ## Open Points
-SPEC 13.1: the restart detection is tested against the fake; the spike on
-the development server checks it against a real provider. A restart whose
+Restart detection is tested against the fake and was checked against a
+real provider on the development server, which showed that a restart inside
+a bucket also needs `max` (SPEC 6.2). A restart whose
 new counter overtakes the old value within one bucket is not detectable;
 with 60 s to 3600 s buckets and a counter starting from zero this needs
 more traffic in one bucket than in the whole previous run.

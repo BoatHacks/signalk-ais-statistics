@@ -37,4 +37,4 @@ corrupt files, resolution conversion, closed polygons.
 `src/coverage.ts`, `src/api.ts`, `test/coverage.test.ts`.
 
 ## Open Points
-SPEC 13.2 (how many cells the plotter overlay handles smoothly).
+SPEC 13.1 (how many cells the plotter overlay handles smoothly).

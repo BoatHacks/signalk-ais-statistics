@@ -89,8 +89,9 @@ Combines the live state (current open bucket) with HistoryReader results to
 answer windowed queries. All REST handlers go through it. A window total is
 the sum of a counter's per-bucket increments (60, 300 or 3600 second
 buckets by window), with reset detection: a value lower than its
-predecessor starts a new segment counted from zero, a null before the first
-sample counts as zero and a later null as unchanged. Window percentiles come
+predecessor starts a new segment counted from zero, and the bucket's `max`
+adds what was counted before a restart inside that bucket. A null before
+the first sample counts as zero and a later null as unchanged. Window percentiles come
 from the summed increments of the distance bin counters. The one-hour window
 uses the live minute buckets once the plugin has run for an hour, since they
 are exact. Without history, all answers come from the aggregator.

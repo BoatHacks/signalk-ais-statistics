@@ -12,8 +12,8 @@ back through the SignalK History API, serves a web app, and offers the
 coverage footprint as a Freeboard-SK plotter overlay.
 
 **Current state: MVP implemented (roadmap items 1 to 8), not released.**
-The next steps are the two remaining spikes and the Freeboard-SK check on
-the development server, then the first release (item 9) in
+The next steps are the Freeboard-SK check and the NMEA 2000 AIS question
+(SPEC section 13), then the first release (item 9) in
 [docs/plans/mvp-roadmap.md](docs/plans/mvp-roadmap.md).
 
 ## Read in this order

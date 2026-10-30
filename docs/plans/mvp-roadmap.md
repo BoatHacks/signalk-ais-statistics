@@ -11,8 +11,9 @@ that read it back.
 Small throwaway experiments, each ending in an update to section 13 and, if
 the answer differs from the assumption, to SPEC.md or ARCHITECTURE.md.
 Items 1 to 8 are implemented, each with a plan in this directory
-(`item-<n>-<slug>.md`); the two open spikes and the Freeboard-SK check run
-against the development server with the plugin installed.
+(`item-<n>-<slug>.md`); the counter reset spike ran against the
+development server; the Freeboard-SK check and the NMEA 2000 question
+remain.
 
 - [x] **`nmea0183` event payload.** The event delivers the raw sentence as a
       plain string with no source or timestamp (checked in an existing
@@ -25,10 +26,12 @@ against the development server with the plugin installed.
       sample; `resolution` is required. Recorded in SPEC section 8.
 - [x] **Path namespace.** `sensors.ais.statistics.*` conflicts with no
       defined schema key (SPEC section 12).
-- [ ] **Counter reset.** Publish a test counter from the plugin, restart it
-      and confirm the reader detects the reset. (13.1)
-- [ ] **Overlay size.** Serve a GeoJSON source of a few hundred H3 cells to a
-      plotter extension data overlay and check that it stays smooth. (13.2)
+- [x] **Counter reset.** The restart shows as a plain drop; a restart
+      inside a bucket needed `max` as well as `last` (SPEC 6.2).
+- [ ] **Overlay size.** The overlay is served and small (SPEC 6.3); whether
+      it stays smooth in Freeboard-SK needs a look in the plotter. (13.1)
+- [ ] **NMEA 2000 AIS.** Decide whether to also listen on
+      `nmea0183AISout`. (13.2)
 
 ## 1. Plugin scaffold
 

@@ -249,10 +249,15 @@ series instead.
 
 A counter resets to zero when the plugin restarts. Readers detect a value
 lower than its predecessor and treat the new value as counted from zero. A
-`last` query returns `null` for buckets before the first recorded sample,
-which readers treat as zero, and the one provider checked repeats the
-previous value for buckets with no new sample. History queries must always
-pass a `resolution` (without one the provider returned no rows).
+restart inside a bucket would lose the count before it, so readers also
+query `max` for each counter: when a bucket's `last` dropped, its increment
+is the rise from the previous bucket up to that `max`, plus the new `last`.
+On the provider checked, a restart shows as a plain drop with no `null` or
+gap, and buckets start at the query's `from`. A `last` query returns `null`
+for buckets before the first recorded sample, which readers treat as zero,
+and the one provider checked repeats the previous value for buckets with
+no new sample. History queries must always pass a `resolution` (without one
+the provider returned no rows).
 
 The cell ids themselves are not published, because the History API is built
 around numeric values and a provider is not required to store text; see
@@ -284,6 +289,9 @@ button:
   `/signalk-ais-statistics/plotterext/refresh.html` (part of the web app
   bundle), that does so hourly. Without it the overlay still shows, and
   refreshes when the plotter reloads it.
+- On the test server the GeoJSON for a few hours of traffic was about 8 KB
+  (12 cells, 15 radar wedges), and all overlay routes answered without
+  authentication on a server that allows read-only access.
 - The overlay is a plotter feature, so it works wherever the plotter
   supports Plotter Extensions; other plotters (for example OpenCPN) are not
   covered.
@@ -415,7 +423,8 @@ directly. Consequences:
   useless.
 - **Counts as cumulative counters (chosen by the maintainer).** History
   providers lack sum and count aggregates; a window total is `last(end)`
-  minus `last(start)`, and counter resets are detected by the reader.
+  minus `last(start)`, and counter resets are detected by the reader with the
+help of `max` (6.2). Verified across a plugin restart on the test server.
 - **Published under `sensors.ais.statistics.*` (chosen by the maintainer).**
   It sits next to `sensors.ais.class`. The SignalK schema defines a sensor
   as an object with `name`, `sensorType`, `sensorData`, `fromBow`,
@@ -442,19 +451,18 @@ directly. Consequences:
 
 ## 13. Open Questions
 
-Checked on 2026-10-30 against a test server (SignalK server 2.35.1) and the
-Freeboard-SK plotter extensions documentation. Resolved findings are
-recorded in 4.1, 6.1, 6.3 and 8 and in ARCHITECTURE.md; the points below
-are what is still unverified.
+Checked on 2026-10-30 against a test server (SignalK server 2.35.1) with
+the plugin installed. Resolved findings are recorded in 4.1, 6.1, 6.2, 6.3
+and 8 and in ARCHITECTURE.md; the points below are what is still
+unverified or undecided.
 
-1. **Counter reset across a plugin restart.** On the test server (default
-   provider `signalk-questdb` 2.3.2) `last` queries work, return `null`
-   before the first sample and repeat the previous value for buckets
-   without a new sample. Not yet tested with the plugin's own counters:
-   the restart reset and its detection by the reader. Only this provider
-   has been seen; others may behave differently.
-2. **Plotter extension data overlay.** The Freeboard-SK doc describes
-   `overlay.setData` and `overlay.refresh` but not a server-only way to push
-   live data, so the background iframe page is needed for live refresh. How
-   large a GeoJSON source the plotter handles smoothly (hundreds of cells
-   over 30 days) is untested.
+1. **Overlay smoothness in Freeboard-SK.** The overlay is served and
+   small, but nobody has yet looked at it in the plotter, and how large a
+   GeoJSON source it handles smoothly (hundreds of cells over 30 days) is
+   untested.
+2. **AIS that arrives over NMEA 2000.** The plugin listens only on the
+   `nmea0183` event. A server whose AIS receiver is connected over NMEA 2000
+   gets no raw sentences there. The server re-encodes AIS for NMEA 0183
+   output on `nmea0183AISout`, and listening there too worked on the test
+   server. Whether to add that source, and how to avoid counting the same
+   message twice when both carry it, is for the maintainer to decide.

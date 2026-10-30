@@ -30,5 +30,5 @@ call with a timestamp.
 `src/publish.ts`, `test/publish.test.ts`.
 
 ## Open Points
-SPEC 13.1 (counter reset across a restart) is checked by the spike on the
-development server.
+The counter reset across a restart was checked on the development server
+(resolved, see SPEC 6.2).
