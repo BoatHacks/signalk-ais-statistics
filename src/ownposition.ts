@@ -6,7 +6,7 @@ export interface LatLon {
 }
 
 export class OwnPosition {
-  private last?: LatLon & { time: number }
+  private latest?: LatLon & { time: number }
 
   constructor(private maxAgeMs: number) {}
 
@@ -22,19 +22,26 @@ export class OwnPosition {
       Math.abs(longitude) > 180
     )
       return
-    this.last = { lat: latitude, lon: longitude, time }
+    this.latest = { lat: latitude, lon: longitude, time }
   }
 
   /** The own position at `time`, or undefined when unknown or stale. */
   at(time: number): LatLon | undefined {
-    if (!this.last) return undefined
-    const age = time - this.last.time
+    if (!this.latest) return undefined
+    const age = time - this.latest.time
     if (age > this.maxAgeMs || age < -this.maxAgeMs) return undefined
-    return { lat: this.last.lat, lon: this.last.lon }
+    return { lat: this.latest.lat, lon: this.latest.lon }
+  }
+
+  /** The last known own position regardless of age. */
+  last(): LatLon | undefined {
+    return this.latest
+      ? { lat: this.latest.lat, lon: this.latest.lon }
+      : undefined
   }
 
   /** Age in milliseconds of the last known position, if any. */
   ageMs(time: number): number | undefined {
-    return this.last ? time - this.last.time : undefined
+    return this.latest ? time - this.latest.time : undefined
   }
 }

@@ -14,6 +14,7 @@ import {
   type Query,
   type WindowName,
 } from './query'
+import { OVERLAY_DAYS } from './overlay'
 import { SECTOR_CLASSES, type SectorClass } from './paths'
 
 export interface Status {
@@ -21,9 +22,12 @@ export interface Status {
 }
 
 export interface ApiDeps {
-  query: Query
+  /** Undefined while the plugin is stopped. */
+  query: () => Query | undefined
   coverage: () => Coverage | undefined
   status: () => Status
+  /** Radar polygons and other extra features for the plotter overlay. */
+  overlayExtras?: () => Promise<object[]>
   now?: () => number
 }
 
@@ -36,6 +40,7 @@ export interface RouterLike extends Getter {
 }
 
 class BadRequest extends Error {}
+class NotRunning extends Error {}
 
 const COVERAGE_DAYS: Partial<Record<WindowName, number>> = {
   '24h': 1,
@@ -78,6 +83,8 @@ function handle(
       .catch((err: unknown) => {
         if (err instanceof BadRequest)
           res.status(400).json({ error: err.message })
+        else if (err instanceof NotRunning)
+          res.status(503).json({ error: 'the plugin is not running' })
         else
           res.status(500).json({
             error: err instanceof Error ? err.message : 'internal error',
@@ -89,10 +96,20 @@ function handle(
 export function registerRoutes(router: RouterLike, deps: ApiDeps): void {
   const r: Getter = router.access ? router.access('readonly') : router
   const now = deps.now ?? Date.now
+  const query = (): Query => {
+    const q = deps.query()
+    if (!q) throw new NotRunning()
+    return q
+  }
+  const coverage = (): Coverage => {
+    const c = deps.coverage()
+    if (!c) throw new NotRunning()
+    return c
+  }
 
   r.get(
     '/summary',
-    handle((req) => deps.query.summary(windowParam(req, '24h'), now())),
+    handle((req) => query().summary(windowParam(req, '24h'), now())),
   )
 
   r.get(
@@ -101,7 +118,7 @@ export function registerRoutes(router: RouterLike, deps: ApiDeps): void {
       const cls = param(req, 'class') ?? 'all'
       if (cls !== 'all' && !SECTOR_CLASSES.includes(cls as SectorClass))
         throw new BadRequest('class must be a, b or all')
-      return deps.query.radar(
+      return query().radar(
         windowParam(req, '24h'),
         cls as SectorClass | 'all',
         now(),
@@ -125,7 +142,7 @@ export function registerRoutes(router: RouterLike, deps: ApiDeps): void {
         throw new BadRequest(
           `at most ${MAX_SERIES_POINTS} points; raise the resolution`,
         )
-      return deps.query.series(metric as Metric, resolution, from, to)
+      return query().series(metric as Metric, resolution, from, to)
     }),
   )
 
@@ -135,9 +152,7 @@ export function registerRoutes(router: RouterLike, deps: ApiDeps): void {
       const window = windowParam(req, '24h')
       const days = COVERAGE_DAYS[window]
       if (!days) throw new BadRequest('coverage windows are 24h, 7d and 30d')
-      const coverage = deps.coverage()
-      if (!coverage) throw new Error('coverage is not running')
-      const f = await coverage.footprint(days, now())
+      const f = await coverage().footprint(days, now())
       return {
         window,
         days: f.days,
@@ -149,6 +164,16 @@ export function registerRoutes(router: RouterLike, deps: ApiDeps): void {
         cellIds: f.cells.map((c) => c.id),
         geojson: footprintGeoJson(f),
       }
+    }),
+  )
+
+  r.get(
+    '/overlay/coverage.geojson',
+    handle(async () => {
+      const f = await coverage().footprint(OVERLAY_DAYS, now())
+      const g = footprintGeoJson(f)
+      const extras = deps.overlayExtras ? await deps.overlayExtras() : []
+      return { ...g, features: [...g.features, ...extras] }
     }),
   )
 

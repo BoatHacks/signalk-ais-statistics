@@ -17,13 +17,15 @@
     "typecheck": "tsc --noEmit && tsc --noEmit -p web",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "smoke": "node scripts/smoke.cjs"
   },
   "keywords": [
     "signalk-node-server-plugin",
     "signalk-webapp",
     "signalk-category-ais",
     "signalk-category-utility",
+    "signalk-category-plotter-extensions",
     "ais",
     "statistics",
     "coverage"

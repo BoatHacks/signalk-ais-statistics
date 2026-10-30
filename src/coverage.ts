@@ -108,8 +108,11 @@ export class Coverage {
   async load(now: number): Promise<void> {
     const date = utcDay(now)
     const existing = await this.read(date)
-    this.day = emptyDay(date, this.resolution)
-    if (existing) this.mergeDay(this.day, existing)
+    // Reports may have arrived while the file was read; merge, do not replace.
+    if (existing && this.day.date === date) {
+      this.mergeDay(this.day, existing)
+      this.dirty = true
+    }
   }
 
   /** Records one located report. */
@@ -253,6 +256,7 @@ export interface CellFeature {
   type: 'Feature'
   id: string
   properties: {
+    kind: 'cell'
     id: string
     intensity: number
     reports: number
@@ -276,6 +280,7 @@ export function footprintGeoJson(f: Footprint): {
       type: 'Feature',
       id: c.id,
       properties: {
+        kind: 'cell',
         id: c.id,
         intensity: Math.round((Math.log1p(c.reports) / maxLog) * 1000) / 1000,
         reports: c.reports,

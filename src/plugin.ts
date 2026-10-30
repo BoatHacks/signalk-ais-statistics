@@ -1,20 +1,247 @@
-import type { Plugin, ServerAPI } from '@signalk/server-api'
-import { configSchema, resolveConfig } from './config'
+// Plugin entry and wiring (ARCHITECTURE 1): sentence events and own position
+// in, deltas out every minute, coverage files flushed hourly, REST routes and
+// the plotter overlay served while running.
+import type { Path, Plugin, ServerAPI } from '@signalk/server-api'
+import { Aggregator, HOUR_MS, MINUTE_MS } from './aggregate'
+import { registerRoutes, type RouterLike } from './api'
+import { configSchema, resolveConfig, type Config } from './config'
+import { Coverage } from './coverage'
+import {
+  connectHistory,
+  nullHistoryReader,
+  type HistoryReader,
+} from './history'
+import { Ingest } from './ingest'
+import { OwnPosition } from './ownposition'
+import {
+  buildManifest,
+  radarFeatures,
+  registerOverlayProvider,
+} from './overlay'
+import { buildValues, publish } from './publish'
+import { Query } from './query'
 
 export const PLUGIN_ID = 'signalk-ais-statistics'
+/** How often to look for a history provider again while in live-only mode. */
+const HISTORY_RETRY_MS = 10 * MINUTE_MS
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const VERSION: string = require('../package.json').version
+
+interface EventSource {
+  on(event: string, listener: (...args: unknown[]) => void): unknown
+  removeListener(event: string, listener: (...args: unknown[]) => void): unknown
+}
+
+interface Running {
+  config: Config
+  ingest: Ingest
+  own: OwnPosition
+  agg: Aggregator
+  coverage: Coverage
+  query: Query
+  history: HistoryReader
+  stops: (() => void)[]
+}
 
 export function createPlugin(app: ServerAPI): Plugin {
+  let state: Running | undefined
+  let providerRegistered = false
+
+  const log = (msg: string, err?: unknown) =>
+    app.error(`${msg}${err instanceof Error ? `: ${err.message}` : ''}`)
+
+  async function findHistory(s: Running): Promise<void> {
+    const reader = await connectHistory(app)
+    if (state !== s) return
+    if (reader.available !== s.history.available)
+      app.debug(`history ${reader.available ? 'available' : 'unavailable'}`)
+    s.history = reader
+  }
+
+  function minute(s: Running): void {
+    const now = Date.now()
+    try {
+      const values = buildValues(s.agg, now, s.coverage.today(now))
+      publish(app, PLUGIN_ID, values, now)
+    } catch (err) {
+      log('publishing failed', err)
+    }
+    const last = s.agg.lastMessageTime()
+    app.setPluginStatus(
+      last === undefined
+        ? 'Running, no AIS data received yet'
+        : `Running, ${s.agg.trackedTargets(now, s.config.targetExpirySeconds * 1000)} targets tracked, history ${s.history.available ? 'available' : 'unavailable (live-only)'}`,
+    )
+  }
+
+  function hour(s: Running): void {
+    s.coverage
+      .flush()
+      .then(() => s.coverage.prune(Date.now()))
+      .catch((err: unknown) => log('writing coverage failed', err))
+  }
+
+  function status() {
+    const s = state
+    if (!s) return { running: false }
+    const now = Date.now()
+    const last = s.agg.lastMessageTime()
+    const ownAge = s.own.ageMs(now)
+    return {
+      running: true,
+      version: VERSION,
+      startedAt: new Date(s.agg.startedAt).toISOString(),
+      noData: last === undefined,
+      lastMessageAt: last === undefined ? null : new Date(last).toISOString(),
+      trackedTargets: s.agg.trackedTargets(
+        now,
+        s.config.targetExpirySeconds * 1000,
+      ),
+      ownPositionAgeSeconds: ownAge === undefined ? null : ownAge / 1000,
+      ownPositionFresh: s.own.at(now) !== undefined,
+      historyAvailable: s.history.available,
+      sentences: s.ingest.stats.sentences,
+      ownSentencesSkipped: s.ingest.stats.ownSkipped,
+      decodeErrors: s.ingest.stats.decodeErrors,
+      incompleteDropped: s.ingest.stats.incompleteDropped,
+      coverageCellsDropped: s.coverage.droppedCells,
+      config: s.config,
+    }
+  }
+
   const plugin: Plugin = {
     id: PLUGIN_ID,
     name: 'AIS Statistics',
     description:
       'AIS reception statistics: counts, distance percentiles, bearing radar and coverage',
     schema: () => configSchema,
+
     start(options) {
-      resolveConfig(options)
-      app.setPluginStatus('Started')
+      const config = resolveConfig(options)
+      const now = Date.now()
+      const agg = new Aggregator(now)
+      const s: Running = {
+        config,
+        ingest: new Ingest(),
+        own: new OwnPosition(config.ownPositionMaxAgeSeconds * 1000),
+        agg,
+        coverage: new Coverage(
+          app.getDataDirPath(),
+          config.h3Resolution,
+          config.coverageRetentionDays,
+          config.coverageDistancePercentile,
+          now,
+        ),
+        query: undefined as unknown as Query,
+        history: nullHistoryReader,
+        stops: [],
+      }
+      s.query = new Query(agg, () => s.history)
+      state = s
+
+      s.coverage
+        .load(now)
+        .catch((err: unknown) => log('reading coverage failed', err))
+      void findHistory(s)
+
+      const onSentence = (sentence: unknown) => {
+        try {
+          const time = Date.now()
+          const msg = s.ingest.push(sentence as string)
+          if (!msg) return
+          const located = s.agg.add(msg, s.own.at(time), time)
+          if (located)
+            s.coverage.add(
+              located.lat,
+              located.lon,
+              located.distanceNm,
+              located.time,
+            )
+        } catch (err) {
+          // Never let one bad sentence escape into the server.
+          log('processing a sentence failed', err)
+        }
+      }
+      const events = app as unknown as EventSource
+      events.on('nmea0183', onSentence)
+      s.stops.push(() => events.removeListener('nmea0183', onSentence))
+
+      const unsubscribe = app.streambundle
+        .getSelfStream('navigation.position' as Path)
+        .onValue((pos: unknown) => s.own.update(pos, Date.now()))
+      s.stops.push(unsubscribe)
+
+      // Publish at the end of each minute so every value lands in its bucket.
+      const delay = MINUTE_MS - (now % MINUTE_MS) - 1000
+      const first = setTimeout(
+        () => {
+          minute(s)
+          const every = setInterval(() => minute(s), MINUTE_MS)
+          s.stops.push(() => clearInterval(every))
+        },
+        Math.max(0, delay),
+      )
+      s.stops.push(() => clearTimeout(first))
+      const hourly = setInterval(() => hour(s), HOUR_MS)
+      s.stops.push(() => clearInterval(hourly))
+      const retry = setInterval(() => {
+        if (!s.history.available) void findHistory(s)
+      }, HISTORY_RETRY_MS)
+      s.stops.push(() => clearInterval(retry))
+
+      if (config.publishOverlay && !providerRegistered) {
+        try {
+          registerOverlayProvider(
+            app as never,
+            PLUGIN_ID,
+            () => buildManifest(PLUGIN_ID, VERSION),
+            () => state?.config.publishOverlay === true,
+          )
+          providerRegistered = true
+        } catch (err) {
+          log('registering the plotter overlay failed', err)
+        }
+      }
+
+      app.setPluginStatus('Started, waiting for AIS data')
     },
-    stop() {},
+
+    async stop() {
+      const s = state
+      state = undefined
+      if (!s) return
+      for (const stop of s.stops) {
+        try {
+          stop()
+        } catch {
+          // keep stopping the rest
+        }
+      }
+      // Flush the open state (SPEC 8): coverage file and a last delta.
+      try {
+        publish(app, PLUGIN_ID, buildValues(s.agg, Date.now()), Date.now())
+      } catch {
+        // the server may already be shutting down
+      }
+      await s.coverage
+        .flush()
+        .catch((err: unknown) => log('writing coverage failed', err))
+    },
+
+    registerWithRouter(router) {
+      registerRoutes(router as unknown as RouterLike, {
+        query: () => state?.query,
+        coverage: () => state?.coverage,
+        status,
+        overlayExtras: async () => {
+          const s = state
+          if (!s) return []
+          const radar = await s.query.radar('24h', 'all', Date.now())
+          return radarFeatures(radar, s.own.last())
+        },
+      })
+    },
   }
   return plugin
 }
