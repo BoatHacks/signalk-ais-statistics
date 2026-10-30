@@ -428,6 +428,12 @@ directly. Consequences:
 - **Read-only users may use the web app (chosen by the maintainer).** Needs
   explicit route permissions, since SignalK defaults plugin routes to
   admin-only.
+- **Radar keeps the highest hourly p99 per sector (chosen by the
+  maintainer).** In a sector-hour with fewer than about 100 reports, p99 is
+  close to that hour's maximum, so one bogus position can set a sector's
+  radius for a whole window. Accepted for its simplicity and conservative
+  reading, over a minimum report count per hour, a lower percentile, or 768
+  per-sector bin counters.
 - **Bucket-based statistics, not rolling all-time figures.** Conditions
   such as ducting change daily; one all-time max would hide that.
 - **Availability deferred.** Its definition needs care (window, gap
@@ -452,10 +458,3 @@ are what is still unverified.
    live data, so the background iframe page is needed for live refresh. How
    large a GeoJSON source the plotter handles smoothly (hundreds of cells
    over 30 days) is untested.
-3. **Radar robustness in sparse sectors.** The radar for a window shows the
-   highest hourly p99 per sector (2.6). In a sector-hour with fewer than
-   about 100 reports, p99 is close to that hour's maximum, so a single bogus
-   position can set a sector's radius for the whole window. Synthetic data
-   with 0.2 percent bogus positions showed this. Options: require a minimum
-   report count per sector-hour, or publish per-sector bin counters and
-   merge them like the distance bins (more paths). Needs a decision.
