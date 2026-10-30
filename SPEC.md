@@ -296,7 +296,9 @@ button:
   7 days (`kind: "cell"`, with `id`, a coverage `intensity` from 0 to 1 and
   the report count), plus the 24 hour sector radar as wedges from the last
   known own position (`kind: "radar"`). A fill layer colours cells by
-  `intensity` and a line layer outlines the radar.
+  `intensity` on a magenta to purple ramp, which contrasts with chart water
+  and land, a line layer outlines each cell in the same ramp, and another
+  line layer outlines the radar.
 - Live updates need a context that calls `overlay.refresh`, so the manifest
   also declares an optional `background.iframe` page,
   `/signalk-ais-statistics/plotterext/refresh.html` (part of the web app

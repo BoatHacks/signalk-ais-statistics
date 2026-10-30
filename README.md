@@ -3,7 +3,7 @@
 A SignalK server plugin that turns the AIS traffic your server already
 receives into reception statistics for your own AIS station.
 
-**Status: 0.1.0, the first release.** The plugin, its REST API, the web
+**Status: 0.1.1.** The plugin, its REST API, the web
 app and the plotter overlay are unit tested and run on a development
 server; the open points are in SPEC section 13.
 
@@ -22,6 +22,10 @@ server; the open points are in SPEC section 13.
   a phone and offline.
 - Offer the coverage footprint as an overlay layer for chart plotters that
   support Plotter Extensions, such as Freeboard-SK 3.4.0 or later.
+
+In Freeboard-SK the overlay is listed as "AIS coverage" under the layers
+button. If it is missing after a server update, reload the Freeboard page:
+a tab opened on an older Freeboard skips the overlay without a message.
 
 ## Documents
 

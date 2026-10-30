@@ -1,6 +1,6 @@
 {
   "name": "signalk-ais-statistics",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "AIS reception statistics for SignalK: counts, distance percentiles, bearing radar and coverage, with a web app and a chart plotter overlay",
   "author": "Tobias Rosenstock",
   "main": "dist/index.js",
@@ -8,7 +8,8 @@
   "files": [
     "dist",
     "public",
-    "docs/screenshots"
+    "docs/screenshots",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "build": "npm run build:plugin && npm run build:web",

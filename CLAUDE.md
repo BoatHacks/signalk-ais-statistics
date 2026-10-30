@@ -11,9 +11,9 @@ It publishes numeric paths under `sensors.ais.statistics.*`, reads history
 back through the SignalK History API, serves a web app, and offers the
 coverage footprint as a Freeboard-SK plotter overlay.
 
-**Current state: 0.1.0, the MVP (roadmap items 1 to 8), being released.**
-The next step is the Freeboard-SK check (SPEC section 13), then the first release (item 9) in
-[docs/plans/mvp-roadmap.md](docs/plans/mvp-roadmap.md).
+**Current state: 0.1.1, the MVP (roadmap items 1 to 8), released.**
+The remaining open point is the Freeboard-SK visual check (SPEC section 13).
+The roadmap is [docs/plans/mvp-roadmap.md](docs/plans/mvp-roadmap.md).
 
 ## Read in this order
 
