@@ -17,14 +17,15 @@ the answer differs from the assumption, to SPEC.md or ARCHITECTURE.md.
 - [x] **History API aggregates.** A provider accepts `average`, `min`, `max`,
       `first`, `last`, `mid`, `middle_index`, `sma` and `ema`; no `sum` or
       `count`. Hence cumulative counters (SPEC 4.1).
-- [ ] **Counters through the History API.** Publish a test counter, read it
-      back with `last` per hour, restart the plugin and confirm reset
-      detection, and check what a provider returns for an empty bucket.
-      (13.1)
+- [x] **Empty and sparse buckets.** `last` returns `null` before the first
+      sample and repeats the previous value for buckets without a new
+      sample; `resolution` is required. Recorded in SPEC section 8.
+- [x] **Path namespace.** `sensors.ais.statistics.*` conflicts with no
+      defined schema key (SPEC section 12).
+- [ ] **Counter reset.** Publish a test counter from the plugin, restart it
+      and confirm the reader detects the reset. (13.1)
 - [ ] **Overlay size.** Serve a GeoJSON source of a few hundred H3 cells to a
-      plotter extension data overlay and check that it stays smooth. (13.3)
-- [ ] **Path namespace.** Check `sensors.ais.statistics.*` against the
-      SignalK schema and other plugins for conflicts. (13.4)
+      plotter extension data overlay and check that it stays smooth. (13.2)
 
 ## 1. Plugin scaffold
 

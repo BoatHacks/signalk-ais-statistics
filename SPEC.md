@@ -231,7 +231,11 @@ because unique counts are not additive; the web app shows the daily
 series instead.
 
 A counter resets to zero when the plugin restarts. Readers detect a value
-lower than its predecessor and treat the new value as counted from zero.
+lower than its predecessor and treat the new value as counted from zero. A
+`last` query returns `null` for buckets before the first recorded sample,
+which readers treat as zero, and the one provider checked repeats the
+previous value for buckets with no new sample. History queries must always
+pass a `resolution` (without one the provider returned no rows).
 
 The cell ids themselves are not published, because the History API is built
 around numeric values and a provider is not required to store text; see
@@ -374,8 +378,7 @@ directly. Consequences:
   functional without a provider.
 - **Covered cells stored in a small plugin file, not in history.** A
   consequence of the above: the History API is numeric, and cell id lists
-  are not. This is the only state the plugin owns (proposed, not yet
-  confirmed with the maintainer; see 13.2).
+  are not. This is the only state the plugin owns (chosen by the maintainer).
 - **Keep everything, report p95 and p99 (chosen by the maintainer, replacing
   an earlier range cap with counters).** Statistics always reflect all
   decoded traffic and nothing is silently discarded. Cost: the max and
@@ -386,8 +389,11 @@ directly. Consequences:
   providers lack sum and count aggregates; a window total is `last(end)`
   minus `last(start)`, and counter resets are detected by the reader.
 - **Published under `sensors.ais.statistics.*` (chosen by the maintainer).**
-  It sits next to `sensors.ais.class`. Not yet checked against the SignalK
-  schema for conflicts (13.4).
+  It sits next to `sensors.ais.class`. The SignalK schema defines a sensor
+  as an object with `name`, `sensorType`, `sensorData`, `fromBow`,
+  `fromCenter` and `class` and does not forbid other keys, so `statistics`
+  does not conflict with any defined key; another plugin already publishes
+  `sensors.ais.status` as a precedent.
 - **Publish distance histogram bins as paths (chosen by the maintainer).**
   About 30 extra paths per hour, in exchange for exact window percentiles
   from merged history.
@@ -404,25 +410,17 @@ directly. Consequences:
 
 Checked on 2026-10-30 against a test server (SignalK server 2.35.1) and the
 Freeboard-SK plotter extensions documentation. Resolved findings are
-recorded in 4.1, 6.1, 6.3 and 8 and in ARCHITECTURE.md; the points below are
-what is still unverified.
+recorded in 4.1, 6.1, 6.3 and 8 and in ARCHITECTURE.md; the points below
+are what is still unverified.
 
-1. **Counters through the History API.** On the test server (default
-   provider `signalk-questdb` 2.3.2) `values` queries work and accept the
-   aggregates listed in section 8. Not yet tested: a published counter read
-   back with `last`, behavior across a plugin restart (reset detection), and
-   whether a provider that skips unchanged samples returns an empty bucket
-   or the previous value. Any provider should work, but only this one has
-   been seen.
-2. **Cell sets in a plugin file.** Section 8 adds a small data-directory
-   file for covered cells because the History API is numeric. Confirm this is
-   acceptable, or choose between dropping coverage history beyond one day or
-   encoding cells as numeric paths (far more paths than the 84 counters per
-   minute already published).
-3. **Plotter extension data overlay.** The Freeboard-SK doc describes
+1. **Counter reset across a plugin restart.** On the test server (default
+   provider `signalk-questdb` 2.3.2) `last` queries work, return `null`
+   before the first sample and repeat the previous value for buckets
+   without a new sample. Not yet tested with the plugin's own counters:
+   the restart reset and its detection by the reader. Only this provider
+   has been seen; others may behave differently.
+2. **Plotter extension data overlay.** The Freeboard-SK doc describes
    `overlay.setData` and `overlay.refresh` but not a server-only way to push
    live data, so the background iframe page is needed for live refresh. How
    large a GeoJSON source the plotter handles smoothly (hundreds of cells
    over 30 days) is untested.
-4. **Path namespace.** `sensors.ais.statistics.*` is chosen, but not yet
-   checked against the SignalK schema or other plugins for conflicts.
