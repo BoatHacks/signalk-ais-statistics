@@ -132,6 +132,33 @@ describe('plugin', () => {
     expect(f.app.listenerCount('myAisOut')).toBe(0)
   })
 
+  it('starts and stops in an app shaped like the registry harness', async () => {
+    // The registry's shim: no-op events, a stream whose onValue returns the
+    // bus rather than an unsubscribe function, no History API, and no call
+    // to registerWithRouter.
+    const dir = await mkdtemp(join(tmpdir(), 'ais-plugin-'))
+    const errors: string[] = []
+    const bus = { onValue: () => bus }
+    const app = {
+      on: () => undefined,
+      removeListener: () => undefined,
+      streambundle: { getSelfStream: () => bus },
+      handleMessage: () => undefined,
+      getDataDirPath: () => dir,
+      registerResourceProvider: () => undefined,
+      setPluginStatus: () => undefined,
+      setPluginError: (s: string) => errors.push(s),
+      error: (s: string) => errors.push(s),
+      debug: () => undefined,
+    }
+    const plugin = createPlugin(app as never)
+    expect(typeof plugin.schema).toBe('function')
+    await plugin.start({}, () => undefined)
+    await vi.advanceTimersByTimeAsync(120_000)
+    await plugin.stop()
+    expect(errors).toEqual([])
+  })
+
   it('counts reports without own position toward rates only', async () => {
     const f = fakeApp(await mkdtemp(join(tmpdir(), 'ais-plugin-')))
     const plugin = createPlugin(f.app as never)
