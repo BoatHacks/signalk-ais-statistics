@@ -13,15 +13,22 @@ describe('resolveConfig', () => {
       coverageDistancePercentile: 100,
       targetExpirySeconds: 5,
       publishOverlay: false,
+      sentenceEvents: ['nmea0183AISout', ' myAisOut ', 'nmea0183AISout', 3, ''],
     })
     expect(c.h3Resolution).toBe(8)
     expect(c.coverageDistancePercentile).toBe(100)
     expect(c.targetExpirySeconds).toBe(60)
     expect(c.publishOverlay).toBe(false)
+    expect(c.sentenceEvents).toEqual(['nmea0183AISout', 'myAisOut'])
   })
 
   it('ignores values of the wrong type', () => {
-    const c = resolveConfig({ h3Resolution: 'x', publishOverlay: 'no' })
+    const c = resolveConfig({
+      h3Resolution: 'x',
+      publishOverlay: 'no',
+      sentenceEvents: 'nmea0183',
+    })
+    expect(c.sentenceEvents).toEqual(['nmea0183', 'nmea0183AISout'])
     expect(c.h3Resolution).toBe(DEFAULT_CONFIG.h3Resolution)
     expect(c.publishOverlay).toBe(true)
   })
@@ -31,7 +38,7 @@ describe('resolveConfig', () => {
       const prop = (
         configSchema.properties as Record<string, { default: unknown }>
       )[key]
-      expect(prop?.default).toBe(value)
+      expect(prop?.default).toEqual(value)
     }
   })
 })

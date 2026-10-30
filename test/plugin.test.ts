@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { destination } from '../src/geo'
 import { paths } from '../src/paths'
 import { PLUGIN_ID, createPlugin } from '../src/plugin'
-import { asOwn, classA, classB, OWN } from './fixtures/ais'
+import { asOwn, classA, classB, OWN, staticA } from './fixtures/ais'
 import { fakeApp } from './fixtures/app'
 import { FakeHistory } from './fixtures/history'
 import { fakeRouter } from './fixtures/router'
@@ -86,6 +86,50 @@ describe('plugin', () => {
     expect(await readdir(dir)).toEqual(['coverage-2030-01-01.json'])
     expect((await r.call('/summary')).status).toBe(503)
     expect(f.errors).toEqual([])
+  })
+
+  it('also counts AIS from nmea0183AISout, decoding each source apart', async () => {
+    const f = fakeApp(await mkdtemp(join(tmpdir(), 'ais-plugin-')))
+    const plugin = createPlugin(f.app as never)
+    const r = fakeRouter()
+    plugin.registerWithRouter!(r.router as never)
+    await plugin.start({}, () => undefined)
+    f.app.emit('nmea0183AISout', sentenceAt(999000001, 50, 12))
+    // The same multipart message on both events, interleaved.
+    const [a1, a2] = staticA(999000002, 70)
+    f.app.emit('nmea0183', a1)
+    f.app.emit('nmea0183AISout', a1)
+    f.app.emit('nmea0183', a2)
+    f.app.emit('nmea0183AISout', a2)
+    await vi.advanceTimersByTimeAsync(60_000)
+    const values = new Map(
+      f.deltas[0]!.delta.updates[0]!.values.map((v) => [v.path, v.value]),
+    )
+    expect(values.get(paths.messagesTotal)).toBe(3)
+    expect((await r.call('/status')).body).toMatchObject({
+      sentences: 5,
+      decodeErrors: 0,
+    })
+    await plugin.stop()
+    expect(f.app.listenerCount('nmea0183')).toBe(0)
+    expect(f.app.listenerCount('nmea0183AISout')).toBe(0)
+  })
+
+  it('listens only on the configured sentence events', async () => {
+    const f = fakeApp(await mkdtemp(join(tmpdir(), 'ais-plugin-')))
+    const plugin = createPlugin(f.app as never)
+    await plugin.start({ sentenceEvents: ['myAisOut'] }, () => undefined)
+    expect(f.app.listenerCount('nmea0183')).toBe(0)
+    expect(f.app.listenerCount('nmea0183AISout')).toBe(0)
+    f.app.emit('nmea0183', sentenceAt(999000001, 50, 12))
+    f.app.emit('myAisOut', sentenceAt(999000002, 50, 12))
+    await vi.advanceTimersByTimeAsync(60_000)
+    const values = new Map(
+      f.deltas[0]!.delta.updates[0]!.values.map((v) => [v.path, v.value]),
+    )
+    expect(values.get(paths.messagesTotal)).toBe(1)
+    await plugin.stop()
+    expect(f.app.listenerCount('myAisOut')).toBe(0)
   })
 
   it('counts reports without own position toward rates only', async () => {
