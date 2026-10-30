@@ -89,6 +89,9 @@ remains.
 - [x] Overview, charts, radar and map views (SPEC 7)
 - [x] Basemap switch with the online and metered default, remembered choice
 - [x] Works at phone width and offline, no CDN assets
+- [x] SignalK visual guideline: tactical theme with day and night, custom
+      elements, hash routes, WebSocket with backoff, display units, ship
+      time, app icon ([item-7b](item-7b-signalk-visuals.md))
 
 ## 8. Chart plotter overlay
 
@@ -100,8 +103,11 @@ remains.
 
 ## 9. First release
 
-- [ ] Work through [docs/release.md](../release.md): package metadata,
-      registry score items, first manual publish, trusted publisher
+- [x] Registry score items in the repository: plugin CI, changelog,
+      synthetic screenshots, a registry-like offline test job
+      ([item-9a](item-9a-plugin-and-registry-compliance.md))
+- [ ] Work through [docs/release.md](../release.md): first manual publish,
+      trusted publisher, GitHub Release, repository metadata
 - [ ] README with install, configuration and screenshots that contain no
       real vessel data
 - [ ] Review SPEC.md and ARCHITECTURE.md against the code and resolve or

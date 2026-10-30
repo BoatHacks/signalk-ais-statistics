@@ -58,9 +58,9 @@ SPEC 6.1, 6.2, 7, 12; ARCHITECTURE 2.11 and 4.
   grids with `auto-fit` and `clamp()`; map at `calc(100vh - 140px)` on
   desktop and `min-height: 50vh` on phones, Leaflet controls restyled as
   floating dark panels.
-- **Icon.** An SVG app icon at `public/icon.svg` (built from
-  `web/static/icon.svg`), referenced by `signalk.appIcon` and used as the
-  favicon from the same file.
+- **Icon.** Tobi's graphic as a 512 px PNG at `public/icon.png` (built
+  from `web/static/icon.png`), referenced by `signalk.appIcon` and used as
+  the favicon from the same file, plus `favicon.ico` and a touch icon.
 - **Licensing.** No change; all runtime and bundled dependencies are
   permissive and EUPL-1.2 compatible (ggencoder and h3-js Apache-2.0,
   Leaflet BSD-2, Temporal polyfill ISC).
@@ -75,10 +75,10 @@ SPEC 6.1, 6.2, 7, 12; ARCHITECTURE 2.11 and 4.
   phone width, offline (WebSocket refused) to see the offline state.
 
 ## Implementation Steps
-- [ ] Settle the open point below
-- [ ] Plugin: SI paths and REST fields, default metadata
-- [ ] Web: theme, icon, custom elements, routing, WebSocket, units, time
-- [ ] Tests, screenshots, SPEC 6.1, 6.2, 7, 12 and ARCHITECTURE 2.11 and 4
+- [x] Settle the open point below (SI paths, chosen by Tobi)
+- [x] Plugin: SI paths and REST fields, default metadata
+- [x] Web: theme, icon, custom elements, routing, WebSocket, units, time
+- [x] Tests, screenshots, SPEC 6.1, 6.2, 7, 12 and ARCHITECTURE 2.11
 
 ## Files to Create/Modify
 `src/paths.ts`, `src/publish.ts`, `src/query.ts`, `src/api.ts`,
@@ -86,7 +86,7 @@ SPEC 6.1, 6.2, 7, 12; ARCHITECTURE 2.11 and 4.
 `package.json`, tests, SPEC.md, ARCHITECTURE.md.
 
 ## Open Points
-- **Published path names.** SignalK expects SI values, and display units
+- **Published path names (resolved: SI paths).** SignalK expects SI values, and display units
   come from path metadata, so the published distance and area paths would
   move to SI too: `distance.p99` in metres instead of `distance.p99Nm`,
   `coverage.area.today` in m² instead of `coverage.areaKm2.today`. Nothing

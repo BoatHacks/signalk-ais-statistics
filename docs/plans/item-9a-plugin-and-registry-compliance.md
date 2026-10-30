@@ -3,8 +3,8 @@
 ## Overview
 Bring the package up to the conventions of Tobi's `signalk-plugin` skill
 and to a full 100 in the SignalK plugin registry (`signalk-registry`
-skill), ahead of the first release (roadmap item 9). Plan only; nothing
-here is implemented yet.
+skill), ahead of the first release (roadmap item 9). Implemented except
+the steps that happen at release time.
 
 ## Relevant SPEC/ARCHITECTURE Sections
 [docs/release.md](../release.md), ARCHITECTURE 4 and 8, SPEC 6.1 and 6.3.
@@ -102,12 +102,12 @@ Projected today: 80. After the three gaps: 100.
   `signalk-registry` check 0 and confirm 100.
 
 ## Implementation Steps
-- [ ] plugin-ci.yml pinned to v2.35.1
-- [ ] CHANGELOG.md
-- [ ] Synthetic screenshot script, images, `signalk.screenshots`, `files`
-- [ ] Harness-like CI job and shim-like plugin test, unsubscribe guard
-- [ ] `signalk.appIcon`, `author`
-- [ ] release.md and roadmap updates
+- [x] plugin-ci.yml pinned to v2.35.1
+- [x] CHANGELOG.md
+- [x] Synthetic screenshot script, images, `signalk.screenshots`, `files`
+- [x] Harness-like CI job and shim-like plugin test, unsubscribe guard
+- [x] `signalk.appIcon`, `author`
+- [x] release.md and roadmap updates
 - [ ] At release: GitHub Release `v0.1.0`, repo metadata
 
 ## Files to Create/Modify
@@ -124,7 +124,8 @@ Projected today: 80. After the three gaps: 100.
    routes work for read-only users there. Whether that includes anonymous
    access under `allow_readonly` is being checked by the spike on the
    development server. If it does not, move the overlay GeoJSON (and
-   possibly the statistics) to a read-only resource type.
+   possibly the statistics) to a read-only resource type. Resolved: the
+   spike showed anonymous read-only access works on server 2.35.1.
 2. **Screenshots before or after the restyle.** Taking them now and again
    after item 7b costs little; waiting avoids churn. Default: after item 7b.
 3. **The plugin CI pin goes stale** with every server release. The
