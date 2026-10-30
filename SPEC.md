@@ -320,7 +320,9 @@ A SignalK web app, listed in the admin UI, with:
   p95 and p99 per hour (max shown separately and marked untrusted).
 - Radar: the 24-sector bearing view for class A and B.
 - Map: the coverage footprint with a window selector (day, 7 days, 30
-  days) and an on-screen basemap switch between OpenStreetMap with
+  days), the 24 hour radar wedges from the plotter overlay, on-screen
+  toggles that show or hide the cells and the radar (remembered per
+  browser), and an on-screen basemap switch between OpenStreetMap with
   OpenSeaMap overlay, and the SignalK server's chart provider. Default:
   OSM/OpenSeaMap when the internet is available and the connection is not
   metered, read from `network.internet.state` (`online`, `offline` or

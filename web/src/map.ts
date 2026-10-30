@@ -1,4 +1,6 @@
-// Coverage map with a window selector and the basemap switch.
+// Coverage map with a window selector, the basemap switch and layer
+// toggles for the coverage cells and the radar. Cells and radar use the
+// plotter overlay's colours.
 import * as L from 'leaflet'
 import { get, type CoverageResponse } from './api'
 import {
@@ -10,6 +12,16 @@ import {
   type Basemap,
 } from './basemap'
 import { el } from './format'
+import { layerVisible, saveLayerVisible, type Layer } from './layers'
+import {
+  CELL_FILL_OPACITY,
+  CELL_LINE_WIDTH,
+  OVERLAY_OPACITY,
+  RADAR_COLOUR,
+  RADAR_LINE_WIDTH,
+  cellColour,
+} from '../../src/style'
+import { SECTOR_WIDTH_DEG } from '../../src/paths'
 import type { Unit } from './units'
 
 export interface MapView {
@@ -22,23 +34,43 @@ export interface MapView {
   restyle(): void
 }
 
-const cssVar = (name: string) =>
-  getComputedStyle(document.documentElement).getPropertyValue(name).trim()
-
 const OSM = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
 const SEAMARK = 'https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png'
+
+const bearings = (sector: number) =>
+  `${sector * SECTOR_WIDTH_DEG}° to ${(sector + 1) * SECTOR_WIDTH_DEG}°`
 
 export function createMap(): MapView {
   const element = el('div', { class: 'map-view' })
   const info = el('p', { class: 'muted small' })
-  const switcher = el('div', { class: 'map-switcher', role: 'group' })
+  const switcher = el('div', {
+    class: 'map-switcher',
+    role: 'group',
+    'aria-label': 'Basemap',
+  })
+  const toggles = el('div', {
+    class: 'map-switcher map-layers',
+    role: 'group',
+    'aria-label': 'Layers',
+  })
   const mapEl = el('div', { class: 'map' })
-  const card = el('div', { class: 'map-card sk-card' }, mapEl, switcher)
+  const card = el(
+    'div',
+    { class: 'map-card sk-card' },
+    mapEl,
+    switcher,
+    toggles,
+  )
   element.append(card, info)
 
   let map: L.Map | undefined
   let base: L.Layer[] = []
   let cells: L.GeoJSON | undefined
+  let radar: L.GeoJSON | undefined
+  const visible: Record<Layer, boolean> = {
+    cells: layerVisible('cells'),
+    radar: layerVisible('radar'),
+  }
   let current: Basemap | undefined
   let fitted = false
 
@@ -70,6 +102,7 @@ export function createMap(): MapView {
     }
     for (const l of base) l.addTo(map)
     cells?.bringToFront()
+    radar?.bringToFront()
     for (const btn of switcher.querySelectorAll('button'))
       btn.setAttribute('aria-pressed', String(btn.dataset.basemap === b))
   }
@@ -86,6 +119,37 @@ export function createMap(): MapView {
     switcher.append(btn)
   }
 
+  function applyVisibility() {
+    for (const [name, layer] of [
+      ['cells', cells],
+      ['radar', radar],
+    ] as const) {
+      if (!map || !layer) continue
+      if (visible[name] && !map.hasLayer(layer)) layer.addTo(map)
+      if (!visible[name] && map.hasLayer(layer)) layer.remove()
+    }
+    radar?.bringToFront()
+    for (const btn of toggles.querySelectorAll('button'))
+      btn.setAttribute(
+        'aria-pressed',
+        String(visible[btn.dataset.layer as Layer]),
+      )
+  }
+
+  for (const [name, label] of [
+    ['cells', 'Cells'],
+    ['radar', 'Radar 24h'],
+  ] as const) {
+    const btn = el('button', { type: 'button', 'data-layer': name }, label)
+    btn.addEventListener('click', () => {
+      visible[name] = !visible[name]
+      saveLayerVisible(name, visible[name])
+      applyVisibility()
+    })
+    toggles.append(btn)
+  }
+  applyVisibility()
+
   async function ensureMap() {
     if (map) return
     map = L.map(mapEl, { worldCopyJump: true }).setView([0, 0], 2)
@@ -94,34 +158,63 @@ export function createMap(): MapView {
     await setBasemap(chosen)
   }
 
+  // The plotter draws the overlay at OVERLAY_OPACITY on top of the paint
+  // opacity, so the same product here gives the same look.
   const cellStyle = (f?: GeoJSON.Feature): L.PathOptions => {
-    const t = Number(f?.properties?.intensity ?? 0)
-    const color = cssVar('--color-teal') || '#66c6db'
+    const color = cellColour(Number(f?.properties?.intensity ?? 0))
     return {
       color,
-      weight: 0.5,
+      weight: CELL_LINE_WIDTH,
+      opacity: OVERLAY_OPACITY,
       fillColor: color,
-      fillOpacity: 0.15 + 0.5 * t,
+      fillOpacity: CELL_FILL_OPACITY * OVERLAY_OPACITY,
     }
+  }
+
+  const radarStyle: L.PathOptions = {
+    color: RADAR_COLOUR,
+    weight: RADAR_LINE_WIDTH,
+    opacity: OVERLAY_OPACITY,
+    fill: false,
   }
 
   return {
     element,
     restyle() {
-      cells?.setStyle(cellStyle)
+      // Cell and radar colours follow the plotter overlay, not the theme.
     },
     async show(window, units) {
       await ensureMap()
       map!.invalidateSize()
-      const c = await get<CoverageResponse>('/coverage', { window })
+      const [c, overlay] = await Promise.all([
+        get<CoverageResponse>('/coverage', { window }),
+        get<GeoJSON.FeatureCollection>('/overlay/coverage.geojson').catch(
+          () => undefined,
+        ),
+      ])
       cells?.remove()
+      radar?.remove()
       cells = L.geoJSON(c.geojson, {
         style: cellStyle,
         onEachFeature: (f, layer) =>
           layer.bindTooltip(
             `${f.properties?.reports} reports, nearest ${units.distance.format(f.properties?.minDistanceM)}`,
           ),
-      }).addTo(map!)
+      })
+      const wedges: GeoJSON.FeatureCollection = {
+        type: 'FeatureCollection',
+        features: (overlay?.features ?? []).filter(
+          (f) => f.properties?.kind === 'radar',
+        ),
+      }
+      radar = L.geoJSON(wedges, {
+        style: radarStyle,
+        onEachFeature: (f, layer) =>
+          layer.bindTooltip(
+            `${bearings(Number(f.properties?.sector))}: p99 ${units.distance.format(f.properties?.p99M)} over 24h`,
+          ),
+      })
+      applyVisibility()
       if (!fitted && c.cells > 0) {
         map!.fitBounds(cells.getBounds(), { padding: [16, 16] })
         fitted = true

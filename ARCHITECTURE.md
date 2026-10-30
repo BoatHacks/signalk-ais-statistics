@@ -123,7 +123,11 @@ charts reuse their SVG paths and rects. Pure helpers (`units.ts`,
 `time.ts`, `route.ts`, `backoff.ts`) are unit tested under `test/web`. The map has a basemap switch (OSM/OpenSeaMap or the server's chart
 provider); its default follows the internet-status plugin's online and
 metered state when present, and a manual choice is remembered in
-`localStorage`.
+`localStorage`. Toggles show or hide the coverage cells and the radar
+wedges (`layers.ts`, also remembered in `localStorage`). The radar wedges
+come from the overlay GeoJSON route, and the cell and radar colours are
+imported from `src/style.ts`, which the plotter overlay uses too, so the
+app map and the plotter look the same.
 
 ## 3. Data Models
 
@@ -204,6 +208,7 @@ src/
   query.ts            windowed queries
   api.ts              REST routes
   overlay.ts          plotterExtensions provider, manifest and radar wedges
+  style.ts            coverage and radar colours shared by overlay and web app
   geo.ts              haversine, bearing, sector
   types/              typings for untyped dependencies
 web/src/              web app source, built into public/ by web/build.mjs

@@ -6,6 +6,15 @@
 import { destination, M_PER_NM } from './geo'
 import type { LatLon } from './ownposition'
 import type { Radar } from './query'
+import {
+  CELL_FILL_OPACITY,
+  CELL_HIGH,
+  CELL_LINE_WIDTH,
+  CELL_LOW,
+  OVERLAY_OPACITY,
+  RADAR_COLOUR,
+  RADAR_LINE_WIDTH,
+} from './style'
 
 export const OVERLAY_ID = 'coverage'
 export const OVERLAY_SOURCE = 'coverage'
@@ -26,16 +35,14 @@ export function overlayUrls(pluginId: string): OverlayUrls {
   }
 }
 
-// Magenta to purple stands out from both chart water and land; a blue ramp
-// disappears over the sea.
 const CELL_RAMP = [
   'interpolate',
   ['linear'],
   ['get', 'intensity'],
   0,
-  '#f768a1',
+  CELL_LOW,
   1,
-  '#7a0177',
+  CELL_HIGH,
 ]
 
 export function overlayStyle(dataUrl: string): object {
@@ -50,21 +57,21 @@ export function overlayStyle(dataUrl: string): object {
         type: 'fill',
         source: OVERLAY_SOURCE,
         filter: ['==', ['get', 'kind'], 'cell'],
-        paint: { 'fill-color': CELL_RAMP, 'fill-opacity': 0.45 },
+        paint: { 'fill-color': CELL_RAMP, 'fill-opacity': CELL_FILL_OPACITY },
       },
       {
         id: 'cell-outlines',
         type: 'line',
         source: OVERLAY_SOURCE,
         filter: ['==', ['get', 'kind'], 'cell'],
-        paint: { 'line-color': CELL_RAMP, 'line-width': 1 },
+        paint: { 'line-color': CELL_RAMP, 'line-width': CELL_LINE_WIDTH },
       },
       {
         id: 'radar',
         type: 'line',
         source: OVERLAY_SOURCE,
         filter: ['==', ['get', 'kind'], 'radar'],
-        paint: { 'line-color': '#d94801', 'line-width': 1.5 },
+        paint: { 'line-color': RADAR_COLOUR, 'line-width': RADAR_LINE_WIDTH },
       },
     ],
   }
@@ -98,7 +105,7 @@ export function buildManifest(
         type: 'data',
         band: 'aboveCharts',
         visible: true,
-        opacity: 0.8,
+        opacity: OVERLAY_OPACITY,
         style: overlayStyle(urls.data),
       },
     ],
