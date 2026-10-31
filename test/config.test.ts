@@ -37,6 +37,29 @@ describe('resolveConfig', () => {
     expect(c.publishOverlay).toBe(true)
   })
 
+  it('publishes every 5 minutes and keeps coverage for 14 days by default', () => {
+    expect(DEFAULT_CONFIG.publishIntervalMinutes).toBe(5)
+    expect(DEFAULT_CONFIG.coverageRetentionDays).toBe(14)
+  })
+
+  it('snaps the publish interval to a divisor of the hour', () => {
+    expect(
+      resolveConfig({ publishIntervalMinutes: 7 }).publishIntervalMinutes,
+    ).toBe(6)
+    expect(
+      resolveConfig({ publishIntervalMinutes: 15 }).publishIntervalMinutes,
+    ).toBe(15)
+    expect(
+      resolveConfig({ publishIntervalMinutes: 0 }).publishIntervalMinutes,
+    ).toBe(1)
+    expect(
+      resolveConfig({ publishIntervalMinutes: 500 }).publishIntervalMinutes,
+    ).toBe(60)
+    expect(
+      resolveConfig({ publishIntervalMinutes: 'x' }).publishIntervalMinutes,
+    ).toBe(5)
+  })
+
   it('has a schema default for every option', () => {
     for (const [key, value] of Object.entries(DEFAULT_CONFIG)) {
       const prop = (

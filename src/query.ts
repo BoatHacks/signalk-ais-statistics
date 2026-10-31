@@ -32,7 +32,6 @@ export const WINDOWS = {
   '1h': { ms: HOUR_MS, resolution: 60 },
   '24h': { ms: DAY_MS, resolution: 300 },
   '7d': { ms: 7 * DAY_MS, resolution: 3600 },
-  '30d': { ms: 30 * DAY_MS, resolution: 3600 },
 } as const
 export type WindowName = keyof typeof WINDOWS
 
@@ -45,6 +44,13 @@ export type Metric = (typeof METRICS)[number]
 export const MAX_SERIES_POINTS = 2000
 
 export type Source = 'history' | 'live'
+
+/**
+ * Shown instead of the provider's own error, which can be a long database
+ * message; the full error goes to the server log.
+ */
+export const HISTORY_FAILED =
+  'The history provider could not answer, so these figures are live data from at most the last 24 hours.'
 
 export interface DistanceFigures {
   count: number
@@ -67,6 +73,8 @@ export interface Summary {
   /** Unique vessels; null for windows over 24 hours, which are not additive. */
   vessels: { total: number; byGroup: Record<TypeGroup, number> } | null
   distance: DistanceFigures
+  /** Set when history failed and the figures fell back to live data. */
+  historyError?: string
 }
 
 export interface RadarSector {
@@ -82,6 +90,7 @@ export interface Radar {
   class: SectorClass | 'all'
   source: Source
   sectors: RadarSector[]
+  historyError?: string
 }
 
 export interface SeriesResult {
@@ -89,6 +98,7 @@ export interface SeriesResult {
   source: Source
   resolution: number
   times: string[]
+  historyError?: string
   [column: string]: unknown
 }
 
@@ -173,6 +183,9 @@ export class Query {
   constructor(
     private readonly agg: Aggregator,
     private readonly history: () => HistoryReader,
+    /** The publish interval: history has nothing finer to offer. */
+    private readonly minResolution = 60,
+    private readonly onHistoryError: (err: unknown) => void = () => {},
   ) {}
 
   private useHistory(windowMs: number, now: number): boolean {
@@ -180,6 +193,23 @@ export class Query {
     // The live minute buckets are exact for the last hour once the plugin
     // has been running that long.
     return !(windowMs <= HOUR_MS && now - this.agg.startedAt >= HOUR_MS)
+  }
+
+  private resolution(seconds: number): number {
+    return Math.max(seconds, this.minResolution)
+  }
+
+  /** Runs a history read, falling back to the live figures if it fails. */
+  private async withFallback<T extends object>(
+    fromHistory: () => Promise<T>,
+    live: () => T,
+  ): Promise<T> {
+    try {
+      return await fromHistory()
+    } catch (err) {
+      this.onHistoryError(err)
+      return { ...live(), historyError: HISTORY_FAILED }
+    }
   }
 
   async summary(window: WindowName, now: number): Promise<Summary> {
@@ -193,9 +223,25 @@ export class Query {
       vessels,
     }
 
-    if (this.useHistory(w.ms, now)) {
+    const live = (): Summary => {
+      const b = this.liveBucket(w.ms, now)
+      return {
+        ...base,
+        source: 'live',
+        messages: b.messages,
+        positions: {
+          classA: b.positions.A,
+          classB: b.positions.B,
+          other: b.positions.other,
+        },
+        distance: distanceFigures(b.distanceBins, b.maxNm),
+      }
+    }
+    if (!this.useHistory(w.ms, now)) return live()
+
+    return this.withFallback(async (): Promise<Summary> => {
       const h = this.history()
-      const res = w.resolution
+      const res = this.resolution(w.resolution)
       const [counters, max] = await Promise.all([
         counterIncrements(h, COUNTER_PATHS, from, now, res),
         h.series([paths.distanceMax], 'max', from, now, w.ms / 1000),
@@ -215,20 +261,7 @@ export class Query {
           toNm(maxOf(max.values[0] ?? [])),
         ),
       }
-    }
-
-    const b = this.liveBucket(w.ms, now)
-    return {
-      ...base,
-      source: 'live',
-      messages: b.messages,
-      positions: {
-        classA: b.positions.A,
-        classB: b.positions.B,
-        other: b.positions.other,
-      },
-      distance: distanceFigures(b.distanceBins, b.maxNm),
-    }
+    }, live)
   }
 
   async radar(
@@ -238,39 +271,40 @@ export class Query {
   ): Promise<Radar> {
     const w = WINDOWS[window]
     const classes = cls === 'all' ? [...SECTOR_CLASSES] : [cls]
-    const counts = new Array<number>(SECTOR_COUNT).fill(0)
-    const p99: (number | undefined)[] = new Array(SECTOR_COUNT).fill(undefined)
-    const raise = (s: number, v: number | undefined | null) => {
-      if (
-        v !== undefined &&
-        v !== null &&
-        (p99[s] === undefined || v > p99[s]!)
+    const result = (
+      source: Source,
+      counts: number[],
+      p99: (number | undefined)[],
+    ): Radar => ({
+      window,
+      class: cls,
+      source,
+      sectors: counts.map((count, s) => ({
+        sector: s,
+        fromDeg: s * SECTOR_WIDTH_DEG,
+        toDeg: (s + 1) * SECTOR_WIDTH_DEG,
+        count,
+        p99M: metres(p99[s]),
+      })),
+    })
+    const accumulator = () => {
+      const counts = new Array<number>(SECTOR_COUNT).fill(0)
+      const p99: (number | undefined)[] = new Array(SECTOR_COUNT).fill(
+        undefined,
       )
-        p99[s] = v
+      const raise = (s: number, v: number | undefined | null) => {
+        if (
+          v !== undefined &&
+          v !== null &&
+          (p99[s] === undefined || v > p99[s]!)
+        )
+          p99[s] = v
+      }
+      return { counts, p99, raise }
     }
-    let source: Source
 
-    if (this.useHistory(w.ms, now)) {
-      source = 'history'
-      const h = this.history()
-      const countPaths: string[] = []
-      const p99Paths: string[] = []
-      for (const c of classes)
-        for (let s = 0; s < SECTOR_COUNT; s++) {
-          countPaths.push(paths.sectorCount(s, c))
-          p99Paths.push(paths.sectorP99(s, c))
-        }
-      const res = w.resolution
-      const [cs, ps] = await Promise.all([
-        counterIncrements(h, countPaths, now - w.ms, now, res),
-        h.series(p99Paths, 'max', now - w.ms, now, w.ms / 1000),
-      ])
-      cs.increments.forEach((col, i) => {
-        counts[i % SECTOR_COUNT]! += sum(col)
-      })
-      ps.values.forEach((col, i) => raise(i % SECTOR_COUNT, toNm(maxOf(col))))
-    } else {
-      source = 'live'
+    const live = (): Radar => {
+      const { counts, p99, raise } = accumulator()
       const ci = classes.map((c) => SECTOR_CLASSES.indexOf(c))
       const buckets =
         w.ms <= HOUR_MS
@@ -286,20 +320,31 @@ export class Query {
             raise(s, bp[c]![s])
           }
       }
+      return result('live', counts, p99)
     }
+    if (!this.useHistory(w.ms, now)) return live()
 
-    return {
-      window,
-      class: cls,
-      source,
-      sectors: counts.map((count, s) => ({
-        sector: s,
-        fromDeg: s * SECTOR_WIDTH_DEG,
-        toDeg: (s + 1) * SECTOR_WIDTH_DEG,
-        count,
-        p99M: metres(p99[s]),
-      })),
-    }
+    return this.withFallback(async () => {
+      const { counts, p99, raise } = accumulator()
+      const h = this.history()
+      const countPaths: string[] = []
+      const p99Paths: string[] = []
+      for (const c of classes)
+        for (let s = 0; s < SECTOR_COUNT; s++) {
+          countPaths.push(paths.sectorCount(s, c))
+          p99Paths.push(paths.sectorP99(s, c))
+        }
+      const res = this.resolution(w.resolution)
+      const [cs, ps] = await Promise.all([
+        counterIncrements(h, countPaths, now - w.ms, now, res),
+        h.series(p99Paths, 'max', now - w.ms, now, w.ms / 1000),
+      ])
+      cs.increments.forEach((col, i) => {
+        counts[i % SECTOR_COUNT]! += sum(col)
+      })
+      ps.values.forEach((col, i) => raise(i % SECTOR_COUNT, toNm(maxOf(col))))
+      return result('history', counts, p99)
+    }, live)
   }
 
   async series(
@@ -308,9 +353,13 @@ export class Query {
     from: number,
     to: number,
   ): Promise<SeriesResult> {
-    if (this.history().available)
-      return this.historySeries(metric, resolution, from, to)
-    return this.liveSeries(metric, resolution, from, to)
+    const live = () => this.liveSeries(metric, resolution, from, to)
+    // Within the last hour the live minute buckets are finer than history.
+    if (!this.useHistory(to - from, to)) return live()
+    return this.withFallback(
+      () => this.historySeries(metric, this.resolution(resolution), from, to),
+      live,
+    )
   }
 
   private liveBucket(windowMs: number, now: number): Bucket {

@@ -42,6 +42,56 @@ describe('increments', () => {
   })
 })
 
+describe('HistoryApiReader request queue', () => {
+  it('sends one request at a time, across chunks and callers', async () => {
+    let active = 0
+    let peak = 0
+    let calls = 0
+    const fake = new FakeHistory()
+    const api = {
+      getValues: async (q: Parameters<FakeHistory['getValues']>[0]) => {
+        calls++
+        active++
+        peak = Math.max(peak, active)
+        await new Promise((r) => setTimeout(r, 5))
+        active--
+        return fake.getValues(q)
+      },
+    }
+    const reader = new HistoryApiReader(api as never)
+    const paths = Array.from({ length: 90 }, (_, i) => `a.path.${i}`)
+    const from = Date.UTC(2030, 0, 1)
+    await Promise.all([
+      reader.series(paths, 'last', from, from + 3600e3, 300),
+      reader.series(paths, 'max', from, from + 3600e3, 300),
+    ])
+    // 90 paths are three chunks of at most 40, for each of two callers.
+    expect(calls).toBe(6)
+    expect(peak).toBe(1)
+  })
+
+  it('keeps going after a failed request', async () => {
+    let first = true
+    const fake = new FakeHistory()
+    const api = {
+      getValues: async (q: Parameters<FakeHistory['getValues']>[0]) => {
+        if (first) {
+          first = false
+          throw new Error('out of memory')
+        }
+        return fake.getValues(q)
+      },
+    }
+    const reader = new HistoryApiReader(api as never)
+    const from = Date.UTC(2030, 0, 1)
+    await expect(
+      reader.series(['a'], 'last', from, from + 600e3, 300),
+    ).rejects.toThrow('out of memory')
+    const ok = await reader.series(['a'], 'last', from, from + 600e3, 300)
+    expect(ok.times).toHaveLength(2)
+  })
+})
+
 describe('parseRows and mergeSeries', () => {
   it('parses timestamps and non-numeric values as null', () => {
     const s = parseRows(

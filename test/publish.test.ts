@@ -21,6 +21,14 @@ describe('buildValues', () => {
     expect(values).toHaveLength(4 + 32 + 48 + 2 + 14)
   })
 
+  it('leaves the sector paths out when asked', () => {
+    const values = buildValues(new Aggregator(T0), T0, undefined, {
+      sectors: false,
+    })
+    expect(values.some((v) => v.path.includes('.sectors.'))).toBe(false)
+    expect(values).toHaveLength(4 + 32 + 2 + 14)
+  })
+
   it('publishes only finite numbers under the prefix', () => {
     const agg = new Aggregator(T0)
     const p = destination(OWN, 37, 25)

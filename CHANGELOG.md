@@ -6,6 +6,27 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-01
+
+### Added
+
+- `publishIntervalMinutes` option, default 5.
+
+### Changed
+
+- The statistics paths are published every 5 minutes instead of every
+  minute, and the per-sector radar paths once an hour, which more than
+  halves what the history provider stores. Counters stay exact; history
+  charts are no finer than the interval.
+- Windows go up to 7 days; the 30 day window is gone.
+- Coverage files are kept for 14 days by default instead of 90. Saved
+  settings keep their value.
+- History requests run one at a time and REST answers are cached for a
+  minute. Parallel requests could make the history database exceed its
+  memory limit on a busy server.
+- When a history read fails, the web app shows live figures with a short
+  note instead of the provider's error.
+
 ## [0.2.0] - 2026-10-31
 
 ### Added
@@ -73,7 +94,8 @@ First release.
 - A dark tactical web app theme following day and night mode, with
   distances in the server's display units and the plugin's app icon.
 
-[Unreleased]: https://github.com/BoatHacks/signalk-ais-statistics/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/BoatHacks/signalk-ais-statistics/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/BoatHacks/signalk-ais-statistics/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/BoatHacks/signalk-ais-statistics/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/BoatHacks/signalk-ais-statistics/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/BoatHacks/signalk-ais-statistics/compare/v0.1.0...v0.1.1

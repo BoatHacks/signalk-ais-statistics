@@ -38,8 +38,21 @@ const CHUNK = 40
 
 export class HistoryApiReader implements HistoryReader {
   readonly available = true
+  /**
+   * Requests run one at a time, across all callers. Providers such as
+   * signalk-questdb run one database query per path, and parallel requests
+   * multiplied that into enough concurrent scans to exhaust the database's
+   * memory on a busy server.
+   */
+  private queue: Promise<unknown> = Promise.resolve()
 
   constructor(private readonly api: HistoryApi) {}
+
+  private enqueue<T>(job: () => Promise<T>): Promise<T> {
+    const run = this.queue.then(job, job)
+    this.queue = run.catch(() => undefined)
+    return run
+  }
 
   async series(
     paths: string[],
@@ -51,9 +64,13 @@ export class HistoryApiReader implements HistoryReader {
     const chunks: string[][] = []
     for (let i = 0; i < paths.length; i += CHUNK)
       chunks.push(paths.slice(i, i + CHUNK))
-    const parts = await Promise.all(
-      chunks.map((c) => this.query(c, aggregate, from, to, resolutionSeconds)),
-    )
+    const parts: Series[] = []
+    for (const c of chunks)
+      parts.push(
+        await this.enqueue(() =>
+          this.query(c, aggregate, from, to, resolutionSeconds),
+        ),
+      )
     return mergeSeries(parts)
   }
 

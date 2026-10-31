@@ -1,5 +1,7 @@
 // REST routes (SPEC 6.1, ARCHITECTURE 2.9). Thin: validate parameters, call
-// the query layer, serialize. Every route is read-only and registered
+// the query layer, serialize. Answers are cached for a minute and identical
+// requests share one computation, so reloads and several open browsers do
+// not repeat the history reads behind them. Every route is read-only and registered
 // through router.access('readonly') where the server has it, so read-only
 // users can open the web app; older servers keep them admin-only.
 import { M_PER_NM } from './geo'
@@ -30,7 +32,11 @@ export interface ApiDeps {
   /** Radar polygons and other extra features for the plotter overlay. */
   overlayExtras?: () => Promise<object[]>
   now?: () => number
+  /** How long an answer is reused; 0 disables the cache. */
+  cacheMs?: number
 }
+
+export const CACHE_MS = 60_000
 
 interface Getter {
   get(path: string, ...handlers: RequestHandler[]): unknown
@@ -46,7 +52,6 @@ class NotRunning extends Error {}
 const COVERAGE_DAYS: Partial<Record<WindowName, number>> = {
   '24h': 1,
   '7d': 7,
-  '30d': 30,
 }
 
 function param(req: Request, name: string): string | undefined {
@@ -71,12 +76,43 @@ function timeParam(req: Request, name: string, fallback: number): number {
   return t
 }
 
+type Cached = (
+  req: Request,
+  compute: () => Promise<unknown> | unknown,
+) => Promise<unknown> | unknown
+
+/**
+ * Reuses answers for `ms` and shares in-flight ones, keyed by the query
+ * parameters; failures are dropped.
+ */
+function answerCache(now: () => number, ms: number): Cached {
+  const entries = new Map<string, { at: number; value: Promise<unknown> }>()
+  return (req, compute) => {
+    if (ms <= 0) return compute()
+    const t = now()
+    for (const [k, e] of entries) if (t - e.at >= ms) entries.delete(k)
+    const key = Object.entries(req.query)
+      .map(([k, v]) => `${k}=${String(v)}`)
+      .sort()
+      .join('&')
+    const hit = entries.get(key)
+    if (hit) return hit.value
+    const value = Promise.resolve().then(compute)
+    entries.set(key, { at: t, value })
+    value.catch(() => {
+      if (entries.get(key)?.value === value) entries.delete(key)
+    })
+    return value
+  }
+}
+
 function handle(
   fn: (req: Request) => Promise<unknown> | unknown,
+  cached?: Cached,
 ): RequestHandler {
   return (req: Request, res: Response) => {
     Promise.resolve()
-      .then(() => fn(req))
+      .then(() => (cached ? cached(req, () => fn(req)) : fn(req)))
       .then((body) => {
         res.setHeader('Cache-Control', 'no-store')
         res.json(body)
@@ -97,6 +133,15 @@ function handle(
 export function registerRoutes(router: RouterLike, deps: ApiDeps): void {
   const r: Getter = router.access ? router.access('readonly') : router
   const now = deps.now ?? Date.now
+  // One cache per route. A stopped plugin answers 503 even while an older
+  // answer is cached.
+  const cachedRoute = (): Cached => {
+    const cache = answerCache(now, deps.cacheMs ?? CACHE_MS)
+    return (req, compute) => {
+      if (!deps.query()) throw new NotRunning()
+      return cache(req, compute)
+    }
+  }
   const query = (): Query => {
     const q = deps.query()
     if (!q) throw new NotRunning()
@@ -110,7 +155,10 @@ export function registerRoutes(router: RouterLike, deps: ApiDeps): void {
 
   r.get(
     '/summary',
-    handle((req) => query().summary(windowParam(req, '24h'), now())),
+    handle(
+      (req) => query().summary(windowParam(req, '24h'), now()),
+      cachedRoute(),
+    ),
   )
 
   r.get(
@@ -124,7 +172,7 @@ export function registerRoutes(router: RouterLike, deps: ApiDeps): void {
         cls as SectorClass | 'all',
         now(),
       )
-    }),
+    }, cachedRoute()),
   )
 
   r.get(
@@ -144,7 +192,7 @@ export function registerRoutes(router: RouterLike, deps: ApiDeps): void {
           `at most ${MAX_SERIES_POINTS} points; raise the resolution`,
         )
       return query().series(metric as Metric, resolution, from, to)
-    }),
+    }, cachedRoute()),
   )
 
   r.get(
@@ -152,7 +200,7 @@ export function registerRoutes(router: RouterLike, deps: ApiDeps): void {
     handle(async (req) => {
       const window = windowParam(req, '24h')
       const days = COVERAGE_DAYS[window]
-      if (!days) throw new BadRequest('coverage windows are 24h, 7d and 30d')
+      if (!days) throw new BadRequest('coverage windows are 24h and 7d')
       const f = await coverage().footprint(days, now())
       return {
         window,
@@ -165,7 +213,7 @@ export function registerRoutes(router: RouterLike, deps: ApiDeps): void {
         cellIds: f.cells.map((c) => c.id),
         geojson: footprintGeoJson(f),
       }
-    }),
+    }, cachedRoute()),
   )
 
   r.get(
@@ -175,7 +223,7 @@ export function registerRoutes(router: RouterLike, deps: ApiDeps): void {
       const g = footprintGeoJson(f)
       const extras = deps.overlayExtras ? await deps.overlayExtras() : []
       return { ...g, features: [...g.features, ...extras] }
-    }),
+    }, cachedRoute()),
   )
 
   r.get(

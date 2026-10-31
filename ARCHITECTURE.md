@@ -81,7 +81,10 @@ used by the map and the overlay.
 
 ### 2.6 Publisher
 Emits the SignalK deltas of SPEC 6.2 through the plugin API's delta handler,
-with the plugin id as source, at the end of every minute. Counters are
+with the plugin id as source, at the end of every publish interval (5
+minutes by default, a divisor of the hour); the sector paths go out on the
+tick that closes each hour, on the first tick after a start and on stop.
+Counters are
 running totals since the plugin started; gauges are rolling one-hour or
 24-hour figures. Gauges without data are left out (SPEC 6.2).
 Distances and areas are converted from the internal nautical miles and
@@ -94,24 +97,30 @@ The only component that reads history. A small interface
 the in-process History API (`app.getHistoryApi()`, which returns the
 server's default provider) and a null implementation for live-only mode. It
 always passes a resolution, uses only `last` and `max`, splits requests into
-40 paths, and never talks to a database directly (SPEC 8). The plugin looks
+40 paths, sends them one at a time across all callers, and never talks to
+a database directly (SPEC 8). The plugin looks
 for a provider again every 10 minutes while in live-only mode.
 
 ### 2.8 Query layer
 Combines the live state (current open bucket) with HistoryReader results to
 answer windowed queries. All REST handlers go through it. A window total is
 the sum of a counter's per-bucket increments (60, 300 or 3600 second
-buckets by window), with reset detection: a value lower than its
+buckets by window, never finer than the publish interval), with reset detection: a value lower than its
 predecessor starts a new segment counted from zero, and the bucket's `max`
 adds what was counted before a restart inside that bucket. A null before
 the first sample counts as zero and a later null as unchanged. Window percentiles come
 from the summed increments of the distance bin counters. The one-hour window
-uses the live minute buckets once the plugin has run for an hour, since they
-are exact. Without history, all answers come from the aggregator.
+and chart spans of up to an hour use the live minute buckets once the
+plugin has run for an hour, since they are exact. Without history, all
+answers come from the aggregator, and if a history read fails the answer
+falls back to them with a short `historyError` note (the provider's error
+goes to the server log).
 
 ### 2.9 REST API
 Express router registered through the plugin API. Thin: parse and validate
-parameters, call the query layer, serialize (SPEC 6.1).
+parameters, call the query layer, serialize (SPEC 6.1). Data routes reuse
+an answer for a minute per set of parameters and share in-flight
+computations; `/status` is never cached.
 
 ### 2.10 Overlay provider
 Registers a read-only `plotterExtensions` resource provider through

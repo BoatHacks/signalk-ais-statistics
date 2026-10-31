@@ -17,6 +17,8 @@ export interface Distance {
 export interface Summary {
   window: WindowName
   source: 'history' | 'live'
+  /** Set when history failed and the answer fell back to live data. */
+  historyError?: string
   messages: number
   positions: { classA: number; classB: number; other: number }
   vessels: { total: number; byGroup: Record<string, number> } | null
@@ -25,6 +27,8 @@ export interface Summary {
 
 export interface Radar {
   source: 'history' | 'live'
+  /** Set when history failed and the answer fell back to live data. */
+  historyError?: string
   sectors: {
     sector: number
     fromDeg: number
@@ -36,6 +40,8 @@ export interface Radar {
 
 export interface Series {
   source: 'history' | 'live'
+  /** Set when history failed and the answer fell back to live data. */
+  historyError?: string
   resolution: number
   times: string[]
   [column: string]: unknown

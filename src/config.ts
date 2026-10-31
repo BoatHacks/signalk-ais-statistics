@@ -8,6 +8,7 @@ export interface Config {
   coverageDistancePercentile: number
   ownPositionMaxAgeSeconds: number
   coverageRetentionDays: number
+  publishIntervalMinutes: number
   publishOverlay: boolean
   sentenceEvents: string[]
 }
@@ -17,9 +18,21 @@ export const DEFAULT_CONFIG: Config = {
   h3Resolution: 6,
   coverageDistancePercentile: 99,
   ownPositionMaxAgeSeconds: 60,
-  coverageRetentionDays: 90,
+  coverageRetentionDays: 14,
+  publishIntervalMinutes: 5,
   publishOverlay: true,
   sentenceEvents: ['nmea0183', 'N2KAnalyzerOut'],
+}
+
+/** Divisors of an hour, so every interval ends on the hour too. */
+export const PUBLISH_INTERVALS = [1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 30, 60]
+
+/** The allowed interval nearest to the value, or the default. */
+function interval(value: unknown, fallback: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback
+  return PUBLISH_INTERVALS.reduce((best, i) =>
+    Math.abs(i - value) < Math.abs(best - value) ? i : best,
+  )
 }
 
 export const configSchema = {
@@ -62,9 +75,18 @@ export const configSchema = {
     coverageRetentionDays: {
       type: 'number',
       title: 'Coverage retention (days)',
-      description: 'How long the daily coverage cell files are kept.',
+      description:
+        'How long the daily coverage cell files are kept. The map and the plotter overlay show up to 7 days.',
       default: DEFAULT_CONFIG.coverageRetentionDays,
       minimum: 1,
+    },
+    publishIntervalMinutes: {
+      type: 'number',
+      title: 'Publish interval (minutes)',
+      description:
+        'How often the statistics paths are published to the server and its history provider. Counters stay exact at any interval; charts read from history are no finer than this. The radar sector distances are published once an hour regardless.',
+      default: DEFAULT_CONFIG.publishIntervalMinutes,
+      enum: PUBLISH_INTERVALS,
     },
     publishOverlay: {
       type: 'boolean',
@@ -117,6 +139,10 @@ export function resolveConfig(options: unknown): Config {
     ),
     coverageRetentionDays: Math.round(
       num(o.coverageRetentionDays, d.coverageRetentionDays, 1),
+    ),
+    publishIntervalMinutes: interval(
+      o.publishIntervalMinutes,
+      d.publishIntervalMinutes,
     ),
     publishOverlay:
       typeof o.publishOverlay === 'boolean'

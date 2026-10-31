@@ -2,7 +2,7 @@
 // a query part, for example #/charts?window=7d.
 export const VIEWS = ['overview', 'charts', 'radar', 'map'] as const
 export type View = (typeof VIEWS)[number]
-export const WINDOWS = ['1h', '24h', '7d', '30d'] as const
+export const WINDOWS = ['1h', '24h', '7d'] as const
 export type WindowName = (typeof WINDOWS)[number]
 
 export interface Route {

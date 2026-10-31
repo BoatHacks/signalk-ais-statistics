@@ -17,7 +17,9 @@ server; the open points are in SPEC section 13.
 - Track coverage: which areas you have actually received traffic from, per
   day, for a moving boat.
 - Publish all of it as numeric SignalK paths under `sensors.ais.statistics.*`,
-  so any history provider (QuestDB, InfluxDB, ...) records it.
+  every 5 minutes by default, so any history provider (QuestDB, InfluxDB,
+  ...) records it. Windows reach back up to 7 days, so about 14 days of
+  history retention for these paths is plenty.
 - Show graphs, a radar and a coverage map in a SignalK web app that works on
   a phone and offline.
 - Offer the coverage footprint as an overlay layer for chart plotters that

@@ -3,7 +3,7 @@ import { Aggregator, HOUR_MS, MINUTE_MS } from '../src/aggregate'
 import { destination } from '../src/geo'
 import { HistoryApiReader, nullHistoryReader } from '../src/history'
 import { buildValues } from '../src/publish'
-import { Query } from '../src/query'
+import { HISTORY_FAILED, Query } from '../src/query'
 import { OWN } from './fixtures/ais'
 import { FakeHistory } from './fixtures/history'
 
@@ -97,6 +97,62 @@ describe('Query with history', () => {
   })
 })
 
+describe('Query when history fails', () => {
+  it('answers from live data and says so', async () => {
+    const agg = new Aggregator(T0)
+    run(agg, new FakeHistory(), T0, 120)
+    const errors: unknown[] = []
+    const failing = {
+      available: true,
+      series: async () => {
+        throw new Error('global RSS memory limit exceeded')
+      },
+    }
+    const q = new Query(
+      agg,
+      () => failing,
+      300,
+      (e) => errors.push(e),
+    )
+    const now = T0 + 120 * MINUTE_MS
+    const s = await q.summary('24h', now)
+    expect(s.source).toBe('live')
+    expect(s.messages).toBe(240)
+    expect(s.historyError).toBe(HISTORY_FAILED)
+    expect(s.historyError).not.toContain('memory')
+    const r = await q.radar('24h', 'all', now)
+    expect(r.source).toBe('live')
+    expect(r.historyError).toBe(HISTORY_FAILED)
+    const series = await q.series('messages', 3600, now - 7 * 86400e3, now)
+    expect(series.source).toBe('live')
+    expect(series.historyError).toBe(HISTORY_FAILED)
+    expect(errors).toHaveLength(3)
+  })
+})
+
+describe('Query resolution', () => {
+  it('reads history no finer than the publish interval', async () => {
+    const history = new FakeHistory()
+    const agg = new Aggregator(T0)
+    run(agg, history, T0, 120)
+    const q = new Query(agg, () => new HistoryApiReader(history), 600)
+    await q.summary('24h', T0 + 120 * MINUTE_MS)
+    const resolutions = history.requests.map((r) => r.resolution)
+    expect(Math.min(...(resolutions as number[]))).toBe(600)
+  })
+
+  it('answers short chart spans from live data once it covers them', async () => {
+    const history = new FakeHistory()
+    const agg = new Aggregator(T0)
+    run(agg, history, T0, 120)
+    const q = new Query(agg, () => new HistoryApiReader(history), 300)
+    const now = T0 + 120 * MINUTE_MS
+    const s = await q.series('messages', 60, now - HOUR_MS, now)
+    expect(s.source).toBe('live')
+    expect(history.requests).toHaveLength(0)
+  })
+})
+
 describe('Query in live-only mode', () => {
   it('answers windows from the aggregator', async () => {
     const agg = new Aggregator(T0)
@@ -108,8 +164,8 @@ describe('Query in live-only mode', () => {
     expect(day.messages).toBe(240)
     const hour = await q.summary('1h', now)
     expect(hour.messages).toBe(120)
-    const month = await q.summary('30d', now)
-    expect(month.vessels).toBeNull()
+    const week = await q.summary('7d', now)
+    expect(week.vessels).toBeNull()
     const r = await q.radar('1h', 'b', now)
     expect(r.sectors[13]!.count).toBe(60)
     const s = await q.series('messages', 3600, T0, now)
