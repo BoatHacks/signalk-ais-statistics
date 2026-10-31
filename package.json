@@ -1,6 +1,6 @@
 {
   "name": "signalk-ais-statistics",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "AIS reception statistics for SignalK: counts, distance percentiles, bearing radar and coverage, with a web app and a chart plotter overlay",
   "author": "Tobias Rosenstock",
   "main": "dist/index.js",
