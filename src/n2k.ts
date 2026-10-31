@@ -1,9 +1,9 @@
 // NMEA 2000 ingestion (ARCHITECTURE 2.1): the server decodes every PGN with
 // canboatjs and emits it on N2KAnalyzerOut, so AIS PGNs only need their
 // fields mapped onto the message the sentence decoder produces. Lookup
-// fields arrive as canboat names, which the canboat lookup tables (the
-// same ones n2k-signalk uses) turn back into AIS codes.
-import { getEnumerationValue } from '@canboat/ts-pgns'
+// fields arrive as canboat names, which a local copy of the canboat lookup
+// tables (the same ones n2k-signalk uses) turns back into AIS codes.
+import { LOOKUPS, type LookupName } from './n2k-lookups'
 import type { AisMessage, IngestStats } from './ingest'
 
 /** PGNs that each carry one received AIS message. */
@@ -18,11 +18,29 @@ const OWN_TRANSCEIVER = new Set([2, 3, 4])
 
 const MMSI_RE = /^\d{1,9}$/
 
-function lookup(enumeration: string, value: unknown): number | undefined {
+function lookup(table: LookupName, value: unknown): number | undefined {
   if (typeof value === 'number')
     return Number.isInteger(value) ? value : undefined
-  if (typeof value === 'string') return getEnumerationValue(enumeration, value)
+  const names = LOOKUPS[table]
+  if (typeof value === 'string' && Object.hasOwn(names, value))
+    return names[value]
   return undefined
+}
+
+/**
+ * An MMSI is nine digits, and leading zeros are significant: a coast station
+ * is 00MIDxxxx and a group 0MIDxxxxx (ITU-R M.585). The sentence decoder
+ * writes all nine digits, so a number or a shorter string from canboatjs is
+ * padded the same way and one station never counts as two.
+ */
+export function normaliseMmsi(id: unknown): string | undefined {
+  const s =
+    typeof id === 'number' && Number.isInteger(id) && id >= 0
+      ? String(id)
+      : typeof id === 'string'
+        ? id.trim()
+        : ''
+  return MMSI_RE.test(s) ? s.padStart(9, '0') : undefined
 }
 
 export class N2kIngest {
@@ -54,10 +72,8 @@ export class N2kIngest {
       return undefined
     }
     const type = lookup('AIS_MESSAGE_ID', f.messageId)
-    const id = f.userId ?? f.sourceId
-    const mmsi =
-      typeof id === 'number' || typeof id === 'string' ? String(id) : ''
-    if (type === undefined || type < 1 || type > 27 || !MMSI_RE.test(mmsi)) {
+    const mmsi = normaliseMmsi(f.userId ?? f.sourceId)
+    if (type === undefined || type < 1 || type > 27 || mmsi === undefined) {
       this.stats.decodeErrors++
       return undefined
     }

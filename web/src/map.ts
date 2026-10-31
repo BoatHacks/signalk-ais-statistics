@@ -4,12 +4,13 @@
 import * as L from 'leaflet'
 import { get, type CoverageResponse } from './api'
 import {
-  defaultBasemap,
+  chooseBasemap,
   internetState,
   saveBasemap,
   savedBasemap,
   serverCharts,
   type Basemap,
+  type ChartLayer,
 } from './basemap'
 import { el } from './format'
 import { layerVisible, saveLayerVisible, type Layer } from './layers'
@@ -49,18 +50,24 @@ export function createMap(): MapView {
     'aria-label': 'Basemap',
   })
   const toggles = el('div', {
-    class: 'map-switcher map-layers',
+    class: 'map-switcher',
     role: 'group',
     'aria-label': 'Layers',
   })
-  const mapEl = el('div', { class: 'map' })
-  const card = el(
+  const noCharts = el(
+    'p',
+    { class: 'map-note', role: 'status', hidden: '' },
+    'No charts on this server.',
+  )
+  const controls = el(
     'div',
-    { class: 'map-card sk-card' },
-    mapEl,
+    { class: 'map-controls' },
     switcher,
+    noCharts,
     toggles,
   )
+  const mapEl = el('div', { class: 'map' })
+  const card = el('div', { class: 'map-card sk-card' }, mapEl, controls)
   element.append(card, info)
 
   let map: L.Map | undefined
@@ -72,6 +79,7 @@ export function createMap(): MapView {
     radar: layerVisible('radar'),
   }
   let current: Basemap | undefined
+  let charts: ChartLayer[] = []
   let fitted = false
 
   async function setBasemap(b: Basemap) {
@@ -91,7 +99,7 @@ export function createMap(): MapView {
         }),
       )
     } else {
-      for (const c of await serverCharts())
+      for (const c of charts)
         base.push(
           L.tileLayer(c.url, {
             minZoom: c.minzoom ?? 0,
@@ -112,6 +120,8 @@ export function createMap(): MapView {
     ['charts', 'Server charts'],
   ] as const) {
     const btn = el('button', { type: 'button', 'data-basemap': b }, label)
+    // Server charts stay disabled until the chart list is known.
+    if (b === 'charts') btn.disabled = true
     btn.addEventListener('click', () => {
       saveBasemap(b)
       void setBasemap(b)
@@ -153,9 +163,18 @@ export function createMap(): MapView {
   async function ensureMap() {
     if (map) return
     map = L.map(mapEl, { worldCopyJump: true }).setView([0, 0], 2)
-    const chosen =
-      savedBasemap() ?? defaultBasemap(await internetState(), navigator.onLine)
-    await setBasemap(chosen)
+    const [state, found] = await Promise.all([internetState(), serverCharts()])
+    charts = found
+    // Without server charts that basemap would stay blank, so its button is
+    // greyed out with a note saying why.
+    const chartsBtn = switcher.querySelector<HTMLButtonElement>(
+      'button[data-basemap="charts"]',
+    )
+    if (chartsBtn) chartsBtn.disabled = charts.length === 0
+    noCharts.hidden = charts.length > 0
+    await setBasemap(
+      chooseBasemap(savedBasemap(), state, navigator.onLine, charts.length > 0),
+    )
   }
 
   // The plotter draws the overlay at OVERLAY_OPACITY on top of the paint
