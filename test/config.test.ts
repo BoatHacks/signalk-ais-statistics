@@ -37,9 +37,9 @@ describe('resolveConfig', () => {
     expect(c.publishOverlay).toBe(true)
   })
 
-  it('publishes every 5 minutes and keeps coverage for 7 days by default', () => {
+  it('publishes every 5 minutes and keeps coverage for 14 days by default', () => {
     expect(DEFAULT_CONFIG.publishIntervalMinutes).toBe(5)
-    expect(DEFAULT_CONFIG.coverageRetentionDays).toBe(7)
+    expect(DEFAULT_CONFIG.coverageRetentionDays).toBe(14)
   })
 
   it('snaps the publish interval to a divisor of the hour', () => {

@@ -18,7 +18,7 @@ export const DEFAULT_CONFIG: Config = {
   h3Resolution: 6,
   coverageDistancePercentile: 99,
   ownPositionMaxAgeSeconds: 60,
-  coverageRetentionDays: 7,
+  coverageRetentionDays: 14,
   publishIntervalMinutes: 5,
   publishOverlay: true,
   sentenceEvents: ['nmea0183', 'N2KAnalyzerOut'],

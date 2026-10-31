@@ -387,8 +387,8 @@ directly. Consequences:
 - The one thing the History API cannot carry is the set of covered H3
   cells. The plugin therefore writes one small cell-set file per UTC day in
   its own data directory (a few KB), `coverage-YYYY-MM-DD.json`, pruned by
-  `coverageRetentionDays` (default 7, which the 7 day map window and the
-  overlay need). Per cell it holds the shortest
+  `coverageRetentionDays` (default 14; the 7 day map window and the
+  overlay need at least 7). Per cell it holds the shortest
   distance seen and the report count; it also holds that day's distance
   histogram, so a window's coverage cap is computed from the files alone. A
   day holds at most 20000 cells. Files are written atomically every hour,
@@ -404,7 +404,7 @@ directly. Consequences:
 | `h3Resolution` | 6 | coverage cell size: 6 is about 7 km across (36 km²); 5 was too coarse (chosen by the maintainer) |
 | `coverageDistancePercentile` | 99 | coverage skips cells beyond this percentile of the window's distances; 100 disables the cap |
 | `ownPositionMaxAgeSeconds` | 60 | staleness limit for own position |
-| `coverageRetentionDays` | 7 | how long daily cell-set files are kept; the map and the overlay show up to 7 days |
+| `coverageRetentionDays` | 14 | how long daily cell-set files are kept; the map and the overlay show up to 7 days, so two weeks leaves room (chosen by the maintainer) |
 | `publishIntervalMinutes` | 5 | how often the statistics paths are published; a divisor of 60; sector paths go out hourly regardless |
 | `publishOverlay` | true | register the plotter extension overlay |
 | `sentenceEvents` | `nmea0183`, `N2KAnalyzerOut` | server events to read AIS from: raw sentences or canboat PGNs; any event names |
@@ -484,7 +484,7 @@ help of `max` (6.2). Verified across a plugin restart on the test server.
   per-sector bin counters.
 - **Lean history by default (chosen by the maintainer).** The plugin
   publishes every 5 minutes, sends the sector paths once an hour, offers
-  windows up to 7 days and keeps coverage files for 7 days. Per-minute
+  windows up to 7 days and keeps coverage files for 14 days. Per-minute
   publishing of all 136 paths wrote about 62,700 rows a day on the test
   server, half of them sector values that change at most hourly; the
   defaults cut that by more than half. History requests run one at a time

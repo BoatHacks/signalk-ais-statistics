@@ -19,7 +19,7 @@ uses [Semantic Versioning](https://semver.org/).
   halves what the history provider stores. Counters stay exact; history
   charts are no finer than the interval.
 - Windows go up to 7 days; the 30 day window is gone.
-- Coverage files are kept for 7 days by default instead of 90. Saved
+- Coverage files are kept for 14 days by default instead of 90. Saved
   settings keep their value.
 - History requests run one at a time and REST answers are cached for a
   minute. Parallel requests could make the history database exceed its
