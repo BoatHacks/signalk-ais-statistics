@@ -215,8 +215,13 @@ export function createMap(): MapView {
           ),
       })
       applyVisibility()
-      if (!fitted && c.cells > 0) {
-        map!.fitBounds(cells.getBounds(), { padding: [16, 16] })
+      // The first view frames the cells and the radar wedges together; the
+      // wedges reach past the cells where the p99 range exceeds them.
+      if (!fitted && (c.cells > 0 || wedges.features.length > 0)) {
+        const bounds = L.latLngBounds([])
+        for (const layer of [cells, radar])
+          if (layer.getLayers().length > 0) bounds.extend(layer.getBounds())
+        map!.fitBounds(bounds, { padding: [16, 16] })
         fitted = true
       }
       info.textContent =
