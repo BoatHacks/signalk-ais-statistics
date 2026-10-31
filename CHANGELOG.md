@@ -6,6 +6,13 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-10-31
+
+### Changed
+
+- The map's first view frames the radar wedges as well as the coverage
+  cells, so long wedges no longer run off the edge.
+
 ## [0.1.2] - 2026-10-30
 
 ### Added
@@ -45,7 +52,8 @@ First release.
 - A dark tactical web app theme following day and night mode, with
   distances in the server's display units and the plugin's app icon.
 
-[Unreleased]: https://github.com/BoatHacks/signalk-ais-statistics/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/BoatHacks/signalk-ais-statistics/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/BoatHacks/signalk-ais-statistics/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/BoatHacks/signalk-ais-statistics/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/BoatHacks/signalk-ais-statistics/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/BoatHacks/signalk-ais-statistics/releases/tag/v0.1.0
