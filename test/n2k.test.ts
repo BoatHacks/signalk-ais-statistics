@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { N2kIngest } from '../src/n2k'
+import { N2kIngest, normaliseMmsi } from '../src/n2k'
 import {
   classAPgn,
   classBPgn,
@@ -97,5 +97,34 @@ describe('N2kIngest', () => {
     for (const p of [noType, noMmsi, badMmsi, { pgn: 129038 }])
       expect(ingest.push(p)).toBeUndefined()
     expect(ingest.stats.decodeErrors).toBe(4)
+  })
+
+  it('pads MMSIs to nine digits as the sentence decoder does', () => {
+    const ingest = new N2kIngest()
+    const coast = classAPgn(999000013, 0, 0)
+    coast.fields.messageId = 'Base station report'
+    coast.fields.userId = 2111234
+    expect(ingest.push(coast)).toMatchObject({ type: 4, mmsi: '002111234' })
+    coast.fields.userId = '002111234'
+    expect(ingest.push(coast)).toMatchObject({ mmsi: '002111234' })
+  })
+
+  it('ignores lookup names inherited from Object', () => {
+    const pgn = classAPgn(999000014, 0, 0)
+    pgn.fields.messageId = 'constructor'
+    expect(new N2kIngest().push(pgn)).toBeUndefined()
+  })
+})
+
+describe('normaliseMmsi', () => {
+  it('accepts up to nine digits and pads them', () => {
+    expect(normaliseMmsi(999000001)).toBe('999000001')
+    expect(normaliseMmsi('2111234')).toBe('002111234')
+    expect(normaliseMmsi(' 999000001 ')).toBe('999000001')
+  })
+
+  it('rejects anything that is not an MMSI', () => {
+    for (const v of [1.5, -1, 1234567890, '12a', '', undefined, null])
+      expect(normaliseMmsi(v)).toBeUndefined()
   })
 })
