@@ -94,7 +94,8 @@ function tile(label: string, note = ''): StatTile {
   return t
 }
 
-function sourceText(source: 'history' | 'live'): string {
+function sourceText(source: 'history' | 'live', historyError?: string): string {
+  if (historyError) return historyError
   return source === 'history'
     ? 'From the server history.'
     : 'From live data held by the plugin (no history provider, or the last hour).'
@@ -185,7 +186,7 @@ class OverviewView extends HTMLElement implements ViewElement {
     }
     this.groupsEmpty!.hidden = any || !s.vessels
     ;(this.querySelector('.groups') as HTMLElement).hidden = !any
-    this.source!.textContent = sourceText(s.source)
+    this.source!.textContent = sourceText(s.source, s.historyError)
   }
 }
 
@@ -193,13 +194,11 @@ const RESOLUTION: Record<WindowName, number> = {
   '1h': 60,
   '24h': 3600,
   '7d': 3600,
-  '30d': 86400,
 }
 const SPAN: Record<WindowName, number> = {
   '1h': 3600e3,
   '24h': 86400e3,
   '7d': 7 * 86400e3,
-  '30d': 30 * 86400e3,
 }
 
 class ChartsView extends HTMLElement implements ViewElement {
@@ -254,7 +253,8 @@ class ChartsView extends HTMLElement implements ViewElement {
   }
 
   async load(ctx: Context): Promise<void> {
-    const to = new Date()
+    // Whole minutes, so reloads within a minute reuse the server's answer.
+    const to = new Date(Math.floor(Date.now() / 60_000) * 60_000)
     const params = {
       resolution: String(RESOLUTION[ctx.window]),
       from: new Date(to.getTime() - SPAN[ctx.window]).toISOString(),
@@ -322,7 +322,7 @@ class ChartsView extends HTMLElement implements ViewElement {
       columns: [col(ves, 'vessels')],
       format: count,
     })
-    this.source!.textContent = sourceText(pos.source)
+    this.source!.textContent = sourceText(pos.source, pos.historyError)
   }
 }
 
@@ -369,7 +369,7 @@ class RadarView extends HTMLElement implements ViewElement {
     ])
     this.a!.update(a, ctx.units.distance)
     this.b!.update(b, ctx.units.distance)
-    this.source!.textContent = sourceText(a.source)
+    this.source!.textContent = sourceText(a.source, a.historyError)
   }
 }
 

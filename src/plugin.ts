@@ -1,5 +1,5 @@
 // Plugin entry and wiring (ARCHITECTURE 1): AIS events and own position
-// in, deltas out every minute, coverage files flushed hourly, REST routes and
+// in, deltas out at each publish interval, coverage files flushed hourly, REST routes and
 // the plotter overlay served while running.
 import type { Path, Plugin, ServerAPI } from '@signalk/server-api'
 import { Aggregator, HOUR_MS, MINUTE_MS } from './aggregate'
@@ -49,8 +49,16 @@ interface Running {
   coverage: Coverage
   query: Query
   history: HistoryReader
+  /** Hour index of the last delta that carried the sector paths. */
+  sectorHour?: number
   stops: (() => void)[]
 }
+
+/**
+ * The hour a publish tick belongs to. Ticks fire a second before the end
+ * of their interval, so the tick that closes an hour counts as the next.
+ */
+const tickHour = (time: number) => Math.floor((time + 30_000) / HOUR_MS)
 
 export function createPlugin(app: ServerAPI): Plugin {
   let state: Running | undefined
@@ -80,11 +88,17 @@ export function createPlugin(app: ServerAPI): Plugin {
     s.history = reader
   }
 
-  function minute(s: Running): void {
+  function tick(s: Running): void {
     const now = Date.now()
     try {
-      const values = buildValues(s.agg, now, s.coverage.today(now))
+      // Sector paths once an hour, and on the first tick after a start.
+      const hourIndex = tickHour(now)
+      const sectors = s.sectorHour !== hourIndex
+      const values = buildValues(s.agg, now, s.coverage.today(now), {
+        sectors,
+      })
       publish(app, PLUGIN_ID, values, now)
+      if (sectors) s.sectorHour = hourIndex
     } catch (err) {
       log('publishing failed', err)
     }
@@ -160,7 +174,12 @@ export function createPlugin(app: ServerAPI): Plugin {
         history: nullHistoryReader,
         stops: [],
       }
-      s.query = new Query(agg, () => s.history)
+      s.query = new Query(
+        agg,
+        () => s.history,
+        config.publishIntervalMinutes * 60,
+        (err) => log('reading history failed, answered from live data', err),
+      )
       state = s
 
       s.coverage
@@ -205,16 +224,16 @@ export function createPlugin(app: ServerAPI): Plugin {
       // Some hosts return the stream itself rather than an unsubscribe.
       if (typeof unsubscribe === 'function') s.stops.push(unsubscribe)
 
-      // Publish at the end of each minute so every value lands in its bucket.
-      const delay = MINUTE_MS - (now % MINUTE_MS) - 1000
-      const first = setTimeout(
-        () => {
-          minute(s)
-          const every = setInterval(() => minute(s), MINUTE_MS)
-          s.stops.push(() => clearInterval(every))
-        },
-        Math.max(0, delay),
-      )
+      // Publish just before the end of each interval, so every value lands
+      // in the bucket it describes. Intervals divide the hour.
+      const intervalMs = config.publishIntervalMinutes * MINUTE_MS
+      let delay = intervalMs - (now % intervalMs) - 1000
+      if (delay < 0) delay += intervalMs
+      const first = setTimeout(() => {
+        tick(s)
+        const every = setInterval(() => tick(s), intervalMs)
+        s.stops.push(() => clearInterval(every))
+      }, delay)
       s.stops.push(() => clearTimeout(first))
       const hourly = setInterval(() => hour(s), HOUR_MS)
       s.stops.push(() => clearInterval(hourly))

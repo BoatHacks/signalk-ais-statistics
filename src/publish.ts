@@ -1,5 +1,6 @@
-// Builds the deltas of SPEC 6.2. Every counter is published every minute,
-// changed or not; a gauge without data (for example no position in the last
+// Builds the deltas of SPEC 6.2. Every counter is published at each publish
+// interval (5 minutes by default), changed or not, except the sector paths,
+// which go out once an hour; a gauge without data (for example no position in the last
 // hour) is left out rather than published as zero or null, so only numeric
 // values ever reach the history provider.
 import { M_PER_NM } from './geo'
@@ -76,10 +77,20 @@ export function defaultMetadata(): PathMeta[] {
   return out
 }
 
+export interface BuildOptions {
+  /**
+   * Include the per-sector counters and p99 distances. The plugin sends
+   * them once an hour, since the radar keeps the highest hourly p99 per
+   * sector, and on stop.
+   */
+  sectors?: boolean
+}
+
 export function buildValues(
   agg: Aggregator,
   time: number,
   coverage?: CoverageToday,
+  { sectors = true }: BuildOptions = {},
 ): PathValue[] {
   const out: PathValue[] = []
   const put = (path: string, value: number | undefined) => {
@@ -93,10 +104,11 @@ export function buildValues(
   put(paths.positionsOther, t.positions.other)
   for (let i = 0; i < DISTANCE_BIN_COUNT; i++)
     put(paths.distanceBin(i), t.distanceBins[i])
-  SECTOR_CLASSES.forEach((cls, c) => {
-    for (let s = 0; s < SECTOR_COUNT; s++)
-      put(paths.sectorCount(s, cls), t.sectorCounts[c]![s])
-  })
+  if (sectors)
+    SECTOR_CLASSES.forEach((cls, c) => {
+      for (let s = 0; s < SECTOR_COUNT; s++)
+        put(paths.sectorCount(s, cls), t.sectorCounts[c]![s])
+    })
 
   const hour = agg.lastHour(time)
   const d = summarize(hour.distanceBins, hour.maxNm)
@@ -105,11 +117,13 @@ export function buildValues(
   put(paths.distanceP95, m(d.p95Nm))
   put(paths.distanceP99, m(d.p99Nm))
   put(paths.distanceMax, m(hour.maxNm))
-  const p99 = sectorP99(hour)
-  SECTOR_CLASSES.forEach((cls, c) => {
-    for (let s = 0; s < SECTOR_COUNT; s++)
-      put(paths.sectorP99(s, cls), m(p99[c]![s]))
-  })
+  if (sectors) {
+    const p99 = sectorP99(hour)
+    SECTOR_CLASSES.forEach((cls, c) => {
+      for (let s = 0; s < SECTOR_COUNT; s++)
+        put(paths.sectorP99(s, cls), m(p99[c]![s]))
+    })
+  }
 
   const v1 = agg.uniqueVessels(time, HOUR_MS)
   const v24 = agg.uniqueVessels(time, DAY_MS)

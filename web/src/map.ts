@@ -28,7 +28,7 @@ import type { Unit } from './units'
 export interface MapView {
   element: HTMLElement
   show(
-    window: '24h' | '7d' | '30d',
+    window: '24h' | '7d',
     units: { distance: Unit; area: Unit },
   ): Promise<void>
   /** Re-reads the theme colours, after a day or night change. */

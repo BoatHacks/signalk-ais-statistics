@@ -215,11 +215,11 @@ including when it is embedded in another page such as an infodisplay panel.
 | `GET /summary?window=24h` | headline figures: messages, positions, vessels by group, distance avg, p95, p99 and max |
 | `GET /series?metric=&resolution=&from=&to=` | time series for the charts, read from history; `metric` is `messages`, `positions`, `distance` or `vessels`, `resolution` in seconds (at least 60, at most 2000 points) |
 | `GET /radar?window=24h&class=a\|b\|all` | 24 sectors with count and p99 distance (the highest hourly p99 in the window, see 2.6) |
-| `GET /coverage?window=7d` | cell ids, GeoJSON for the map, covered area in m²; windows `24h` (today), `7d`, `30d` |
+| `GET /coverage?window=7d` | cell ids, GeoJSON for the map, covered area in m²; windows `24h` (today) and `7d` |
 | `GET /overlay/coverage.geojson` | the plotter overlay's GeoJSON: the 7 day footprint and the 24 hour radar wedges |
 | `GET /status` | live state: tracked targets, own position age, history reachable or not |
 
-Windows accept `1h`, `24h`, `7d`, `30d`. Responses are JSON in SI units
+Windows accept `1h`, `24h` and `7d`. Responses are JSON in SI units
 named in the field (`p99M` in metres, `areaM2` in square metres); the web
 app converts them to the user's display units (section 7). Responses and say whether they came from history
 or from live data (`source`). Unique vessel counts are given for windows up
@@ -232,7 +232,10 @@ vessel (source label `signalk-ais-statistics`). History is whatever the
 server's history provider records of these, so the paths are part of the
 persistence contract (section 8). All published values are numeric, so any
 History API provider can store and return them. Every counter is published
-every minute, whether or not it changed. A gauge with no data (for example
+at each publish interval (`publishIntervalMinutes`, default 5), whether or
+not it changed, except the per-sector counters and p99 distances, which are
+published once an hour and on stop: the radar keeps the highest hourly p99
+per sector, so finer updates add nothing. A gauge with no data (for example
 no position with a known own position in the last hour) is left out of the
 delta rather than published as zero or null; the web app's distance series
 come from the bin counters, not from these gauges.
@@ -321,8 +324,7 @@ A SignalK web app, listed in the admin UI, with:
 - Charts: positions and messages per hour split by class, distance avg,
   p95 and p99 per hour (max shown separately and marked untrusted).
 - Radar: the 24-sector bearing view for class A and B.
-- Map: the coverage footprint with a window selector (day, 7 days, 30
-  days), the 24 hour radar wedges from the plotter overlay, on-screen
+- Map: the coverage footprint with a window selector (day, 7 days), the 24 hour radar wedges from the plotter overlay, on-screen
   toggles that show or hide the cells and the radar (remembered per
   browser), and an on-screen basemap switch between OpenStreetMap with
   OpenSeaMap overlay, and the SignalK server's chart provider. Default:
@@ -385,7 +387,8 @@ directly. Consequences:
 - The one thing the History API cannot carry is the set of covered H3
   cells. The plugin therefore writes one small cell-set file per UTC day in
   its own data directory (a few KB), `coverage-YYYY-MM-DD.json`, pruned by
-  `coverageRetentionDays` (default 90). Per cell it holds the shortest
+  `coverageRetentionDays` (default 7, which the 7 day map window and the
+  overlay need). Per cell it holds the shortest
   distance seen and the report count; it also holds that day's distance
   histogram, so a window's coverage cap is computed from the files alone. A
   day holds at most 20000 cells. Files are written atomically every hour,
@@ -401,7 +404,8 @@ directly. Consequences:
 | `h3Resolution` | 6 | coverage cell size: 6 is about 7 km across (36 km²); 5 was too coarse (chosen by the maintainer) |
 | `coverageDistancePercentile` | 99 | coverage skips cells beyond this percentile of the window's distances; 100 disables the cap |
 | `ownPositionMaxAgeSeconds` | 60 | staleness limit for own position |
-| `coverageRetentionDays` | 90 | how long daily cell-set files are kept |
+| `coverageRetentionDays` | 7 | how long daily cell-set files are kept; the map and the overlay show up to 7 days |
+| `publishIntervalMinutes` | 5 | how often the statistics paths are published; a divisor of 60; sector paths go out hourly regardless |
 | `publishOverlay` | true | register the plotter extension overlay |
 | `sentenceEvents` | `nmea0183`, `N2KAnalyzerOut` | server events to read AIS from: raw sentences or canboat PGNs; any event names |
 
@@ -478,6 +482,16 @@ help of `max` (6.2). Verified across a plugin restart on the test server.
   radius for a whole window. Accepted for its simplicity and conservative
   reading, over a minimum report count per hour, a lower percentile, or 768
   per-sector bin counters.
+- **Lean history by default (chosen by the maintainer).** The plugin
+  publishes every 5 minutes, sends the sector paths once an hour, offers
+  windows up to 7 days and keeps coverage files for 7 days. Per-minute
+  publishing of all 136 paths wrote about 62,700 rows a day on the test
+  server, half of them sector values that change at most hourly; the
+  defaults cut that by more than half. History requests run one at a time
+  and REST answers are cached for a minute, because parallel requests made
+  a busy server's QuestDB exceed its memory limit (each requested path is
+  one database query there). Cost: history charts are no finer than the
+  publish interval.
 - **Bucket-based statistics, not rolling all-time figures.** Conditions
   such as ducting change daily; one all-time max would hide that.
 - **Availability deferred.** Its definition needs care (window, gap
@@ -514,5 +528,5 @@ unverified.
 
 1. **Overlay smoothness in Freeboard-SK.** The overlay is served and
    small, but nobody has yet looked at it in the plotter, and how large a
-   GeoJSON source it handles smoothly (hundreds of cells over 30 days) is
+   GeoJSON source it handles smoothly (hundreds of cells over 7 days) is
    untested.
