@@ -32,7 +32,7 @@ describe('resolveConfig', () => {
       publishOverlay: 'no',
       sentenceEvents: 'nmea0183',
     })
-    expect(c.sentenceEvents).toEqual(['nmea0183', 'nmea0183AISout'])
+    expect(c.sentenceEvents).toEqual(['nmea0183', 'N2KAnalyzerOut'])
     expect(c.h3Resolution).toBe(DEFAULT_CONFIG.h3Resolution)
     expect(c.publishOverlay).toBe(true)
   })

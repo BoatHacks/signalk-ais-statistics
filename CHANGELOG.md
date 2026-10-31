@@ -6,6 +6,13 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- AIS from NMEA 2000 is read directly from the server's `N2KAnalyzerOut`
+  event, so NMEA 2000 receivers no longer need a converter plugin such as
+  `signalk-n2kais-to-nmea0183`. The default events are now `nmea0183` and
+  `N2KAnalyzerOut`; saved settings keep their events.
+
 ## [0.1.3] - 2026-10-31
 
 ### Changed

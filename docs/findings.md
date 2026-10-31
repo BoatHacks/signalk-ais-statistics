@@ -56,6 +56,14 @@ the aggregates above.
   plugin `signalk-n2kais-to-nmea0183` re-encodes it as NMEA 0183 VDM
   sentences and emits them on `nmea0183AISout` and `nmea0183out`, also as
   plain strings.
+- The server itself decodes every NMEA 2000 PGN it receives with canboatjs
+  and emits it on `N2KAnalyzerOut` (`packages/streams/src/canboatjs.ts` in
+  the server) as an object with `pgn` and camelCase `fields`. AIS PGNs carry
+  `messageId`, `userId` (a string), `latitude`, `longitude`, `typeOfShip`
+  and `aisTransceiverInformation`; lookup fields are canboat names, for
+  example `"Scheduled Class A position report"`, `"Cargo ship"` and
+  `"Channel A VDL reception"`. Re-check by round-tripping a PGN through
+  canboatjs' `pgnToActisenseSerialFormat` and `FromPgn.parseString`.
 - The server's AIS decoding dependency is `ggencoder` (version 1.0.13 with the
   tested server), pulled in by `@signalk/nmea0183-signalk`.
 

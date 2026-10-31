@@ -19,7 +19,7 @@ export const DEFAULT_CONFIG: Config = {
   ownPositionMaxAgeSeconds: 60,
   coverageRetentionDays: 90,
   publishOverlay: true,
-  sentenceEvents: ['nmea0183', 'nmea0183AISout'],
+  sentenceEvents: ['nmea0183', 'N2KAnalyzerOut'],
 }
 
 export const configSchema = {
@@ -75,9 +75,9 @@ export const configSchema = {
     },
     sentenceEvents: {
       type: 'array',
-      title: 'Sentence events to read AIS from',
+      title: 'Server events to read AIS from',
       description:
-        'Server events that carry raw NMEA 0183 sentences. nmea0183 is NMEA 0183 input; nmea0183AISout is what converter plugins such as signalk-n2kais-to-nmea0183 emit for AIS from NMEA 2000. If the same receiver reaches two of these events, every message counts twice.',
+        'nmea0183 is NMEA 0183 input and N2KAnalyzerOut is NMEA 2000 input, as the server decodes it. Events carrying raw NMEA 0183 sentences also work, such as nmea0183AISout from converter plugins like signalk-n2kais-to-nmea0183, which NMEA 2000 input no longer needs. If the same receiver reaches two of these events, every message counts twice.',
       items: { type: 'string' },
       uniqueItems: true,
       default: DEFAULT_CONFIG.sentenceEvents,
