@@ -1,6 +1,7 @@
 // Basemap choice (SPEC 7): OpenStreetMap with OpenSeaMap when online and
 // not metered, otherwise the server's chart provider. A manual choice wins
-// and is remembered per browser.
+// and is remembered per browser. Without any server charts, OpenStreetMap is
+// the only basemap that can show anything, so it is used regardless.
 export type Basemap = 'osm' | 'charts'
 
 const KEY = 'signalk-ais-statistics.basemap'
@@ -44,6 +45,17 @@ export function defaultBasemap(
   if (state === 'online') return 'osm'
   if (state === 'offline' || state === 'metered') return 'charts'
   return browserOnline ? 'osm' : 'charts'
+}
+
+/** The basemap to start with, given whether the server has any charts. */
+export function chooseBasemap(
+  saved: Basemap | undefined,
+  state: string | undefined,
+  browserOnline: boolean,
+  hasCharts: boolean,
+): Basemap {
+  if (!hasCharts) return 'osm'
+  return saved ?? defaultBasemap(state, browserOnline)
 }
 
 export interface ChartLayer {

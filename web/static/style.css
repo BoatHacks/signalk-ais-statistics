@@ -362,20 +362,38 @@ svg.radar .axis {
   min-height: 320px;
   background: var(--bg-panel-muted);
 }
-.map-switcher {
+.map-controls {
   position: absolute;
   top: 10px;
   right: 10px;
   z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+.map-switcher {
   display: flex;
   gap: 4px;
   background-color: rgba(17, 20, 20, 0.8);
   border: 1px solid rgba(var(--theme-color-rgb), 0.5);
   padding: 4px;
 }
-/* Layer toggles sit below the basemap switch. */
-.map-layers {
-  top: 72px;
+/* Shown under the basemap switch when the server has no charts. */
+.map-note {
+  margin: -4px 0 0;
+  padding: 2px 6px;
+  font-size: 0.75rem;
+  color: var(--color-red);
+  background-color: rgba(17, 20, 20, 0.8);
+}
+.map-switcher button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.map-switcher button:disabled:hover {
+  background: transparent;
+  color: var(--theme-color);
 }
 .leaflet-bar,
 .leaflet-touch .leaflet-bar {
@@ -421,9 +439,10 @@ svg.radar .axis {
     height: auto;
     min-height: 50vh;
   }
-  .map-switcher {
+  .map-controls {
     left: 54px;
     right: auto;
+    align-items: flex-start;
   }
   .map-switcher button {
     padding: 0 8px;

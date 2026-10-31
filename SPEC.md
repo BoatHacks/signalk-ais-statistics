@@ -334,7 +334,9 @@ A SignalK web app, listed in the admin UI, with:
   the connection is metered, or when the user picks it. A manual choice overrides the default and is
   remembered per browser. If no internet-status plugin is present, the app
   treats the connection as unmetered only when the browser reports it online
-  and the user has not chosen otherwise.
+  and the user has not chosen otherwise. When the server has no charts, the
+  server charts button is greyed out with a short note under it and the map
+  uses OSM/OpenSeaMap, since the chart basemap would stay blank.
 
 It must work on a phone, since the boat server is often viewed remotely
 over a metered link, so the app's own assets are bundled locally (no CDN)
@@ -496,7 +498,12 @@ help of `max` (6.2). Verified across a plugin restart on the test server.
   `N2KAnalyzerOut`, so reading AIS PGNs there needs no second decoder, only
   a field mapping; it spares users the `signalk-n2kais-to-nmea0183` round
   trip. Lookup fields arrive as canboat names and are turned back into AIS
-  codes with `@canboat/ts-pgns`, the lookup tables n2k-signalk uses.
+  codes with a local copy of the canboat lookup tables n2k-signalk uses
+  (`src/n2k-lookups.ts`); a test checks the copy against `@canboat/ts-pgns`,
+  which is only a development dependency so the 6.5 MB package does not
+  ship. MMSIs are padded to nine digits, as ITU-R M.585 defines them and as
+  the sentence decoder writes them, so a coast station (`00MIDxxxx`) keys
+  the same from either input.
 
 ## 13. Open Questions
 
