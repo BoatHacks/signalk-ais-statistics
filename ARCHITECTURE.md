@@ -16,7 +16,7 @@ plugin's data directory.
 
 ```
  signalk-server
- ├─ sentence events (!AIVDM) ──► Ingest ──► Classifier ──► Aggregator ──► Publisher ──► deltas ──► history provider
+ ├─ AIS events (!AIVDM, PGNs) ─► Ingest ──► Classifier ──► Aggregator ──► Publisher ──► deltas ──► history provider
  ├─ navigation.position (self) ─► OwnPosition ──┘               │                          │
  │                                                              ▼                          │
  │                                                        Live state                       │
@@ -38,6 +38,14 @@ count, sequence id and channel, because ggencoder's single session breaks
 when multipart messages interleave; partial messages expire after 10
 seconds. Owns nothing persistent. Per-sentence decode errors are counted and
 swallowed, never thrown into the server.
+
+NMEA 2000 input arrives on `N2KAnalyzerOut` as PGN objects already decoded
+by the server's canboatjs. `N2kIngest` (`src/n2k.ts`) keeps the AIS PGNs,
+drops those whose transceiver field marks the own transponder, and maps
+message id, MMSI, position and ship type onto the same message objects,
+turning canboat lookup names back into AIS codes with `@canboat/ts-pgns`.
+Each event gets both decoders; strings go to the sentence decoder and
+objects to `N2kIngest`.
 
 ### 2.2 OwnPosition
 Tracks the latest self `navigation.position` and its timestamp. Exposes
@@ -143,6 +151,7 @@ Published path names are the persistence schema, so they are defined once in
 | Runtime | Node 22 or newer (the test server runs Node 26) | follow the host |
 | Plugin API | `@signalk/server-api` | official types |
 | AIS decoding | `ggencoder` ^1.0.8 | already a dependency of the server's `@signalk/nmea0183-signalk` (ggencoder 1.0.13 on the test server, SignalK server 2.35.1), so no new decoder family |
+| NMEA 2000 lookups | `@canboat/ts-pgns` ^3.1.0 | the canboat lookup tables that the server's canboatjs and n2k-signalk use, so names map back to the same codes |
 | Geo | own haversine and bearing, `h3-js` for cells | h3-js is pure JS, no native module |
 | History | SignalK v2 History API, any provider, read via HistoryReader | chosen by the maintainer; no database dependency |
 | Cell sets | JSON files in the plugin data directory | the History API cannot carry id lists |
@@ -152,12 +161,13 @@ Published path names are the persistence schema, so they are defined once in
 
 ## 5. Integration Points
 
-- **SignalK sentence events**: input for all message statistics, via
+- **SignalK AIS events**: input for all message statistics, via
   `app.on(event, handler)` for each event in `sentenceEvents` (default
-  `nmea0183` and `nmea0183AISout`), each with its own `Ingest`, removed
-  again on stop. The handler receives the raw sentence as a
-  plain string, with no source or timestamp, so `!AIVDO` is told apart by
-  its prefix and reception time is the time of the call.
+  `nmea0183` and `N2KAnalyzerOut`), each with its own `Ingest` and
+  `N2kIngest`, removed again on stop. Sentence events pass the raw
+  sentence as a plain string, with no source or timestamp, so `!AIVDO` is
+  told apart by its prefix; `N2KAnalyzerOut` passes canboatjs PGN objects.
+  Reception time is the time of the call.
 - **`navigation.position` (self)**: via
   `app.streambundle.getSelfStream('navigation.position')`.
 - **History API**: `app.getHistoryApi()` in process (2.7).
