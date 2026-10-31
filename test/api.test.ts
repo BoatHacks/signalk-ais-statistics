@@ -37,6 +37,70 @@ async function setup(withAccess = true) {
   return f
 }
 
+describe('REST API answer cache', () => {
+  async function counted(cacheMs?: number) {
+    const agg = new Aggregator(T0)
+    const q = new Query(agg, () => nullHistoryReader)
+    let calls = 0
+    const summary = q.summary.bind(q)
+    q.summary = async (...args) => {
+      calls++
+      return summary(...args)
+    }
+    let t = T0
+    let running = true
+    const f = fakeRouter()
+    registerRoutes(f.router, {
+      query: () => (running ? q : undefined),
+      coverage: () => undefined,
+      status: () => ({}),
+      now: () => t,
+      cacheMs,
+    })
+    return {
+      ...f,
+      calls: () => calls,
+      advance: (ms: number) => (t += ms),
+      stop: () => (running = false),
+    }
+  }
+
+  it('reuses an answer for a minute, per set of parameters', async () => {
+    const c = await counted()
+    await c.call('/summary', { window: '24h' })
+    await c.call('/summary', { window: '24h' })
+    expect(c.calls()).toBe(1)
+    await c.call('/summary', { window: '7d' })
+    expect(c.calls()).toBe(2)
+    c.advance(60_000)
+    await c.call('/summary', { window: '24h' })
+    expect(c.calls()).toBe(3)
+  })
+
+  it('shares one computation between simultaneous requests', async () => {
+    const c = await counted()
+    await Promise.all([
+      c.call('/summary', { window: '24h' }),
+      c.call('/summary', { window: '24h' }),
+    ])
+    expect(c.calls()).toBe(1)
+  })
+
+  it('answers 503 once stopped, cached or not', async () => {
+    const c = await counted()
+    await c.call('/summary', { window: '24h' })
+    c.stop()
+    expect((await c.call('/summary', { window: '24h' })).status).toBe(503)
+  })
+
+  it('can be switched off', async () => {
+    const c = await counted(0)
+    await c.call('/summary', { window: '24h' })
+    await c.call('/summary', { window: '24h' })
+    expect(c.calls()).toBe(2)
+  })
+})
+
 describe('REST API', () => {
   it('registers every route read-only', async () => {
     const { routes } = await setup()

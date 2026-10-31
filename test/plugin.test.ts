@@ -33,7 +33,7 @@ describe('plugin', () => {
   })
   afterEach(() => vi.useRealTimers())
 
-  it('ingests sentences, publishes every minute and serves routes', async () => {
+  it('ingests sentences, publishes every interval and serves routes', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'ais-plugin-'))
     const f = fakeApp(dir, new FakeHistory())
     const plugin = createPlugin(f.app as never)
@@ -48,7 +48,7 @@ describe('plugin', () => {
     f.app.emit('nmea0183', '!AIVDM,garbage')
     f.app.emit('nmea0183', 42)
 
-    await vi.advanceTimersByTimeAsync(60_000)
+    await vi.advanceTimersByTimeAsync(5 * 60_000)
     expect(f.deltas.length).toBe(1)
     expect(f.deltas[0]!.id).toBe(PLUGIN_ID)
     const values = new Map(
@@ -60,7 +60,7 @@ describe('plugin', () => {
     expect(values.get(paths.distanceMax)).toBeCloseTo(25 * 1852, -1)
     expect(f.metadata.get(paths.distanceMax)?.units).toBe('m')
 
-    await vi.advanceTimersByTimeAsync(60_000)
+    await vi.advanceTimersByTimeAsync(5 * 60_000)
     expect(f.deltas.length).toBe(2)
 
     const status = (await r.call('/status')).body as Record<string, unknown>
@@ -105,7 +105,7 @@ describe('plugin', () => {
       classAPgn(999000002, p.lat, p.lon, 'Channel A VDL transmission'),
     )
     f.app.emit('N2KAnalyzerOut', { pgn: 127250, fields: {} })
-    await vi.advanceTimersByTimeAsync(60_000)
+    await vi.advanceTimersByTimeAsync(5 * 60_000)
     const values = new Map(
       f.deltas[0]!.delta.updates[0]!.values.map((v) => [v.path, v.value]),
     )
@@ -136,7 +136,7 @@ describe('plugin', () => {
     f.app.emit('nmea0183AISout', a1)
     f.app.emit('nmea0183', a2)
     f.app.emit('nmea0183AISout', a2)
-    await vi.advanceTimersByTimeAsync(60_000)
+    await vi.advanceTimersByTimeAsync(5 * 60_000)
     const values = new Map(
       f.deltas[0]!.delta.updates[0]!.values.map((v) => [v.path, v.value]),
     )
@@ -158,7 +158,7 @@ describe('plugin', () => {
     expect(f.app.listenerCount('nmea0183AISout')).toBe(0)
     f.app.emit('nmea0183', sentenceAt(999000001, 50, 12))
     f.app.emit('myAisOut', sentenceAt(999000002, 50, 12))
-    await vi.advanceTimersByTimeAsync(60_000)
+    await vi.advanceTimersByTimeAsync(5 * 60_000)
     const values = new Map(
       f.deltas[0]!.delta.updates[0]!.values.map((v) => [v.path, v.value]),
     )
@@ -189,9 +189,43 @@ describe('plugin', () => {
     const plugin = createPlugin(app as never)
     expect(typeof plugin.schema).toBe('function')
     await plugin.start({}, () => undefined)
-    await vi.advanceTimersByTimeAsync(120_000)
+    await vi.advanceTimersByTimeAsync(10 * 60_000)
     await plugin.stop()
     expect(errors).toEqual([])
+  })
+
+  it('publishes every 5 minutes, with sector paths once an hour', async () => {
+    const f = fakeApp(await mkdtemp(join(tmpdir(), 'ais-plugin-')))
+    const plugin = createPlugin(f.app as never)
+    await plugin.start({}, () => undefined)
+    const hasSectors = (i: number) =>
+      f.deltas[i]!.delta.updates[0]!.values.some((v) =>
+        v.path.includes('.sectors.'),
+      )
+    // T0 is 12:00:30; ticks fall at 12:04:59, 12:09:59 ... 12:59:59.
+    await vi.advanceTimersByTimeAsync(4 * 60_000)
+    expect(f.deltas).toHaveLength(0)
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(f.deltas).toHaveLength(1)
+    expect(hasSectors(0)).toBe(true)
+    await vi.advanceTimersByTimeAsync(5 * 60_000)
+    expect(f.deltas).toHaveLength(2)
+    expect(hasSectors(1)).toBe(false)
+    await vi.advanceTimersByTimeAsync(50 * 60_000)
+    expect(f.deltas).toHaveLength(12)
+    expect(hasSectors(10)).toBe(false)
+    // The tick that closes the hour carries them again.
+    expect(hasSectors(11)).toBe(true)
+    await plugin.stop()
+  })
+
+  it('publishes at the configured interval', async () => {
+    const f = fakeApp(await mkdtemp(join(tmpdir(), 'ais-plugin-')))
+    const plugin = createPlugin(f.app as never)
+    await plugin.start({ publishIntervalMinutes: 1 }, () => undefined)
+    await vi.advanceTimersByTimeAsync(3 * 60_000)
+    expect(f.deltas).toHaveLength(3)
+    await plugin.stop()
   })
 
   it('counts reports without own position toward rates only', async () => {
@@ -199,7 +233,7 @@ describe('plugin', () => {
     const plugin = createPlugin(f.app as never)
     await plugin.start({}, () => undefined)
     f.app.emit('nmea0183', sentenceAt(999000001, 50, 12))
-    await vi.advanceTimersByTimeAsync(60_000)
+    await vi.advanceTimersByTimeAsync(5 * 60_000)
     const values = new Map(
       f.deltas[0]!.delta.updates[0]!.values.map((v) => [v.path, v.value]),
     )

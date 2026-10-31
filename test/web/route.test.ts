@@ -26,8 +26,8 @@ describe('hash routes', () => {
   })
 
   it('formats back', () => {
-    expect(formatRoute({ view: 'charts', window: '30d' })).toBe(
-      '#/charts?window=30d',
+    expect(formatRoute({ view: 'charts', window: '7d' })).toBe(
+      '#/charts?window=7d',
     )
   })
 })
