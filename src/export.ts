@@ -6,7 +6,7 @@
 // UTF-8. Vessel names are untrusted AIS input, so a text field that a
 // spreadsheet would read as a formula gets a leading apostrophe.
 import { M_PER_NM } from './geo'
-import type { Footprint } from './coverage'
+import type { CoverageMode, Footprint } from './coverage'
 import type { LongRangeEntry } from './longrange'
 
 /** Export windows: today, the last 7 days, or every retained day. */
@@ -153,7 +153,9 @@ export function longRangeGeoJson(entries: LongRangeEntry[]): {
 
 /**
  * The download name, for example `ais-longrange-7d-2026-11-01-anon.csv`,
- * dated with the UTC day of the export.
+ * dated with the UTC day of the export. A coverage export of one own vessel
+ * mode carries the mode after the set, for example
+ * `ais-coverage-stationary-7d-2026-11-01.csv`.
  */
 export function exportFileName(
   set: 'coverage' | 'coverage-allcells' | 'longrange',
@@ -161,7 +163,9 @@ export function exportFileName(
   now: number,
   ext: 'csv' | 'geojson',
   anonymise = false,
+  mode: CoverageMode = 'all',
 ): string {
   const date = new Date(now).toISOString().slice(0, 10)
-  return `ais-${set}-${window}-${date}${anonymise ? '-anon' : ''}.${ext}`
+  const m = mode === 'all' ? '' : `-${mode}`
+  return `ais-${set}${m}-${window}-${date}${anonymise ? '-anon' : ''}.${ext}`
 }

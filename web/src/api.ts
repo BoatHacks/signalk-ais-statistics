@@ -115,6 +115,8 @@ export interface Weather {
 }
 
 export interface CoverageResponse {
+  /** The own vessel mode whose cells are shown. */
+  mode: 'all' | 'stationary' | 'underway'
   /** The UTC days read. */
   days: string[]
   /** The oldest UTC day the coverage files are kept for. */
@@ -145,6 +147,9 @@ export interface Status {
   lastMessageAt?: string | null
   trackedTargets?: number
   ownPositionFresh?: boolean
+  /** Own vessel mode now, and what decided it (SPEC 2.8). */
+  mode?: 'stationary' | 'underway' | 'unknown'
+  modeSource?: 'state' | 'drift' | null
   historyAvailable?: boolean
   decodeErrors?: number
   /** The effective plugin settings. */
@@ -188,10 +193,15 @@ export type ExportWindow = '24h' | '7d' | 'all'
 export function exportHref(
   file: ExportFile,
   window: ExportWindow,
-  flags: { all?: boolean; anonymise?: boolean } = {},
+  flags: {
+    all?: boolean
+    anonymise?: boolean
+    mode?: 'all' | 'stationary' | 'underway'
+  } = {},
 ): string {
   const q = new URLSearchParams({ window })
   if (flags.all) q.set('all', 'true')
+  if (flags.mode && flags.mode !== 'all') q.set('mode', flags.mode)
   if (flags.anonymise) q.set('anonymise', 'true')
   return `${API}/export/${file}?${q.toString()}`
 }

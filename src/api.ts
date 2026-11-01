@@ -9,7 +9,13 @@
 import { M_PER_NM } from './geo'
 import type { Request, RequestHandler, Response } from 'express'
 import { DAY_MS, HOUR_MS } from './aggregate'
-import { footprintGeoJson, utcDay, type Coverage } from './coverage'
+import {
+  COVERAGE_MODES,
+  footprintGeoJson,
+  utcDay,
+  type Coverage,
+  type CoverageMode,
+} from './coverage'
 import {
   EXPORT_WINDOWS,
   coverageCsv,
@@ -172,6 +178,14 @@ function capParam(req: Request): number | undefined {
   if (v.trim() === '' || !Number.isFinite(n) || n < min || n > max)
     throw new BadRequest(`cap must be a number from ${min} to ${max}`)
   return n
+}
+
+/** The own vessel mode whose coverage cells to answer with; all by default. */
+function modeParam(req: Request): CoverageMode {
+  const v = param(req, 'mode') ?? 'all'
+  if (!(COVERAGE_MODES as readonly string[]).includes(v))
+    throw new BadRequest(`mode must be one of ${COVERAGE_MODES.join(', ')}`)
+  return v as CoverageMode
 }
 
 function flagParam(req: Request, name: string): boolean {
@@ -398,14 +412,16 @@ export function registerRoutes(router: RouterLike, deps: ApiDeps): void {
       const all = param(req, 'all')
       if (all !== undefined && all !== 'true' && all !== 'false')
         throw new BadRequest('all must be true or false')
+      const mode = modeParam(req)
       const cov = coverage()
       const percentile = capParam(req) ?? cov.capPercentile()
       const t = now()
       const f = range
-        ? await cov.footprintRange(range.from, range.to, t, percentile)
-        : await cov.footprint(days!, t, percentile)
+        ? await cov.footprintRange(range.from, range.to, t, percentile, mode)
+        : await cov.footprint(days!, t, percentile, mode)
       return {
         window,
+        mode,
         ...(range ? { from: range.from, to: range.to } : {}),
         retainedFrom: cov.retainedFrom(t),
         days: f.days,
@@ -468,8 +484,15 @@ export function registerRoutes(router: RouterLike, deps: ApiDeps): void {
     handleFile(async (req) => {
       const window = exportWindowParam(req)
       const all = flagParam(req, 'all')
+      const mode = modeParam(req)
       const t = now()
-      const f = await coverage().footprint(exportDays(window), t)
+      const cov = coverage()
+      const f = await cov.footprint(
+        exportDays(window),
+        t,
+        cov.capPercentile(),
+        mode,
+      )
       return {
         body: coverageCsv(f, all),
         type: 'text/csv; charset=utf-8',
@@ -478,6 +501,8 @@ export function registerRoutes(router: RouterLike, deps: ApiDeps): void {
           window,
           t,
           'csv',
+          false,
+          mode,
         ),
       }
     }, cachedRoute()),
