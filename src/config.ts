@@ -160,3 +160,54 @@ export function resolveConfig(options: unknown): Config {
       : [...d.sentenceEvents],
   }
 }
+
+/**
+ * Options the web app may change while the user watches the result, and
+ * save for users with write access (SPEC 6.1, 9). Every other option stays
+ * in the server's config form. Each key needs `minimum` and `maximum` in
+ * the schema, which bound what the web app sends.
+ */
+export const LIVE_SETTINGS = ['coverageDistancePercentile'] as const
+export type LiveSetting = (typeof LIVE_SETTINGS)[number]
+export type LiveSettings = Pick<Config, LiveSetting>
+
+export class InvalidSettings extends Error {}
+
+/** Schema bounds of a live setting. */
+export function liveBounds(key: LiveSetting): { min: number; max: number } {
+  const p = configSchema.properties[key] as { minimum: number; maximum: number }
+  return { min: p.minimum, max: p.maximum }
+}
+
+/**
+ * Validates a set of live settings sent by the web app. Unknown keys,
+ * wrong types and values out of the schema bounds are rejected rather than
+ * clamped, so a save never stores something other than what was asked.
+ */
+export function parseLiveSettings(body: unknown): Partial<LiveSettings> {
+  if (!body || typeof body !== 'object' || Array.isArray(body))
+    throw new InvalidSettings('settings must be a JSON object')
+  const out: Partial<LiveSettings> = {}
+  for (const [key, value] of Object.entries(body)) {
+    if (!(LIVE_SETTINGS as readonly string[]).includes(key))
+      throw new InvalidSettings(
+        `${key} cannot be changed here; live settings are ${LIVE_SETTINGS.join(', ')}`,
+      )
+    const k = key as LiveSetting
+    const { min, max } = liveBounds(k)
+    if (typeof value !== 'number' || !Number.isFinite(value))
+      throw new InvalidSettings(`${key} must be a number`)
+    if (value < min || value > max)
+      throw new InvalidSettings(`${key} must be from ${min} to ${max}`)
+    out[k] = value
+  }
+  if (Object.keys(out).length === 0)
+    throw new InvalidSettings('no settings given')
+  return out
+}
+
+export function pickLive(config: Config): LiveSettings {
+  return Object.fromEntries(
+    LIVE_SETTINGS.map((k) => [k, config[k]]),
+  ) as LiveSettings
+}

@@ -1,9 +1,11 @@
 // REST routes (SPEC 6.1, ARCHITECTURE 2.9). Thin: validate parameters, call
 // the query layer, serialize. Answers are cached for a minute and identical
 // requests share one computation, so reloads and several open browsers do
-// not repeat the history reads behind them. Every route is read-only and registered
+// not repeat the history reads behind them. The read routes are registered
 // through router.access('readonly') where the server has it, so read-only
-// users can open the web app; older servers keep them admin-only.
+// users can open the web app; older servers keep them admin-only. The one
+// write route, POST /settings, saves live settings and is registered through
+// router.access('readwrite'), or admin-only on older servers.
 import { M_PER_NM } from './geo'
 import type { Request, RequestHandler, Response } from 'express'
 import { DAY_MS } from './aggregate'
@@ -20,6 +22,12 @@ import {
 import type { LongRangeLog } from './longrange'
 import { OVERLAY_DAYS } from './overlay'
 import { SECTOR_CLASSES, type SectorClass } from './paths'
+import {
+  InvalidSettings,
+  liveBounds,
+  parseLiveSettings,
+  type LiveSettings,
+} from './config'
 
 export interface Status {
   [key: string]: unknown
@@ -33,6 +41,11 @@ export interface ApiDeps {
   status: () => Status
   /** Sector polygons and other extra features for the plotter overlay. */
   overlayExtras?: () => Promise<object[]>
+  /**
+   * Saves validated live settings to the plugin config and applies them;
+   * answers the effective live settings. Undefined while stopped.
+   */
+  saveSettings?: (values: Partial<LiveSettings>) => Promise<LiveSettings>
   now?: () => number
   /** How long an answer is reused; 0 disables the cache. */
   cacheMs?: number
@@ -46,12 +59,17 @@ interface Getter {
   get(path: string, ...handlers: RequestHandler[]): unknown
 }
 
-export interface RouterLike extends Getter {
-  access?: (level: 'readonly') => Getter
+interface Poster {
+  post(path: string, ...handlers: RequestHandler[]): unknown
+}
+
+export interface RouterLike extends Getter, Poster {
+  access?: (level: 'readonly' | 'readwrite') => Getter & Poster
 }
 
 class BadRequest extends Error {}
 class NotRunning extends Error {}
+class NotJson extends Error {}
 
 const COVERAGE_DAYS: Partial<Record<WindowName, number>> = {
   '24h': 1,
@@ -72,6 +90,17 @@ function windowParam(req: Request, fallback: WindowName): WindowName {
   return w
 }
 
+/** A trial coverage cap percentile, within the setting's bounds. */
+function capParam(req: Request): number | undefined {
+  const v = param(req, 'cap')
+  if (v === undefined) return undefined
+  const { min, max } = liveBounds('coverageDistancePercentile')
+  const n = Number(v)
+  if (v.trim() === '' || !Number.isFinite(n) || n < min || n > max)
+    throw new BadRequest(`cap must be a number from ${min} to ${max}`)
+  return n
+}
+
 function timeParam(req: Request, name: string, fallback: number): number {
   const v = param(req, name)
   if (v === undefined) return fallback
@@ -80,10 +109,10 @@ function timeParam(req: Request, name: string, fallback: number): number {
   return t
 }
 
-type Cached = (
+type Cached = ((
   req: Request,
   compute: () => Promise<unknown> | unknown,
-) => Promise<unknown> | unknown
+) => Promise<unknown> | unknown) & { clear: () => void }
 
 /**
  * Reuses answers for `ms` and shares in-flight ones, keyed by the query
@@ -91,7 +120,7 @@ type Cached = (
  */
 function answerCache(now: () => number, ms: number): Cached {
   const entries = new Map<string, { at: number; value: Promise<unknown> }>()
-  return (req, compute) => {
+  const cached = (req: Request, compute: () => Promise<unknown> | unknown) => {
     if (ms <= 0) return compute()
     const t = now()
     for (const [k, e] of entries) if (t - e.at >= ms) entries.delete(k)
@@ -108,6 +137,7 @@ function answerCache(now: () => number, ms: number): Cached {
     })
     return value
   }
+  return Object.assign(cached, { clear: () => entries.clear() })
 }
 
 function handle(
@@ -122,8 +152,10 @@ function handle(
         res.json(body)
       })
       .catch((err: unknown) => {
-        if (err instanceof BadRequest)
+        if (err instanceof BadRequest || err instanceof InvalidSettings)
           res.status(400).json({ error: err.message })
+        else if (err instanceof NotJson)
+          res.status(415).json({ error: 'send application/json' })
         else if (err instanceof NotRunning)
           res.status(503).json({ error: 'the plugin is not running' })
         else
@@ -136,15 +168,22 @@ function handle(
 
 export function registerRoutes(router: RouterLike, deps: ApiDeps): void {
   const r: Getter = router.access ? router.access('readonly') : router
+  const w: Poster = router.access ? router.access('readwrite') : router
   const now = deps.now ?? Date.now
   // One cache per route. A stopped plugin answers 503 even while an older
-  // answer is cached.
+  // answer is cached. A saved setting clears them all.
+  const caches: Cached[] = []
   const cachedRoute = (): Cached => {
     const cache = answerCache(now, deps.cacheMs ?? CACHE_MS)
-    return (req, compute) => {
+    caches.push(cache)
+    const guarded = (
+      req: Request,
+      compute: () => Promise<unknown> | unknown,
+    ) => {
       if (!deps.query()) throw new NotRunning()
       return cache(req, compute)
     }
+    return Object.assign(guarded, { clear: cache.clear })
   }
   const query = (): Query => {
     const q = deps.query()
@@ -208,7 +247,7 @@ export function registerRoutes(router: RouterLike, deps: ApiDeps): void {
       const all = param(req, 'all')
       if (all !== undefined && all !== 'true' && all !== 'false')
         throw new BadRequest('all must be true or false')
-      const f = await coverage().footprint(days, now())
+      const f = await coverage().footprint(days, now(), capParam(req))
       return {
         window,
         days: f.days,
@@ -254,5 +293,20 @@ export function registerRoutes(router: RouterLike, deps: ApiDeps): void {
   r.get(
     '/status',
     handle(() => deps.status()),
+  )
+
+  w.post(
+    '/settings',
+    handle(async (req) => {
+      // Only JSON, so a plain HTML form on another site cannot post here.
+      const type = String(req.headers?.['content-type'] ?? '')
+      if (!/^application\/json\b/i.test(type)) throw new NotJson()
+      const values = parseLiveSettings(req.body)
+      const save = deps.query() ? deps.saveSettings : undefined
+      if (!save) throw new NotRunning()
+      const saved = await save(values)
+      for (const c of caches) c.clear()
+      return { settings: saved }
+    }),
   )
 }
