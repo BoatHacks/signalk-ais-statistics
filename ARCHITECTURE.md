@@ -167,6 +167,12 @@ computations; `/status` is never cached. The one write route, `POST
 `config.ts` and hands them to the plugin, which merges them into the stored
 configuration, saves it and applies them (for example
 `Coverage.setPercentile`); the route then clears every answer cache.
+The download routes under `/export/` read the same day files through
+`Coverage.footprint` and `LongRangeLog.entries` (every entry, no limit;
+the day files bound it) and hand them to the pure serializers in
+`export.ts`; `handleFile` sends the string as an attachment, with errors
+still as JSON. Their `all` window reaches back `coverageRetentionDays`,
+which the plugin passes in as `retentionDays`.
 
 ### 2.10 Overlay provider
 Registers a read-only `plotterExtensions` resource provider through
@@ -202,7 +208,9 @@ per page load because the server rate limits it, reports security off or a
 readwrite or admin user. The sectors view draws the sector maxima as ticks with a wide invisible hover line,
 leaves a quarter more room on the scale for them, and lists `/longrange`
 in tables: the farthest receptions, the fastest vessels and the
-implausible jumps. The map's sector wedges
+implausible jumps. Plain `<a download>` links to the export routes (`downloads.ts`,
+URLs from `exportHref` in `api.ts`) sit under the map and the farthest
+receptions table; the browser sends the session cookie with them. The map's sector wedges
 come from the overlay GeoJSON route, and the cell and sector colours are
 imported from `src/style.ts`, which the plotter overlay uses too, so the
 app map and the plotter look the same.
@@ -259,7 +267,12 @@ Published path names are the persistence schema, so they are defined once in
   input, so decode failures are contained per sentence, and memory is bounded
   (tracked targets, cell set per day, long-range log entries and counters
   are capped). Vessel names are cut to 40 characters and shown as text,
-  never as HTML.
+  never as HTML. In CSV downloads a text field that a spreadsheet would
+  read as a formula gets a leading apostrophe.
+- Downloads carry MMSIs, names and both positions by default, for the
+  boat's own use. Anonymise drops all of them from the long-range export;
+  the coverage file is never anonymised and the web app says that a
+  footprint can hint at the berth (SPEC 6.1).
 - Spoofed positions are the identified practical risk. Distance figures are
   made robust with percentiles (SPEC 2.3) and coverage with a percentile cap
   (SPEC 2.4).
@@ -297,6 +310,7 @@ src/
   history.ts          HistoryReader interface and History API implementation
   query.ts            windowed queries
   api.ts              REST routes
+  export.ts           CSV and GeoJSON serializers for the downloads
   overlay.ts          plotterExtensions provider, manifest and sector wedges
   style.ts            coverage and sector colours shared by overlay and web app
   geo.ts              haversine, bearing, sector

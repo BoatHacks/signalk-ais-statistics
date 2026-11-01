@@ -9,7 +9,16 @@
 import { M_PER_NM } from './geo'
 import type { Request, RequestHandler, Response } from 'express'
 import { DAY_MS } from './aggregate'
-import { footprintGeoJson, type Coverage } from './coverage'
+import { footprintGeoJson, utcDay, type Coverage } from './coverage'
+import {
+  EXPORT_WINDOWS,
+  coverageCsv,
+  exportFileName,
+  isExportWindow,
+  longRangeCsv,
+  longRangeGeoJson,
+  type ExportWindow,
+} from './export'
 import {
   MAX_SERIES_POINTS,
   METRICS,
@@ -46,6 +55,11 @@ export interface ApiDeps {
    * answers the effective live settings. Undefined while stopped.
    */
   saveSettings?: (values: Partial<LiveSettings>) => Promise<LiveSettings>
+  /**
+   * Days the coverage and long-range files are kept, the reach of an `all`
+   * export. Undefined while stopped.
+   */
+  retentionDays?: () => number | undefined
   now?: () => number
   /** How long an answer is reused; 0 disables the cache. */
   cacheMs?: number
@@ -103,6 +117,20 @@ function capParam(req: Request): number | undefined {
   return n
 }
 
+function flagParam(req: Request, name: string): boolean {
+  const v = param(req, name)
+  if (v === undefined || v === 'false') return false
+  if (v === 'true') return true
+  throw new BadRequest(`${name} must be true or false`)
+}
+
+function exportWindowParam(req: Request): ExportWindow {
+  const w = param(req, 'window') ?? '24h'
+  if (!isExportWindow(w))
+    throw new BadRequest(`window must be one of ${EXPORT_WINDOWS.join(', ')}`)
+  return w
+}
+
 function timeParam(req: Request, name: string, fallback: number): number {
   const v = param(req, name)
   if (v === undefined) return fallback
@@ -142,6 +170,19 @@ function answerCache(now: () => number, ms: number): Cached {
   return Object.assign(cached, { clear: () => entries.clear() })
 }
 
+function sendError(res: Response, err: unknown): void {
+  if (err instanceof BadRequest || err instanceof InvalidSettings)
+    res.status(400).json({ error: err.message })
+  else if (err instanceof NotJson)
+    res.status(415).json({ error: 'send application/json' })
+  else if (err instanceof NotRunning)
+    res.status(503).json({ error: 'the plugin is not running' })
+  else
+    res.status(500).json({
+      error: err instanceof Error ? err.message : 'internal error',
+    })
+}
+
 function handle(
   fn: (req: Request) => Promise<unknown> | unknown,
   cached?: Cached,
@@ -153,18 +194,36 @@ function handle(
         res.setHeader('Cache-Control', 'no-store')
         res.json(body)
       })
-      .catch((err: unknown) => {
-        if (err instanceof BadRequest || err instanceof InvalidSettings)
-          res.status(400).json({ error: err.message })
-        else if (err instanceof NotJson)
-          res.status(415).json({ error: 'send application/json' })
-        else if (err instanceof NotRunning)
-          res.status(503).json({ error: 'the plugin is not running' })
-        else
-          res.status(500).json({
-            error: err instanceof Error ? err.message : 'internal error',
-          })
+      .catch((err: unknown) => sendError(res, err))
+  }
+}
+
+/** A file download: the body as text, with its type and file name. */
+interface FileBody {
+  body: string
+  type: string
+  filename: string
+}
+
+/** Like `handle`, but sends a file as an attachment; errors stay JSON. */
+function handleFile(
+  fn: (req: Request) => Promise<FileBody> | FileBody,
+  cached?: Cached,
+): RequestHandler {
+  return (req: Request, res: Response) => {
+    Promise.resolve()
+      .then(() => (cached ? cached(req, () => fn(req)) : fn(req)))
+      .then((f) => {
+        const { body, type, filename } = f as FileBody
+        res.setHeader('Cache-Control', 'no-store')
+        res.setHeader('Content-Type', type)
+        res.setHeader(
+          'Content-Disposition',
+          `attachment; filename="${filename}"`,
+        )
+        res.send(body)
       })
+      .catch((err: unknown) => sendError(res, err))
   }
 }
 
@@ -283,6 +342,77 @@ export function registerRoutes(router: RouterLike, deps: ApiDeps): void {
         entries: await log.entries(from, to + 1, LONG_RANGE_LIMIT),
         fastest: await log.fastest(from, to + 1, FASTEST_LIMIT),
         implausibleJumps: await log.fastest(from, to + 1, FASTEST_LIMIT, true),
+      }
+    }, cachedRoute()),
+  )
+
+  // Downloads (SPEC 6.1). `all` reaches back as far as the files are kept.
+  const exportDays = (window: ExportWindow): number => {
+    if (window === '24h') return 1
+    if (window === '7d') return 7
+    const days = deps.retentionDays?.()
+    if (days === undefined) throw new NotRunning()
+    return days
+  }
+  const longRangeEntries = (window: ExportWindow) => {
+    const log = deps.longRange?.()
+    if (!log) throw new NotRunning()
+    const to = now()
+    // 24h and 7d are rolling, as on /longrange; all starts at the oldest
+    // retained UTC day.
+    const from =
+      window === 'all'
+        ? Date.parse(utcDay(to - (exportDays(window) - 1) * DAY_MS))
+        : to - WINDOWS[window].ms
+    // Every entry: the day files already bound how many there are.
+    return log.entries(from, to + 1, Infinity)
+  }
+
+  r.get(
+    '/export/coverage.csv',
+    handleFile(async (req) => {
+      const window = exportWindowParam(req)
+      const all = flagParam(req, 'all')
+      const t = now()
+      const f = await coverage().footprint(exportDays(window), t)
+      return {
+        body: coverageCsv(f, all),
+        type: 'text/csv; charset=utf-8',
+        filename: exportFileName(
+          all ? 'coverage-allcells' : 'coverage',
+          window,
+          t,
+          'csv',
+        ),
+      }
+    }, cachedRoute()),
+  )
+
+  r.get(
+    '/export/longrange.csv',
+    handleFile(async (req) => {
+      const window = exportWindowParam(req)
+      const anonymise = flagParam(req, 'anonymise')
+      return {
+        body: longRangeCsv(await longRangeEntries(window), anonymise),
+        type: 'text/csv; charset=utf-8',
+        filename: exportFileName('longrange', window, now(), 'csv', anonymise),
+      }
+    }, cachedRoute()),
+  )
+
+  r.get(
+    '/export/longrange.geojson',
+    handleFile(async (req) => {
+      const window = exportWindowParam(req)
+      if (flagParam(req, 'anonymise'))
+        throw new BadRequest(
+          'an anonymised export has no positions; use longrange.csv',
+        )
+      return {
+        body: JSON.stringify(longRangeGeoJson(await longRangeEntries(window))),
+        type: 'application/geo+json',
+        filename: exportFileName('longrange', window, now(), 'geojson'),
       }
     }, cachedRoute()),
   )

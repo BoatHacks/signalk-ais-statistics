@@ -108,7 +108,7 @@ describe('plugin', () => {
     plugin.registerWithRouter!(r.router as never)
     await plugin.start(options, () => undefined)
     const res = await r.post('/settings', { coverageDistancePercentile: 95 })
-    expect(res).toEqual({
+    expect(res).toMatchObject({
       status: 200,
       body: { settings: { coverageDistancePercentile: 95 } },
     })

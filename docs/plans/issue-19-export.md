@@ -76,13 +76,14 @@ for read-only users), 7 (UI), 8 (daily files, `coverageRetentionDays`), 9,
   spreadsheet and the GeoJSON and CSV (H3 plugin) in QGIS; phone width.
 
 ## Implementation Steps
-- [ ] Tests for `src/export.ts` and the routes (separate commit)
-- [ ] `src/export.ts`: `csvField`, `csv(rows, columns)`, `coverageCsv`,
-      `longRangeCsv`, `longRangeGeoJson`, `anonymise`
-- [ ] `api.ts`: `handleFile`, the three routes, `retentionDays` in `ApiDeps`;
+- [x] Tests for `src/export.ts` and the routes (separate commit)
+- [x] `src/export.ts`: `csvField`, `csv(columns, rows)`, `coverageCsv`,
+      `longRangeCsv` (anonymise is its flag), `longRangeGeoJson`,
+      `exportFileName`
+- [x] `api.ts`: `handleFile`, the three routes, `retentionDays` in `ApiDeps`;
       wire it in `plugin.ts`
-- [ ] Web app: download links on the map and under the long-range table
-- [ ] Docs: SPEC 6.1 table and text, 7 (download links), 8 (exports reach
+- [x] Web app: download links on the map and under the long-range table
+- [x] Docs: SPEC 6.1 table and text, 7 (download links), 8 (exports reach
       back `coverageRetentionDays`), 9 note on `coverageRetentionDays`;
       ARCHITECTURE 2.9, 2.11, 6 (exports carry MMSIs by default, formula
       escaping), 7 (`src/export.ts`); README "What it does" bullet

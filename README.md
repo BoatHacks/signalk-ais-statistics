@@ -32,6 +32,10 @@ server; the open points are in SPEC section 13.
   history retention for these paths is plenty.
 - Show graphs, the bearing sectors and a coverage map in a SignalK web app that works on
   a phone and offline.
+- Download the coverage cells (H3 ids, CSV) and the farthest receptions
+  (CSV or GeoJSON points) for a spreadsheet or QGIS, for today, 7 days or
+  every retained day. An anonymise switch drops MMSIs, names and all
+  positions from the receptions before you share them.
 - Offer the coverage footprint as an overlay layer for chart plotters that
   support Plotter Extensions, such as Freeboard-SK 3.4.0 or later.
 

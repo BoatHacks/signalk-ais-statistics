@@ -26,6 +26,12 @@ uses [Semantic Versioning](https://semver.org/).
   limit, each with the reported speed over ground beside it. `GET
   /longrange` returns them as `fastest` and `implausibleJumps`,
   `GET /summary` gains `health`, and `GET /series` takes `metric=health`.
+- Downloads (#19): the coverage cells as CSV of H3 ids (under the map)
+  and the farthest receptions as CSV or GeoJSON points (on the sectors
+  page), for today, 7 days or every retained day, through `GET
+  /export/coverage.csv`, `/export/longrange.csv` and
+  `/export/longrange.geojson`. Anonymise drops MMSIs, names and all
+  positions from the receptions, so an anonymised download is CSV only.
 
 ### Changed
 

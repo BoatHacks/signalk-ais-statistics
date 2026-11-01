@@ -40,16 +40,26 @@ export function fakeRouter(withAccess = true) {
     const key = method === 'GET' ? path : `${method} ${path}`
     const route = routes.get(key)
     if (!route) throw new Error(`no route ${key}`)
-    return new Promise<{ status: number; body: unknown }>((resolve) => {
+    return new Promise<{
+      status: number
+      body: unknown
+      headers: Record<string, string>
+    }>((resolve) => {
       let status = 200
+      const sent: Record<string, string> = {}
       const res = {
-        setHeader() {},
+        setHeader(name: string, value: string) {
+          sent[name.toLowerCase()] = value
+        },
         status(s: number) {
           status = s
           return res
         },
         json(b: unknown) {
-          resolve({ status, body: b })
+          resolve({ status, body: b, headers: sent })
+        },
+        send(b: unknown) {
+          resolve({ status, body: b, headers: sent })
         },
       }
       void route.handler(
