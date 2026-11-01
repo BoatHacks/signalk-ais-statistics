@@ -104,19 +104,33 @@ export function connectLive(onChange: (s: LiveState) => void): void {
   open()
 }
 
-/** The path's `meta.displayUnits` from the full tree, if the server has it. */
-export async function displayUnits(
-  path: string,
-): Promise<DisplayUnits | undefined> {
+export interface PathMeta {
+  /** The SI unit of the path, such as Pa or K. */
+  units?: string
+  displayUnits?: DisplayUnits
+}
+
+/** The path's metadata from the full tree, if the server has it. */
+export async function pathMeta(path: string): Promise<PathMeta | undefined> {
   try {
     const res = await fetch(
       `/signalk/v1/api/vessels/self/${path.replace(/\./g, '/')}/meta`,
       { credentials: 'same-origin' },
     )
     if (!res.ok) return undefined
-    const meta = (await res.json()) as { displayUnits?: DisplayUnits }
-    return meta.displayUnits
+    const meta = (await res.json()) as PathMeta
+    return {
+      units: typeof meta.units === 'string' ? meta.units : undefined,
+      displayUnits: meta.displayUnits,
+    }
   } catch {
     return undefined
   }
+}
+
+/** The path's `meta.displayUnits` from the full tree, if the server has it. */
+export async function displayUnits(
+  path: string,
+): Promise<DisplayUnits | undefined> {
+  return (await pathMeta(path))?.displayUnits
 }

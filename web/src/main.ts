@@ -10,10 +10,12 @@ import {
   type LongRange,
   type SectorStats,
   type Series,
+  type Weather,
   type Status,
   type Summary,
 } from './api'
 import { Chart } from './charts'
+import { WeatherPanel } from './weather'
 import { el, int } from './format'
 import {
   classMix,
@@ -276,6 +278,7 @@ class ChartsView extends HTMLElement implements ViewElement {
   }
   private headings = new Map<string, HTMLElement>()
   private source?: HTMLElement
+  private weather?: WeatherPanel
 
   connectedCallback(): void {
     if (this.charts) return
@@ -307,6 +310,7 @@ class ChartsView extends HTMLElement implements ViewElement {
       ]),
     }
     this.charts = c
+    this.weather = new WeatherPanel(COLORS.a, COLORS.b)
     const h = (key: string, tag: 'h2' | 'h3' = 'h2') => {
       const e = el(tag)
       this.headings.set(key, e)
@@ -328,6 +332,7 @@ class ChartsView extends HTMLElement implements ViewElement {
       c.mix.element,
       h('health'),
       c.health.element,
+      this.weather.element,
       this.source,
     )
   }
@@ -340,12 +345,20 @@ class ChartsView extends HTMLElement implements ViewElement {
       from: new Date(to.getTime() - SPAN[ctx.window]).toISOString(),
       to: to.toISOString(),
     }
-    const [pos, msg, dist, ves, hl] = await Promise.all([
+    const shortWindow = RESOLUTION[ctx.window] < 3600
+    const [pos, msg, dist, ves, hl, weather] = await Promise.all([
       get<Series>('/series', { ...params, metric: 'positions' }),
       get<Series>('/series', { ...params, metric: 'messages' }),
       get<Series>('/series', { ...params, metric: 'distance' }),
       get<Series>('/series', { ...params, metric: 'vessels' }),
       get<Series>('/series', { ...params, metric: 'health' }),
+      // Hourly weather pairs with hourly range, so only from 24h up. A
+      // failed weather read hides the panel, not the charts.
+      shortWindow
+        ? Promise.resolve(null)
+        : get<Weather>('/weather', { from: params.from, to: params.to }).catch(
+            () => null,
+          ),
     ])
     const col = (s: Series, k: string) => (s[k] as (number | null)[]) ?? []
     const times = (s: Series) => s.times.map((t) => Date.parse(t))
@@ -433,6 +446,13 @@ class ChartsView extends HTMLElement implements ViewElement {
       format: (v) => formatShare(v),
     })
     this.source!.textContent = sourceText(pos.source, pos.historyError)
+    await this.weather!.update({
+      distance: dist,
+      weather,
+      shortWindow,
+      distanceUnit: u,
+      offsetMin: ctx.offsetMin,
+    })
   }
 }
 
@@ -818,6 +838,7 @@ const SETTING_LABELS: Record<string, string> = {
   jumpSpeedLimitKnots: 'Implausible jump speed (knots)',
   jumpSpeedLimitHighSpeedKnots: 'Jump speed, high-speed and WIG craft (knots)',
   jumpSpeedLimitAircraftKnots: 'Jump speed, SAR aircraft (knots)',
+  weatherPaths: 'Weather paths (range vs weather)',
 }
 
 function renderSettings(config: Record<string, unknown> | undefined): void {

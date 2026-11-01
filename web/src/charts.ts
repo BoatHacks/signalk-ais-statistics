@@ -1,13 +1,18 @@
 // Dependency-free SVG charts (line and stacked bars) built once and then
 // updated in place: a new data set only changes path `d` attributes, rect
-// geometry and label text, never the chart's DOM structure.
+// geometry and label text, never the chart's DOM structure. A line chart
+// can put series on a right axis that spans their minimum to maximum, for
+// values such as air pressure that a zero-based axis would flatten.
 import { el, svg } from './format'
+import { rightRange } from './stats'
 import { formatDate, formatDateTime, formatTime } from './time'
 
 export interface SeriesDef {
   name: string
   /** A CSS colour, normally one of the semantic theme variables. */
   color: string
+  /** Line charts only: plot on the right axis, with `formatRight`. */
+  axis?: 'right'
 }
 
 export interface ChartData {
@@ -15,11 +20,15 @@ export interface ChartData {
   /** One column per series, same length as `times`. */
   columns: (number | null)[][]
   format: (v: number) => string
+  /** Labels of the right axis; defaults to `format`. */
+  formatRight?: (v: number) => string
   offsetMin: number | undefined
 }
 
 const H = 240
 const M = { top: 12, right: 24, bottom: 28, left: 72 }
+/** The right margin when the chart has a right axis. */
+const RIGHT_AXIS_MARGIN = 72
 const PH = H - M.top - M.bottom
 const GRID = 4
 const MAX_TICKS = 6
@@ -37,6 +46,11 @@ export class Chart {
   private readonly PW: number
   private readonly plot: SVGGElement
   private readonly gridLabels: SVGTextElement[] = []
+  private readonly rightLabels: SVGTextElement[] = []
+  private readonly series: SeriesDef[]
+  private readonly legendNames: HTMLElement[]
+  private readonly hasRight: boolean
+  private readonly left: number
   private readonly ticks: SVGTextElement[] = []
   private readonly lines: SVGPathElement[] = []
   private readonly bars: SVGRectElement[] = []
@@ -48,18 +62,21 @@ export class Chart {
 
   constructor(
     private readonly kind: 'line' | 'bars',
-    private readonly series: SeriesDef[],
+    series: SeriesDef[],
   ) {
     // The drawing width follows the screen so text stays legible on a phone.
     this.W = window.innerWidth < 600 ? 380 : 640
-    this.PW = this.W - M.left - M.right
+    this.hasRight = kind === 'line' && series.some((s) => s.axis === 'right')
+    // A narrower left margin on a phone leaves room for the right axis.
+    this.left = this.hasRight && this.W < 600 ? 60 : M.left
+    this.PW = this.W - this.left - (this.hasRight ? RIGHT_AXIS_MARGIN : M.right)
     this.element = el('div', { class: 'chart-wrap sk-card' })
     this.root = svg('svg', {
       viewBox: `0 0 ${this.W} ${H}`,
       class: 'chart',
       role: 'img',
     })
-    this.plot = svg('g', { transform: `translate(${M.left},${M.top})` })
+    this.plot = svg('g', { transform: `translate(${this.left},${M.top})` })
     this.root.append(this.plot)
     for (let i = 0; i <= GRID; i++) {
       const y = PH - (i / GRID) * PH
@@ -74,6 +91,16 @@ export class Chart {
         label,
       )
       this.gridLabels.push(label)
+      if (this.hasRight) {
+        const right = svg('text', {
+          x: this.PW + 8,
+          y: y + 4,
+          class: 'axis',
+          'text-anchor': 'start',
+        })
+        this.plot.append(right)
+        this.rightLabels.push(right)
+      }
     }
     for (let i = 0; i < MAX_TICKS; i++) {
       const t = svg('text', { y: PH + 18, class: 'axis' })
@@ -99,11 +126,18 @@ export class Chart {
       { class: 'muted empty' },
       'No data in this window yet.',
     )
+    this.series = series.map((s) => ({ ...s }))
+    this.legendNames = series.map((s) => el('span', {}, s.name))
     const legend = el(
       'div',
       { class: 'legend' },
-      ...series.map((s) =>
-        el('span', {}, el('i', { style: `background:${s.color}` }), s.name),
+      ...series.map((s, i) =>
+        el(
+          'span',
+          {},
+          el('i', { style: `background:${s.color}` }),
+          this.legendNames[i]!,
+        ),
       ),
     )
     this.element.append(this.root, legend, this.tip, this.empty)
@@ -112,6 +146,14 @@ export class Chart {
       this.tip.hidden = true
       this.cross.setAttribute('visibility', 'hidden')
     })
+  }
+
+  /** Renames a series in the legend and the tooltip. */
+  rename(index: number, name: string): void {
+    const s = this.series[index]
+    if (!s || s.name === name) return
+    s.name = name
+    this.legendNames[index]!.textContent = name
   }
 
   private xOf(i: number, n: number): number {
@@ -132,17 +174,31 @@ export class Chart {
         max = Math.max(max, t)
       }
     } else {
-      for (const c of d.columns)
+      d.columns.forEach((c, s) => {
+        if (this.series[s]?.axis === 'right') return
         for (const v of c) if (v !== null && v > max) max = v
+      })
     }
     max = niceMax(max)
     this.gridLabels.forEach((t, i) => {
       t.textContent = d.format((i / GRID) * max)
     })
+    const right = rightRange(
+      d.columns.filter((_, s) => this.series[s]?.axis === 'right'),
+    )
+    const formatRight = d.formatRight ?? d.format
+    this.rightLabels.forEach((t, i) => {
+      t.textContent = formatRight(
+        right.min + (i / GRID) * (right.max - right.min),
+      )
+    })
     this.updateTicks(d)
     const y = (v: number) => PH - (v / max) * PH
+    const yRight = (v: number) =>
+      PH - ((v - right.min) / (right.max - right.min)) * PH
     if (this.kind === 'line') {
       this.lines.forEach((path, s) => {
+        const ys = this.series[s]?.axis === 'right' ? yRight : y
         let p = ''
         let pen = false
         ;(d.columns[s] ?? []).forEach((v, i) => {
@@ -150,7 +206,7 @@ export class Chart {
             pen = false
             return
           }
-          p += `${pen ? 'L' : 'M'}${this.xOf(i, n).toFixed(1)},${y(v).toFixed(1)}`
+          p += `${pen ? 'L' : 'M'}${this.xOf(i, n).toFixed(1)},${ys(v).toFixed(1)}`
           pen = true
         })
         path.setAttribute('d', p)
@@ -220,7 +276,7 @@ export class Chart {
     if (!d || d.times.length === 0) return
     const n = d.times.length
     const r = this.root.getBoundingClientRect()
-    const x = ((e.clientX - r.left) / r.width) * this.W - M.left
+    const x = ((e.clientX - r.left) / r.width) * this.W - this.left
     let best = 0
     for (let i = 1; i < n; i++)
       if (Math.abs(this.xOf(i, n) - x) < Math.abs(this.xOf(best, n) - x))
@@ -237,12 +293,12 @@ export class Chart {
           'div',
           {},
           el('i', { style: `background:${s.color}` }),
-          `${s.name}: ${v === null ? 'no data' : d.format(v)}`,
+          `${s.name}: ${v === null ? 'no data' : (s.axis === 'right' ? (d.formatRight ?? d.format) : d.format)(v)}`,
         )
       }),
     )
     this.tip.hidden = false
-    const left = ((this.xOf(best, n) + M.left) / this.W) * r.width
+    const left = ((this.xOf(best, n) + this.left) / this.W) * r.width
     this.tip.style.left = `${Math.min(left, r.width - 170)}px`
   }
 }

@@ -16,7 +16,7 @@ import {
   type Bucket,
 } from './aggregate'
 import { sectorOf } from './geo'
-import { increments, type HistoryReader } from './history'
+import { increments, type Aggregate, type HistoryReader } from './history'
 import type { LongRangeEntry } from './longrange'
 import { addInto, emptyBins, summarize } from './histogram'
 import {
@@ -69,6 +69,31 @@ export type Source = 'history' | 'live'
  */
 export const HISTORY_FAILED =
   'The history provider could not answer, so these figures are live data from at most the last 24 hours.'
+
+/** Shown when the weather read fails; there is no live fallback. */
+export const WEATHER_FAILED =
+  'The history provider could not answer, so no weather can be shown.'
+
+/** Weather is read hourly, like the range it is compared with. */
+export const WEATHER_RESOLUTION = 3600
+
+export interface WeatherSeries {
+  path: string
+  values: (number | null)[]
+}
+
+/** Weather read back from history for the range vs weather panel. */
+export interface WeatherResult {
+  /** False without a history provider: there is no live weather record. */
+  available: boolean
+  resolution: number
+  /** The aggregate the values are, normally hourly averages. */
+  aggregate: Aggregate
+  times: string[]
+  /** Only paths with at least one value in the range. */
+  series: WeatherSeries[]
+  historyError?: string
+}
 
 export interface DistanceFigures {
   count: number
@@ -279,7 +304,15 @@ export class Query {
       from: number,
       to: number,
     ) => Promise<LongRangeEntry[]>,
+    /** The configured weather paths (SPEC 9). */
+    private readonly weatherPaths: () => string[] = () => [],
   ) {}
+
+  /**
+   * Hourly averages unless a provider rejected them once; then `last`
+   * until the plugin restarts.
+   */
+  private weatherAggregate: Aggregate = 'average'
 
   private useHistory(windowMs: number, now: number): boolean {
     if (!this.history().available) return false
@@ -515,6 +548,52 @@ export class Query {
       () => this.historySeries(metric, res, start, to),
       live,
     )
+  }
+
+  /**
+   * The weather paths over a range, hourly. Read with `average`, retried
+   * once with `last` if the provider rejects that. Nothing is held live,
+   * so without history or after a failed read there is no weather.
+   */
+  async weather(from: number, to: number): Promise<WeatherResult> {
+    const base = {
+      resolution: WEATHER_RESOLUTION,
+      aggregate: this.weatherAggregate,
+      times: [] as string[],
+      series: [] as WeatherSeries[],
+    }
+    const h = this.history()
+    const wanted = this.weatherPaths()
+    if (!h.available) return { ...base, available: false }
+    if (wanted.length === 0) return { ...base, available: true }
+    // Hour buckets that start on the hour, matching the distance series.
+    const step = WEATHER_RESOLUTION * 1000
+    const start = Math.floor(from / step) * step
+    const read = (a: Aggregate) =>
+      h.series(wanted, a, start, to, WEATHER_RESOLUTION)
+    let s
+    try {
+      try {
+        s = await read(this.weatherAggregate)
+      } catch (err) {
+        if (this.weatherAggregate !== 'average') throw err
+        s = await read('last')
+        this.weatherAggregate = 'last'
+        this.onHistoryError(err)
+      }
+    } catch (err) {
+      this.onHistoryError(err)
+      return { ...base, available: true, historyError: WEATHER_FAILED }
+    }
+    return {
+      ...base,
+      available: true,
+      aggregate: this.weatherAggregate,
+      times: s.times.map((t) => new Date(t).toISOString()),
+      series: wanted
+        .map((path, i) => ({ path, values: s.values[i] ?? [] }))
+        .filter((w) => w.values.some((v) => v !== null)),
+    }
   }
 
   private liveBucket(windowMs: number, now: number): Bucket {

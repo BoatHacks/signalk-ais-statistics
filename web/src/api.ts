@@ -96,6 +96,17 @@ export interface Series {
   [column: string]: unknown
 }
 
+/** Weather read back from history, hourly (GET /weather). */
+export interface Weather {
+  /** False without a history provider. */
+  available: boolean
+  resolution: number
+  aggregate: 'average' | 'last' | 'max'
+  times: string[]
+  series: { path: string; values: (number | null)[] }[]
+  historyError?: string
+}
+
 export interface CoverageResponse {
   cells: number
   cappedCells: number

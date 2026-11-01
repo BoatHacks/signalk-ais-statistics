@@ -14,6 +14,7 @@ export interface Config {
   jumpSpeedLimitKnots: number
   jumpSpeedLimitHighSpeedKnots: number
   jumpSpeedLimitAircraftKnots: number
+  weatherPaths: string[]
 }
 
 export const DEFAULT_CONFIG: Config = {
@@ -28,6 +29,34 @@ export const DEFAULT_CONFIG: Config = {
   jumpSpeedLimitKnots: 60,
   jumpSpeedLimitHighSpeedKnots: 120,
   jumpSpeedLimitAircraftKnots: 600,
+  weatherPaths: [
+    'environment.outside.pressure',
+    'environment.outside.temperature',
+    'environment.outside.relativeHumidity',
+    'environment.water.temperature',
+  ],
+}
+
+/**
+ * Weather paths read at most; eight keep the read to one history request
+ * and the series selector short enough for a phone.
+ */
+export const MAX_WEATHER_PATHS = 8
+
+/** A dotted SignalK path name, without wildcards. */
+const PATH_NAME = /^[A-Za-z][A-Za-z0-9_-]*(\.[A-Za-z0-9_-]+)*$/
+
+/** Trimmed, valid and unique weather paths, at most MAX_WEATHER_PATHS. */
+export function weatherPaths(value: unknown): string[] {
+  if (!Array.isArray(value)) return [...DEFAULT_CONFIG.weatherPaths]
+  const out = new Set<string>()
+  for (const v of value) {
+    if (typeof v !== 'string') continue
+    const p = v.trim()
+    if (PATH_NAME.test(p)) out.add(p)
+    if (out.size === MAX_WEATHER_PATHS) break
+  }
+  return [...out]
 }
 
 /** Divisors of an hour, so every interval ends on the hour too. */
@@ -133,6 +162,15 @@ export const configSchema = {
       default: DEFAULT_CONFIG.jumpSpeedLimitAircraftKnots,
       minimum: 10,
     },
+    weatherPaths: {
+      type: 'array',
+      title: 'Weather paths for range vs weather',
+      description: `Numeric paths of this vessel to chart against the reception range, read back from the history provider as hourly averages. The provider must record them. At most ${MAX_WEATHER_PATHS}; wildcards are not accepted.`,
+      items: { type: 'string' },
+      uniqueItems: true,
+      maxItems: MAX_WEATHER_PATHS,
+      default: DEFAULT_CONFIG.weatherPaths,
+    },
   },
 }
 
@@ -198,6 +236,7 @@ export function resolveConfig(options: unknown): Config {
       d.jumpSpeedLimitAircraftKnots,
       10,
     ),
+    weatherPaths: weatherPaths(o.weatherPaths),
   }
 }
 
