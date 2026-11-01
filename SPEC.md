@@ -156,11 +156,10 @@ values), counting only hours with at least 20 reports in that sector. The
 sector's report count still includes every hour.
 
 Each hour bucket also keeps the farthest reception per sector and class and
-when it arrived. The sectors view draws it as a thin tick along the
-sector's centre line, from the centre out to a dot at that distance, in
-every sector with a reception, also when the farthest reception is at the
-wedge's edge (chosen by the maintainer). The tick of the chart's farthest
-reception is broader. So rare far receptions such as sporadic E or
+when it arrived. The sectors view outlines the sector holding the chart's
+farthest reception bolder and puts one small dot on its centre line at
+that distance; hovering any wedge shows its own farthest reception and
+time (chosen by the maintainer, replacing a tick per sector). So rare far receptions such as sporadic E or
 tropospheric ducting stay visible without moving the radius. The maximum is untrusted like every maximum (2.3).
 
 ### 2.7 Long-range log
@@ -515,15 +514,16 @@ button:
   plotter fetches with the user's credentials: H3 cell polygons for the last
   7 days (`kind: "cell"`, with `id`, a coverage `intensity` from 0 to 1 and
   the report count), plus the 24 hour sectors of class A and B as wedges
-  from the last known own position (`kind: "sector"`), and a line per
-  sector along its centre bearing from the wedge out to the farthest
-  reception (`kind: "sector-max"`, with `maxM` and its time). Each sector
+  from the last known own position (`kind: "sector"`), and per class one
+  point at the farthest reception, on its sector's centre bearing
+  (`kind: "sector-max"`, with `sector`, `maxM` and its time); that sector's
+  wedge carries `farthest: true`. Each sector
   feature carries its class in `cls` (`a` or `b`). A fill layer colours
   cells by `intensity` on a magenta to purple ramp, which contrasts with
   chart water and land, a line layer outlines each cell in the same ramp,
   another line layer outlines the sectors, teal for class A and orange for
-  class B as on the web app's sectors page, and a thin one draws the
-  maxima in the same class colours.
+  class B as on the web app's sectors page, bolder for the `farthest` one,
+  and a circle layer draws the farthest dots in the same class colours.
 - Live updates need a context that calls `overlay.refresh`, so the manifest
   also declares an optional `background.iframe` page,
   `/signalk-ais-statistics/plotterext/refresh.html` (part of the web app
@@ -559,10 +559,11 @@ A SignalK web app, listed in the admin UI, with:
   the paths; the 1h window shows a note instead. Weather values use the
   path's display unit, otherwise hPa for pressure, °C for temperature and
   percent for ratios.
-- Sectors: the 24-sector bearing view for class A and B (`#/sectors`), with a thin tick
-  per sector from the centre to a dot at its farthest reception, broader
-  for the chart's farthest (hover shows distance and time; a tick beyond
-  the scale stops at the rim, dashed, with a hollow dot), and below it a
+- Sectors: the 24-sector bearing view for class A and B (`#/sectors`), where the
+  sector with the chart's farthest reception is outlined bolder and has a
+  dot at that distance (hover shows distance and time; a dot beyond the
+  scale sits hollow on the rim, and hovering a wedge shows its farthest
+  reception too), and below it a
   table of the farthest receptions from the long-range log (2.7): time,
   distance, bearing, class, vessel name and MMSI, its position and the own
   position. Below that, the fastest vessels and the implausible jumps
@@ -820,7 +821,8 @@ help of `max` (6.2). Verified across a plugin restart on the test server.
 - **Far receptions as a tick and a log, not in the radius (chosen by the
   maintainer).** The 20 report minimum keeps rare far receptions out of
   the radius, but they can be real propagation worth seeing. The sectors
-  view draws the sector maximum as a thin tick with its time on hover, and the
+  view marks the chart's farthest reception with a dot and a bolder sector
+  outline, shows each sector's maximum and time on hover, and the
   long-range log keeps who sent each far position and where both stations
   were, which history cannot store. Cost: 48 more hourly paths and a small
   daily file. Rejected: publishing the time of the maximum as a path (an

@@ -229,7 +229,8 @@ Registers a read-only `plotterExtensions` resource provider through
 plugin runs (the pattern `@meri-imperiumi/signalk-internet` uses). The
 MapLibre style is inline in the manifest; its GeoJSON source is the
 read-only route `/overlay/coverage.geojson`, built on request from Coverage
-and the class A and B sectors (`sector` wedges and `sector-max` lines,
+and the class A and B sectors (`sector` wedges and one `sector-max` point
+per class,
 each with its class in `cls`). A static background page in the web app bundle calls
 `overlay.refresh` hourly through the plotter extension bus (SPEC 6.3).
 Nothing is written into the package directory at run time.
@@ -263,8 +264,9 @@ so it is not stored, and the coverage downloads follow it. The distance cap slid
 `/coverage` with `cap` and, through `settings.ts`, saves with `POST
 /settings`; the save button shows when `/skServer/loginStatus`, read once
 per page load because the server rate limits it, reports security off or a
-readwrite or admin user. The sectors view draws the sector maxima as ticks with a wide invisible hover line,
-leaves a quarter more room on the scale for them, and lists `/longrange`
+readwrite or admin user. The sectors view (`sector-layout.ts` for the scale) outlines the sector with the
+chart's farthest reception bolder and puts a dot there with a wide invisible hover circle,
+leaves a quarter more room on the scale for it, and lists `/longrange`
 in tables: the farthest receptions, the fastest vessels and the
 implausible jumps. Plain `<a download>` links to the export routes (`downloads.ts`,
 URLs from `exportHref` in `api.ts`) sit under the map and the farthest
