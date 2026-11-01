@@ -82,11 +82,11 @@ helpers and the web route in `test/web/route.test.ts`.
       stay combined, per-source compare is the summary figures only)
 - [x] Part 1: `from`/`to` in query and routes, `footprintRange`, compare view
 - [x] Part 1 docs: SPEC 6.1, 7; ARCHITECTURE 2.5, 2.8, 2.9, 2.11; README; CHANGELOG
-- [ ] Part 2: config option, `sourceLabel` and source paths, `SourceStats`, wiring
-- [ ] Part 2: publish, query, `/summary?source=`, `/sources`, `/status`, picker
-- [ ] Part 2: per-source health with #16
-- [ ] Tests first for each part, committed separately
-- [ ] Part 2 docs: SPEC 4.1, 5, 6.1, 6.2, 8 (history load), 9, 12 (new
+- [x] Part 2: config option, `sourceLabel` and source paths, `SourceStats` (an `Aggregator` per event in `sources.ts`), wiring
+- [x] Part 2: publish, query, `/summary?source=`, `/sources`, `/status`, picker
+- [x] Part 2: per-source health with #16
+- [x] Tests first for each part, committed separately
+- [x] Part 2 docs: SPEC 4.1, 5, 6.1, 6.2, 8 (history load), 9, 12 (new
       decision entry); ARCHITECTURE 2.4, 2.8, 5, 7, 9 (per event done, per
       `src` later); README status and features; `docs/paths.md` from #20
 

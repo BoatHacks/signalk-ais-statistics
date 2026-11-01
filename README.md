@@ -39,7 +39,9 @@ server; the open points are in SPEC section 13.
 - Compare two date windows side by side, such as the week before and
   the week after an antenna, cable or receiver change: messages,
   positions, distance figures, coverage and the bearing sectors, with the
-  change between them.
+  change between them. Turn on statistics per server event to compare
+  two receivers or antennas running side by side, for example one on NMEA
+  0183 and one on NMEA 2000 (this about doubles the history it stores).
 - Download the coverage cells (H3 ids, CSV) and the farthest receptions
   (CSV or GeoJSON points) for a spreadsheet or QGIS, for today, 7 days or
   every retained day. An anonymise switch drops MMSIs, names and all
