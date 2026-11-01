@@ -21,7 +21,11 @@ export function emptyBins(n = DISTANCE_BIN_COUNT): number[] {
 
 export function binOf(nm: number): number {
   if (!(nm >= FIRST_EDGE_NM)) return 0
-  const i = 1 + Math.floor(STEPS_PER_DOUBLING * Math.log2(nm / FIRST_EDGE_NM))
+  let i = 1 + Math.floor(STEPS_PER_DOUBLING * Math.log2(nm / FIRST_EDGE_NM))
+  // The logarithm can round a distance on an edge into the bin below; the
+  // edges themselves decide.
+  if (i < DISTANCE_BIN_COUNT - 1 && nm >= binLowerNm(i + 1)) i++
+  else if (i > 1 && nm < binLowerNm(i)) i--
   return Math.min(DISTANCE_BIN_COUNT - 1, i)
 }
 
