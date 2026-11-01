@@ -8,6 +8,14 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [0.3.1] - 2026-11-01
 
+### Changed
+
+- The radar distance of a sector counts only hours with at least 20
+  reports in that sector. Sparse hours put the p99 at the top of its
+  distance bin, so the radius was set by chance and the 24 hour and 7 day
+  radars looked alike. Sectors without such an hour show their count but
+  no radius.
+
 ### Fixed
 
 - Chart bars for the 24 hour and 7 day windows start on the full hour.
@@ -108,7 +116,8 @@ First release.
 - A dark tactical web app theme following day and night mode, with
   distances in the server's display units and the plugin's app icon.
 
-[Unreleased]: https://github.com/BoatHacks/signalk-ais-statistics/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/BoatHacks/signalk-ais-statistics/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/BoatHacks/signalk-ais-statistics/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/BoatHacks/signalk-ais-statistics/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/BoatHacks/signalk-ais-statistics/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/BoatHacks/signalk-ais-statistics/compare/v0.1.1...v0.1.2

@@ -134,9 +134,10 @@ positions, and the count of unique vessels per hour and per type group.
 For each of 24 sectors and for each class: number of position reports and
 the p99 distance, per hour bucket, from a coarse per-sector histogram (the
 distance bins merged in pairs, 16 bins). The
-radar for a longer window shows, per sector, the highest hourly p99 in the
-window (a conservative figure, since percentiles do not merge exactly from
-hourly values).
+radar shows, per sector, the highest hourly p99 in the window (a
+conservative figure, since percentiles do not merge exactly from hourly
+values), counting only hours with at least 20 reports in that sector. The
+sector's report count still includes every hour.
 
 ## 3. State / Lifecycle Model
 
@@ -480,12 +481,14 @@ help of `max` (6.2). Verified across a plugin restart on the test server.
 - **Read-only users may use the web app (chosen by the maintainer).** Needs
   explicit route permissions, since SignalK defaults plugin routes to
   admin-only.
-- **Radar keeps the highest hourly p99 per sector (chosen by the
-  maintainer).** In a sector-hour with fewer than about 100 reports, p99 is
-  close to that hour's maximum, so one bogus position can set a sector's
-  radius for a whole window. Accepted for its simplicity and conservative
-  reading, over a minimum report count per hour, a lower percentile, or 768
-  per-sector bin counters.
+- **Radar keeps the highest hourly p99 per sector, from hours with at
+  least 20 reports in the sector (chosen by the maintainer).** In a
+  sector-hour with few reports, p99 lands at the top of its distance bin,
+  so sparse hours set the radius by chance and every window showed the
+  same few bin edges. Skipping them keeps the simple, conservative "best
+  hour" reading, over a median of hourly p99s, a lower percentile, or 768
+  per-sector bin counters. A sector with no hour of 20 reports shows its
+  count but no radius.
 - **Lean history by default (chosen by the maintainer).** The plugin
   publishes every 5 minutes, sends the sector paths once an hour, offers
   windows up to 7 days and keeps coverage files for 14 days. Per-minute

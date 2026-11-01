@@ -42,6 +42,13 @@ export function isWindow(w: unknown): w is WindowName {
 export const METRICS = ['messages', 'positions', 'distance', 'vessels'] as const
 export type Metric = (typeof METRICS)[number]
 export const MAX_SERIES_POINTS = 2000
+/**
+ * An hour counts toward a sector's radar distance only with at least this
+ * many reports in that sector: the p99 of a handful of reports lands at the
+ * top of its distance bin, so sparse hours would set the radius by chance
+ * (chosen by the maintainer).
+ */
+export const MIN_SECTOR_REPORTS = 20
 
 export type Source = 'history' | 'live'
 
@@ -179,6 +186,22 @@ async function counterIncrements(
   }
 }
 
+/** Adds one hour bucket's sector counts, and its p99s where not sparse. */
+function addHour(
+  b: Bucket,
+  classIndexes: number[],
+  counts: number[],
+  raise: (s: number, v: number | undefined) => void,
+): void {
+  const bp = sectorP99(b)
+  for (const c of classIndexes)
+    for (let s = 0; s < SECTOR_COUNT; s++) {
+      const n = b.sectorCounts[c]![s]!
+      counts[s]! += n
+      if (n >= MIN_SECTOR_REPORTS) raise(s, bp[c]![s])
+    }
+}
+
 export class Query {
   constructor(
     private readonly agg: Aggregator,
@@ -312,14 +335,7 @@ export class Query {
           : this.agg
               .hourBuckets(now)
               .filter((b) => b.start + HOUR_MS > now - w.ms)
-      for (const b of buckets) {
-        const bp = sectorP99(b)
-        for (const c of ci)
-          for (let s = 0; s < SECTOR_COUNT; s++) {
-            counts[s]! += b.sectorCounts[c]![s]!
-            raise(s, bp[c]![s])
-          }
-      }
+      for (const b of buckets) addHour(b, ci, counts, raise)
       return result('live', counts, p99)
     }
     if (!this.useHistory(w.ms, now)) return live()
@@ -339,23 +355,30 @@ export class Query {
       const hourStart = Math.floor(now / HOUR_MS) * HOUR_MS
       const from = Math.min(hourStart - HOUR_MS, hourStart - w.ms + HOUR_MS)
       const res = Math.max(HOUR_MS / 1000, this.resolution(w.resolution))
+      // Hourly counts and p99s, so sparse hours can be left out of the p99.
       const [cs, ps] = await Promise.all([
         counterIncrements(h, countPaths, from, hourStart, res),
-        h.series(p99Paths, 'max', from, hourStart, (hourStart - from) / 1000),
+        h.series(p99Paths, 'max', from, hourStart, res),
       ])
+      const p99At = new Map(ps.times.map((t, i) => [t, i]))
+      const hours = cs.times.slice(1)
       cs.increments.forEach((col, i) => {
-        counts[i % SECTOR_COUNT]! += sum(col)
+        const s = i % SECTOR_COUNT
+        col.forEach((n, k) => {
+          counts[s]! += n
+          if (n < MIN_SECTOR_REPORTS) return
+          const j = p99At.get(hours[k]!)
+          if (j !== undefined) raise(s, toNm(ps.values[i]?.[j] ?? null))
+        })
       })
-      ps.values.forEach((col, i) => raise(i % SECTOR_COUNT, toNm(maxOf(col))))
       const open = this.agg.hourBuckets(now).find((b) => b.start === hourStart)
-      if (open) {
-        const bp = sectorP99(open)
-        for (const c of classes.map((k) => SECTOR_CLASSES.indexOf(k)))
-          for (let s = 0; s < SECTOR_COUNT; s++) {
-            counts[s]! += open.sectorCounts[c]![s]!
-            raise(s, bp[c]![s])
-          }
-      }
+      if (open)
+        addHour(
+          open,
+          classes.map((k) => SECTOR_CLASSES.indexOf(k)),
+          counts,
+          raise,
+        )
       return result('history', counts, p99)
     }, live)
   }
