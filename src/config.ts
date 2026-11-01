@@ -11,6 +11,7 @@ export interface Config {
   publishIntervalMinutes: number
   publishOverlay: boolean
   sentenceEvents: string[]
+  sourceStatistics: boolean
   jumpSpeedLimitKnots: number
   jumpSpeedLimitHighSpeedKnots: number
   jumpSpeedLimitAircraftKnots: number
@@ -26,6 +27,7 @@ export const DEFAULT_CONFIG: Config = {
   publishIntervalMinutes: 5,
   publishOverlay: true,
   sentenceEvents: ['nmea0183', 'N2KAnalyzerOut'],
+  sourceStatistics: false,
   jumpSpeedLimitKnots: 60,
   jumpSpeedLimitHighSpeedKnots: 120,
   jumpSpeedLimitAircraftKnots: 600,
@@ -139,6 +141,13 @@ export const configSchema = {
       uniqueItems: true,
       default: DEFAULT_CONFIG.sentenceEvents,
     },
+    sourceStatistics: {
+      type: 'boolean',
+      title: 'Statistics per server event',
+      description:
+        'Also count messages, positions, distances and message health for each server event above, to compare antennas or receivers. Each event adds 43 counter paths at every publish interval, about 12,000 history rows a day at 5 minutes, so with two events the history load about doubles.',
+      default: DEFAULT_CONFIG.sourceStatistics,
+    },
     jumpSpeedLimitKnots: {
       type: 'number',
       title: 'Implausible jump speed (knots)',
@@ -225,6 +234,10 @@ export function resolveConfig(options: unknown): Config {
           ),
         ]
       : [...d.sentenceEvents],
+    sourceStatistics:
+      typeof o.sourceStatistics === 'boolean'
+        ? o.sourceStatistics
+        : d.sourceStatistics,
     jumpSpeedLimitKnots: num(o.jumpSpeedLimitKnots, d.jumpSpeedLimitKnots, 10),
     jumpSpeedLimitHighSpeedKnots: num(
       o.jumpSpeedLimitHighSpeedKnots,

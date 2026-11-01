@@ -104,3 +104,77 @@ export const healthPaths: Record<HealthKind, string> = {
   implausibleJumps: paths.healthImplausibleJumps,
   noOwnPosition: paths.healthNoOwnPosition,
 }
+
+/**
+ * Path label of a server event for the per-source statistics (SPEC 5):
+ * letters and digits stay, every other character becomes `_`, and an empty
+ * name becomes `_`. Labels are event names only (chosen by the maintainer).
+ */
+export function sourceLabel(event: string): string {
+  return event.replace(/[^A-Za-z0-9]/g, '_') || '_'
+}
+
+/**
+ * Labels for the configured events, in config order. Two events that map
+ * to the same label get `_2`, `_3` and so on, in the order they are
+ * configured; `collisions` lists the events that were renamed so.
+ */
+export function sourceLabels(events: string[]): {
+  labels: Map<string, string>
+  collisions: string[]
+} {
+  const labels = new Map<string, string>()
+  const used = new Set<string>()
+  const collisions: string[] = []
+  for (const event of events) {
+    if (labels.has(event)) continue
+    const base = sourceLabel(event)
+    let label = base
+    for (let n = 2; used.has(label); n++) label = `${base}_${n}`
+    if (label !== base) collisions.push(event)
+    used.add(label)
+    labels.set(event, label)
+  }
+  return { labels, collisions }
+}
+
+/**
+ * The counters of one source, under `sources.<label>.`: the same names as
+ * the main counters, and no gauges (window figures come from the bins).
+ */
+export function sourcePaths(label: string) {
+  const s = (suffix: string) => p(`sources.${label}.${suffix}`)
+  return {
+    messagesTotal: s('messages.total'),
+    positionsClassA: s('positions.classA'),
+    positionsClassB: s('positions.classB'),
+    positionsOther: s('positions.other'),
+    distanceBin: (bin: number) => s(`distance.bin.${binLabel(bin)}`),
+    health: (kind: HealthKind) => s(`health.${kind}`),
+  }
+}
+
+/**
+ * The counter paths a window total reads, in the order the query expects:
+ * messages, positions A, B and other, the distance bins, the health kinds.
+ */
+export function counterPaths(label?: string): string[] {
+  if (label === undefined)
+    return [
+      paths.messagesTotal,
+      paths.positionsClassA,
+      paths.positionsClassB,
+      paths.positionsOther,
+      ...distanceBinPaths,
+      ...HEALTH_KINDS.map((k) => healthPaths[k]),
+    ]
+  const s = sourcePaths(label)
+  return [
+    s.messagesTotal,
+    s.positionsClassA,
+    s.positionsClassB,
+    s.positionsOther,
+    ...Array.from({ length: DISTANCE_BIN_COUNT }, (_, i) => s.distanceBin(i)),
+    ...HEALTH_KINDS.map((k) => s.health(k)),
+  ]
+}

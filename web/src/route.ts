@@ -22,6 +22,8 @@ export interface CompareParams {
   date: string
   /** Length of each window in days. */
   days: number
+  /** `all`, or a source label when per-source statistics are on. */
+  source: string
 }
 
 export interface Route {
@@ -47,6 +49,7 @@ export function defaultCompare(now: number): CompareParams {
   return {
     date: utcDay(now - (MAX_COMPARE_DAYS - 1) * DAY_MS),
     days: MAX_COMPARE_DAYS,
+    source: 'all',
   }
 }
 
@@ -66,6 +69,8 @@ export function parseRoute(hash: string, now = Date.now()): Route {
   const fallback = defaultCompare(now)
   const date = q.get('date')
   const days = Number(q.get('days'))
+  const source = q.get('source') ?? ''
+
   // A date after today has nothing to compare.
   const today = utcDay(now)
   return {
@@ -77,6 +82,8 @@ export function parseRoute(hash: string, now = Date.now()): Route {
         Number.isInteger(days) && days >= 1 && days <= MAX_COMPARE_DAYS
           ? days
           : fallback.days,
+      // Labels are letters, digits and underscores (src/paths.ts).
+      source: /^[A-Za-z0-9_]+$/.test(source) ? source : 'all',
     },
   }
 }
@@ -84,7 +91,8 @@ export function parseRoute(hash: string, now = Date.now()): Route {
 export function formatRoute(r: Route): string {
   if (r.view === 'compare') {
     const c = r.compare ?? defaultCompare(Date.now())
-    return `#/compare?date=${c.date}&days=${c.days}`
+    const source = c.source === 'all' ? '' : `&source=${c.source}`
+    return `#/compare?date=${c.date}&days=${c.days}${source}`
   }
   return `#/${r.view}?window=${r.window}`
 }

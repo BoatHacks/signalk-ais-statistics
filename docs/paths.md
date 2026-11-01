@@ -64,6 +64,24 @@ unit preferences convert them for display. A blank unit is a plain count.
 | `vessels.byGroup.<group>.last24h` | | gauge | interval | Distinct vessels per type group, last 24 hours |
 | `coverage.cells.today` | | gauge | interval | Coverage cells today (UTC) |
 | `coverage.area.today` | m2 | gauge | interval | Area of the coverage cells today (UTC) |
+| `sources.<label>.messages.total` | | counter | interval | Decoded AIS messages on one server event (only with `sourceStatistics`) |
+| `sources.<label>.positions.classA` | | counter | interval | Class A position reports on one server event |
+| `sources.<label>.positions.classB` | | counter | interval | Class B position reports on one server event |
+| `sources.<label>.positions.other` | | counter | interval | Other position reports on one server event |
+| `sources.<label>.distance.bin.<nn>` | | counter | interval | Position reports per distance bin on one server event |
+| `sources.<label>.health.decodeErrors` | | counter | interval | Undecodable sentences or PGNs on one server event |
+| `sources.<label>.health.incomplete` | | counter | interval | Incomplete multipart messages on one server event |
+| `sources.<label>.health.duplicates` | | counter | interval | Copies of a message seen on the same server event within 2 s |
+| `sources.<label>.health.duplicatesCrossEvent` | | counter | interval | Copies on this event of a message first seen on another event within 2 s: receiver overlap |
+| `sources.<label>.health.positionInvalid` | | counter | interval | Position reports without a usable position on one server event |
+| `sources.<label>.health.implausibleJumps` | | counter | interval | Implausible position jumps delivered by one server event |
+| `sources.<label>.health.noOwnPosition` | | counter | interval | Position reports on one server event while the own position was unknown or stale |
+
+The `sources.*` paths exist only while the `sourceStatistics` setting is
+on: one set of 43 counters per configured server event, beside the main
+figures, which still count every event (a receiver on two events counts
+twice there). There are no per-source gauges; window figures come from
+the bins, as for the main statistics.
 
 The `health.*` counters only count: a duplicate, a jump or a message
 received without an own position still counts everywhere else (SPEC 2.8).
@@ -80,11 +98,16 @@ is everything received.
 - `<nnn>`: bearing sector, the starting true bearing in degrees as three
   digits, `000` to `345`, 15 degrees wide, clockwise from north.
 - `<class>`: `a` or `b`, the AIS class of the reporting vessel.
+- `<label>`: the server event name with every character other than
+  letters and digits replaced by `_`, for example `nmea0183` or
+  `N2KAnalyzerOut`. Two events that map to the same label get `_2`, `_3`
+  in the order they are configured.
 - `<group>`: `cargo`, `tanker`, `passenger`, `fishing`, `pleasureCraft`,
   `other` or `unknown`, from the AIS ship type.
 
 That makes 32 bin paths, 48 paths each for sector counts, p99 and maximum,
-and 14 per type group paths.
+and 14 per type group paths, plus 43 per server event with
+`sourceStatistics` on.
 
 ## History provider setup
 

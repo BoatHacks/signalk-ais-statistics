@@ -90,6 +90,19 @@ implied speed sample) and keeps no counts; the plugin hands the counts to
 the aggregator and the speed sample to the long-range log. Pure and
 clock-injectable.
 
+### 2.4b Sources
+`sources.ts`, only while `sourceStatistics` is on (SPEC 5, #14): one more
+`Aggregator` per configured event, labelled by `sourceLabels` in
+`paths.ts`. The plugin's input handler gives each message, its health
+verdicts and its decode counts to the main aggregator and to the event's
+own one, so a source counts exactly what its event delivered and the main
+figures stay unchanged. `Sources.values` lists each source's 43 counters
+for the Publisher at every interval and on stop. Each source has its own
+`Query` built with that source's `counterPaths`, which the REST layer
+picks for `/summary?source=`; sectors, series and coverage use the main
+query only. Reusing the aggregator keeps the live hour buckets, reset
+detection and percentile code the same for both.
+
 ### 2.5a Long-range log
 `longrange.ts` keeps, per UTC day, the farthest reception of each MMSI up
 to the 50 farthest (SPEC 2.7), fills in names the registry learns later
@@ -179,7 +192,9 @@ an answer for a minute per set of parameters and share in-flight
 computations; `/status` is never cached. `/weather` checks only that the
 range is at most 7 days. `/summary` and `/sectors` take `from` and `to` on
 whole hours (`rangeParam`), `/coverage` takes them as UTC days
-(`dayRangeParam`), each at most 7 days and never with `window`. The one write route, `POST
+(`dayRangeParam`), each at most 7 days and never with `window`.
+`/summary?source=<label>` answers from that source's query, and
+`/sources` lists the labels (empty while per-source statistics are off). The one write route, `POST
 /settings`, validates live settings with `parseLiveSettings` from
 `config.ts` and hands them to the plugin, which merges them into the stored
 configuration, saves it and applies them (for example
@@ -337,6 +352,7 @@ src/
   publish.ts          SignalK deltas
   history.ts          HistoryReader interface and History API implementation
   query.ts            windowed queries
+  sources.ts          per-event aggregators for sourceStatistics
   api.ts              REST routes
   export.ts           CSV and GeoJSON serializers for the downloads
   overlay.ts          plotterExtensions provider, manifest and sector wedges
@@ -367,6 +383,7 @@ live-only (SPEC 8).
   injectable clock, publishing a few more paths; nothing in the MVP blocks it.
 - Optional position filtering with counters, if unfiltered coverage proves
   unusable.
-- Multiple AIS sources: the sentence event carries no source label, so
-  per-receiver statistics would need another input (for example a provider
-  specific stream). Not designed for now.
+- Multiple AIS sources: statistics per server event exist (SPEC 5,
+  `sources.ts`). A split per NMEA 2000 device (`src`) would key the
+  per-source aggregators on the PGN's source address instead; not designed
+  for now.

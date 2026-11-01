@@ -47,6 +47,10 @@ export interface Status {
 export interface ApiDeps {
   /** Undefined while the plugin is stopped. */
   query: () => Query | undefined
+  /** The query of one source label, when per-source statistics are on. */
+  sourceQuery?: (label: string) => Query | undefined
+  /** The sources counted, empty while per-source statistics are off. */
+  sources?: () => { label: string; event: string }[] | undefined
   coverage: () => Coverage | undefined
   longRange?: () => LongRangeLog | undefined
   status: () => Status
@@ -314,8 +318,26 @@ export function registerRoutes(router: RouterLike, deps: ApiDeps): void {
     '/summary',
     handle((req) => {
       const t = now()
-      return query().summary(rangeParam(req, t) ?? windowParam(req, '24h'), t)
+      const source = param(req, 'source')
+      let q = query()
+      if (source !== undefined && source !== 'all') {
+        const sq = deps.sourceQuery?.(source)
+        if (!sq)
+          throw new BadRequest(
+            'source must be all or a label from /sources (per-source statistics must be on)',
+          )
+        q = sq
+      }
+      return q.summary(rangeParam(req, t) ?? windowParam(req, '24h'), t)
     }, cachedRoute()),
+  )
+
+  r.get(
+    '/sources',
+    handle(() => {
+      if (!deps.query()) throw new NotRunning()
+      return { sources: deps.sources?.() ?? [] }
+    }),
   )
 
   r.get(

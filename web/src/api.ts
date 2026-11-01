@@ -128,8 +128,19 @@ export interface CoverageResponse {
   geojson: GeoJSON.FeatureCollection
 }
 
+/** A server event counted on its own (GET /sources). */
+export interface SourceInfo {
+  label: string
+  event: string
+}
+
 export interface Status {
   running: boolean
+  /** Per source: messages and health counts since the plugin started. */
+  sources?: (SourceInfo & {
+    messages: number
+    health: Record<string, number>
+  })[]
   noData?: boolean
   lastMessageAt?: string | null
   trackedTargets?: number

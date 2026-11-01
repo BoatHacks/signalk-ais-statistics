@@ -14,6 +14,7 @@ import {
   paths,
 } from '../src/paths'
 import { buildValues, defaultMetadata } from '../src/publish'
+import { Sources } from '../src/sources'
 import { OWN } from './fixtures/ais'
 
 interface Row {
@@ -43,6 +44,11 @@ function documented(): Map<string, Row> {
 function pattern(path: string): string {
   return path
     .slice(PATH_PREFIX.length + 1)
+    .replace(/^sources\.[A-Za-z0-9_]+\./, 'sources.<label>.')
+    .replace(
+      /^(sources\.<label>\.)distance\.bin\.\d{2}$/,
+      '$1distance.bin.<nn>',
+    )
     .replace(/^distance\.bin\.\d{2}$/, 'distance.bin.<nn>')
     .replace(/^sectors\.\d{3}\.[ab]\./, 'sectors.<nnn>.<class>.')
     .replace(
@@ -71,6 +77,9 @@ function allPaths(): { key: string; path: string }[] {
         out.push({ key, path: (v as (g: string) => string)(g) })
     else throw new Error(`no expansion for paths.${key}; extend this test`)
   }
+  // The per-source counters, published only with sourceStatistics on.
+  for (const { path } of new Sources(['nmea0183'], 0).values())
+    out.push({ key: 'sources', path })
   return out
 }
 
@@ -101,7 +110,7 @@ describe('docs/paths.md', () => {
     const counters = counterKeys()
     for (const { key, path } of all)
       expect(docs.get(pattern(path))!.kind, path).toBe(
-        counters.has(key) ? 'counter' : 'gauge',
+        counters.has(key) || key === 'sources' ? 'counter' : 'gauge',
       )
   })
 
@@ -115,12 +124,18 @@ describe('docs/paths.md', () => {
         agg.add({ type, mmsi: String(999000100 + s * 2 + type), ...p }, OWN, t)
       }
     const coverage = { cells: 3, areaKm2: 100 }
-    const full = buildValues(agg, t + 1000, coverage).map((v) => v.path)
-    const between = new Set(
-      buildValues(agg, t + 1000, coverage, { sectors: false }).map(
+    const sources = new Sources(['nmea0183'], t).values().map((v) => v.path)
+    const full = [
+      ...buildValues(agg, t + 1000, coverage).map((v) => v.path),
+      ...sources,
+    ]
+    // Source counters go out at every tick, as the plugin sends them.
+    const between = new Set([
+      ...buildValues(agg, t + 1000, coverage, { sectors: false }).map(
         (v) => v.path,
       ),
-    )
+      ...sources,
+    ])
     expect(new Set(full)).toEqual(new Set(all.map((p) => p.path)))
     for (const path of full)
       expect(docs.get(pattern(path))!.cadence, path).toBe(

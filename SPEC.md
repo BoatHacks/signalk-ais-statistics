@@ -251,6 +251,7 @@ subtraction.
 | counter | distance bins | position reports per log-spaced distance bin, used to compute window avg, median, p95 and p99 |
 | counter | sector counts | position reports per sector and class |
 | counter | message health | decode errors, incomplete, duplicates (same and cross event), invalid positions, implausible jumps, reports without own position (2.8) |
+| counter | per source (opt-in) | messages, positions by class, distance bins and message health per server event (5) |
 | gauge | distance, rolling 1 h | average, median, p95, p99 and max distance |
 | gauge | sector p99, rolling 1 h | p99 distance per sector and class |
 | gauge | unique vessels, rolling 1 h and 24 h | total and per type group |
@@ -280,7 +281,18 @@ History is not kept by the plugin. See section 8.
    `signalk-n2kais-to-nmea0183`, work too. Each event has its own decoder
    so multipart messages from different events never mix.
    If the same receiver reaches two events, its messages count twice, so
-   the user lists only one of them (see 12). The only source of message counts, message types and class,
+   the user lists only one of them (see 12). With `sourceStatistics` on
+   (9, #14), each event is also counted on its own, to compare antennas or
+   receivers: one more aggregator per event sees the messages that event
+   delivers, while the main figures stay unchanged and unfiltered (two
+   receivers on two events still count twice there). Per event it keeps
+   messages, positions by class, the distance bins and the health counters
+   (2.8); a duplicate counts on the event that delivered the copy, so
+   cross-event duplicates show receiver overlap and the overview's
+   duplicate hint then counts same-event copies only. Sectors, coverage,
+   vessels and the long-range log stay combined. Sources are labelled by
+   event name only (`sources.<label>`, 6.2); a split per NMEA 2000 device
+   (`src`) may come later. The only source of message counts, message types and class,
    because SignalK's data model does not retain per-message information.
    `!AIVDO` and NMEA 2000 AIS PGNs marked as own transmissions (the
    vessel's own transponder) are excluded from reception statistics.
@@ -319,7 +331,7 @@ effective live settings.
 
 | Route | Returns |
 |---|---|
-| `GET /summary?window=24h` or `?from=&to=` | headline figures: messages, positions, vessels by group, distance avg, p95, p99 and max, and `health`: the health counts (2.8) and `received`, their denominator |
+| `GET /summary?window=24h` or `?from=&to=`, and `&source=` | headline figures (of one source with `source=<label>`, 5): messages, positions, vessels by group, distance avg, p95, p99 and max, and `health`: the health counts (2.8) and `received`, their denominator |
 | `GET /series?metric=&resolution=&from=&to=` | time series for the charts, read from history; `metric` is `messages`, `positions`, `distance`, `vessels` or `health` (each health counter and `received` per bucket), `resolution` in seconds (at least 60, at most 2000 points) |
 | `GET /weather?from=&to=` | the configured weather paths (9) read back from history as hourly averages (`aggregate` says `average`, or `last` for a provider that rejects it), buckets starting on the full hour, at most 7 days; only paths with data; `available` is false without a provider and `historyError` is set when the read fails, with no live fallback |
 | `GET /sectors?window=24h&class=a\|b\|all` or `?from=&to=&class=` | 24 sectors with count and p99 distance (the highest hourly p99 in the window, see 2.6), and the farthest reception `maxM` with its time: `maxAt` when known exactly, otherwise `maxHour`, the start of the hour it fell in |
@@ -329,7 +341,8 @@ effective live settings.
 | `GET /export/longrange.csv?window=7d&anonymise=false` | download: every long-range entry (2.7) in the window, oldest first, `time,mmsi,name,class,ship_type,distance_m,bearing_deg,lat,lon,own_lat,own_lon`; anonymised, only `time,class,ship_type,distance_m,bearing_deg` |
 | `GET /export/longrange.geojson?window=7d` | download: the same entries as GeoJSON points at the reported position, the other fields as properties; full detail only, `anonymise=true` answers 400 |
 | `GET /overlay/coverage.geojson` | the plotter overlay's GeoJSON: the 7 day footprint and the 24 hour sector wedges of class A and B |
-| `GET /status` | live state: tracked targets, own position age, history reachable or not |
+| `GET /sources` | the sources counted on their own, `{ label, event }` each; empty while `sourceStatistics` is off |
+| `GET /status` | live state: tracked targets, own position age, history reachable or not, and per source its messages and health counts since the start |
 | `POST /settings` | saves live settings (body `{ "coverageDistancePercentile": 95 }`), readwrite users only; see above |
 
 The downloads (decisions on #19) take the windows `24h`, `7d` and `all`.
@@ -394,6 +407,13 @@ Counters (monotonic, count since the plugin started):
 - `health.decodeErrors`, `health.incomplete`, `health.duplicates`,
   `health.duplicatesCrossEvent`, `health.positionInvalid`,
   `health.implausibleJumps`, `health.noOwnPosition` (2.8)
+- With `sourceStatistics` on, per server event (5):
+  `sources.<label>.messages.total`, `.positions.classA`, `.classB`,
+  `.other`, `.distance.bin.<nn>` and `.health.<kind>`, 43 paths per
+  event. `<label>` is the event name with every character other than
+  letters and digits replaced by `_`; names that then collide get `_2`,
+  `_3` in config order, logged once. There are no per-source gauges, so a
+  source's window maximum is known from live data only.
 
 Gauges, in SI units like every SignalK path:
 - `distance.avg`, `distance.median`, `distance.p95`, `distance.p99`,
@@ -544,8 +564,10 @@ A SignalK web app, listed in the admin UI, with:
   Below the table, both sector charts (all classes) on one scale. Notes say
   when a window starts before the oldest kept coverage day (coverage is then
   shown as not kept, not as a smaller area), when live data covers only
-  part of a window, and when history failed. The state is in the hash, not
-  in the plugin config. Markers for a change on the charts come later.
+  part of a window, and when history failed. With `sourceStatistics` on, a
+  source picker limits the table to one server event; the sectors and
+  coverage stay combined and the view says so. The state is in the hash,
+  not in the plugin config. Markers for a change on the charts come later.
 - Settings: a collapsed panel at the foot of every page lists the settings
   in effect, read only, and says where to change them.
 
@@ -635,6 +657,7 @@ directly. Consequences:
 | `publishIntervalMinutes` | 5 | how often the statistics paths are published; a divisor of 60; sector paths go out hourly regardless |
 | `publishOverlay` | true | register the plotter extension overlay |
 | `sentenceEvents` | `nmea0183`, `N2KAnalyzerOut` | server events to read AIS from: raw sentences or canboat PGNs; any event names |
+| `sourceStatistics` | false | also count each server event on its own (5); 43 more counter paths per event at every interval, about 12,400 history rows a day each at 5 minutes, so two events about double the history load |
 | `jumpSpeedLimitKnots` | 60 | implied speed above which a position counts as an implausible jump (2.8) |
 | `jumpSpeedLimitHighSpeedKnots` | 120 | the same for ship types 20 to 29 (WIG) and 40 to 49 (high-speed craft) |
 | `jumpSpeedLimitAircraftKnots` | 600 | the same for message 9 (SAR aircraft) |
@@ -821,8 +844,12 @@ help of `max` (6.2). Verified across a plugin restart on the test server.
   the maintainer, #14).** Two windows side by side from data the plugin
   already keeps, so the compare view adds no paths and no history load;
   each window is at most 7 days, like every other window. Change markers on
-  the charts come later. Statistics per server event are opt-in and ship
-  separately; sectors and coverage stay combined.
+  the charts come later. Statistics per server event are opt-in, because
+  each event adds about as many history rows a day as the main figures;
+  they cover messages, positions, distance figures from per-source bins
+  and message health, labelled by event name only, while sectors,
+  coverage and vessels stay combined. A split per NMEA 2000 device comes
+  later, if at all.
 
 ## 13. Open Questions
 

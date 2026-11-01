@@ -14,7 +14,15 @@ uses [Semantic Versioning](https://semver.org/).
   both sector charts on one scale. `GET /summary` and `GET /sectors` take
   `from` and `to` on whole hours instead of `window`, and `GET /coverage`
   takes them as UTC days and reports `retainedFrom`, the oldest kept day.
-  Per-source statistics follow separately.
+- Statistics per server event (#14, setting `sourceStatistics`, off by
+  default): messages, positions by class, distance bins and message health
+  for each configured event under `sensors.ais.statistics.sources.<label>.*`,
+  43 counters per event, beside the unchanged main figures. With two
+  events this about doubles the history load. `GET /summary` takes
+  `source=<label>`, `GET /sources` lists the labels, `GET /status` gives
+  each source's totals, and the compare view gains a source picker. While
+  it is on, the duplicate hint counts copies on the same event only, since
+  copies across events are then receiver overlap.
 
 ## [0.5.0] - 2026-11-01
 
