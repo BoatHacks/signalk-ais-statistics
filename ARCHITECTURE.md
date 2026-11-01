@@ -390,7 +390,7 @@ Published path names are the persistence schema, so they are defined once in
 src/
   index.ts            module export for require()
   plugin.ts           plugin factory, wiring, lifecycle (start/stop)
-  config.ts           schema and defaults
+  config.ts           schema, defaults, form order and live settings
   paths.ts            published path names (the persistence schema)
   histogram.ts        distance bin layout and percentiles
   ingest.ts           sentence reassembly and decode

@@ -121,18 +121,20 @@ MID 999 data. Gaps found in `test/`:
   width, offline, save shown and hidden for each user level.
 
 ## Implementation Steps
-- [ ] Tests for the math gaps and `paths-doc.test.ts`, committed first
-- [ ] `docs/paths.md`; config defaults review, `uiSchema`, SPEC 2.4 default
-      fixed to resolution 6 (SPEC 9 already says 6)
-- [ ] Tests for `POST /settings`, `cap` and `canSave`, committed apart
-- [ ] `LIVE_SETTINGS`, `cap` parameter, `Coverage.setPercentile`, `POST
+- [x] Tests for the math gaps and `paths-doc.test.ts`, committed first
+- [x] `docs/paths.md`; config defaults review, `uiSchema` (`CONFIG_ORDER`);
+      SPEC 2.4 already says resolution 6
+- [x] Tests for `POST /settings`, `cap` and `canSave`, committed apart
+- [x] `LIVE_SETTINGS`, `cap` parameter, `Coverage.setPercentile`, `POST
       /settings`; SPEC 6.1 and ARCHITECTURE 2.9 and 6 in the same commit
-- [ ] Web app: settings panel, cap slider, save button gated by loginStatus
-- [ ] Screenshots regenerated and compressed; README rewritten
-- [ ] Dev server check of save, loginStatus per user level, then the
-      Freeboard-SK check; findings.md, SPEC 6.3, remove 13.1
-- [ ] Roadmap item 9 and the stale NMEA 2000 line in its spike list,
-      README status, CLAUDE.md state, CHANGELOG
+- [x] Web app: settings panel, cap slider, save button gated by loginStatus
+- [x] Dev server check of save and loginStatus per user level
+      (findings.md)
+- [x] Screenshots regenerated and compressed; README rewritten, its
+      configuration table checked by `test/readme.test.ts`
+- [x] Roadmap item 9 and the stale NMEA 2000 line in its spike list
+- [ ] The Freeboard-SK check with the maintainer; findings.md, SPEC 6.3,
+      remove 13.1
 
 ## Files to Create/Modify
 - Create: `docs/paths.md`, `test/paths-doc.test.ts`, `docs/screenshots/*`

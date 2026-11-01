@@ -30,8 +30,9 @@ remains.
       inside a bucket needed `max` as well as `last` (SPEC 6.2).
 - [ ] **Overlay size.** The overlay is served and small (SPEC 6.3); whether
       it stays smooth in Freeboard-SK needs a look in the plotter. (13.1)
-- [x] **NMEA 2000 AIS.** It only arrives on `nmea0183AISout` from a
-      converter plugin; the sentence events are configurable (SPEC 5).
+- [x] **NMEA 2000 AIS.** Read directly from `N2KAnalyzerOut` since 0.2.0;
+      before that it needed a converter plugin's `nmea0183AISout`. The
+      events are configurable (SPEC 5).
 
 ## 1. Plugin scaffold
 
@@ -106,14 +107,15 @@ remains.
 - [x] Registry score items in the repository: plugin CI, changelog,
       synthetic screenshots, a registry-like offline test job
       ([item-9a](item-9a-plugin-and-registry-compliance.md))
-- [ ] Work through [docs/release.md](../release.md): first manual publish,
-      trusted publisher, GitHub Release, repository metadata
-- [ ] README with install, configuration and screenshots that contain no
-      real vessel data
-- [ ] Review SPEC.md and ARCHITECTURE.md against the code and resolve or
-      remove section 13
-- [ ] Privacy pass over the repository and its history before it is made
-      public
+- [x] Work through [docs/release.md](../release.md): first manual publish,
+      trusted publisher, GitHub Release, repository metadata (0.1.0)
+- [x] README with install, configuration and screenshots that contain no
+      real vessel data (#20)
+- [x] Review SPEC.md and ARCHITECTURE.md against the code (#20)
+- [ ] Resolve SPEC section 13: the Freeboard-SK look (13.1) and how
+      displays show the propagation alert (13.2) need the maintainer
+- [x] Privacy pass over the repository and its history, before it was
+      made public and again for #20
 
 ## 10. After the MVP
 
