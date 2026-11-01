@@ -6,6 +6,24 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- A distance cap slider under the map. Moving it redraws the coverage at
+  once; Save stores it in the plugin config, and Reset goes back to the
+  saved value. Save is offered only to readwrite and admin users, or to
+  everyone while the server's security is off. This is the plugin's first
+  write route, `POST /settings`, which accepts only these live settings.
+- A Settings panel at the foot of every page lists the settings in effect.
+- `docs/paths.md` lists every published path with its unit, kind and
+  cadence. There is no stability promise for the paths yet.
+- `GET /coverage` takes `cap` to try another percentile and reports
+  `capPercentile`.
+
+### Fixed
+
+- A distance exactly on a distance bin edge is counted in the bin above
+  it, as documented; one edge (about 0.79 nm) landed in the bin below.
+
 ### Changed
 
 - The bearing view is called "Sectors" instead of "Radar", so it is not
