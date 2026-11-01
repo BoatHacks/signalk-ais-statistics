@@ -6,7 +6,7 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-## [0.3.1] - 2026-11-01
+## [0.3.2] - 2026-11-01
 
 ### Changed
 
@@ -15,6 +15,8 @@ uses [Semantic Versioning](https://semver.org/).
   distance bin, so the radius was set by chance and the 24 hour and 7 day
   radars looked alike. Sectors without such an hour show their count but
   no radius.
+
+## [0.3.1] - 2026-11-01
 
 ### Fixed
 
@@ -116,7 +118,8 @@ First release.
 - A dark tactical web app theme following day and night mode, with
   distances in the server's display units and the plugin's app icon.
 
-[Unreleased]: https://github.com/BoatHacks/signalk-ais-statistics/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/BoatHacks/signalk-ais-statistics/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/BoatHacks/signalk-ais-statistics/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/BoatHacks/signalk-ais-statistics/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/BoatHacks/signalk-ais-statistics/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/BoatHacks/signalk-ais-statistics/compare/v0.1.2...v0.2.0
