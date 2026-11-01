@@ -19,6 +19,16 @@ function point(bearing: number, r: number): [number, number] {
   return [C + r * Math.cos(a), C + r * Math.sin(a)]
 }
 
+/**
+ * The outer ring of a sector chart in metres: it follows the wedges, with
+ * up to a quarter more room for the ticks; ticks beyond it stop at the rim.
+ */
+export function sectorScale(stats: SectorStats): number {
+  const p99 = Math.max(0, ...stats.sectors.map((s) => s.p99M ?? 0))
+  const far = Math.max(0, ...stats.sectors.map((s) => s.maxM ?? 0))
+  return p99 > 0 ? Math.min(Math.max(p99, far), p99 * TICK_ROOM) : far
+}
+
 export class SectorChart {
   readonly element: HTMLElement
   private readonly root: SVGSVGElement
@@ -88,13 +98,16 @@ export class SectorChart {
     this.element.append(this.root, this.tip, this.empty)
   }
 
-  update(stats: SectorStats, unit: Unit, offsetMin?: number): void {
+  update(
+    stats: SectorStats,
+    unit: Unit,
+    offsetMin?: number,
+    /** The outer ring in metres, so charts side by side share a scale. */
+    scaleM?: number,
+  ): void {
     this.data = { stats, unit, offsetMin }
-    // The scale follows the wedges, with up to a quarter more room for the
-    // ticks; ticks beyond it stop at the rim.
-    const p99 = Math.max(0, ...stats.sectors.map((s) => s.p99M ?? 0))
-    const far = Math.max(0, ...stats.sectors.map((s) => s.maxM ?? 0))
-    const max = p99 > 0 ? Math.min(Math.max(p99, far), p99 * TICK_ROOM) : far
+    const own = sectorScale(stats)
+    const max = own > 0 && scaleM !== undefined ? Math.max(own, scaleM) : own
     this.empty.hidden = max > 0
     this.root.style.visibility = max > 0 ? 'visible' : 'hidden'
     if (max === 0) return

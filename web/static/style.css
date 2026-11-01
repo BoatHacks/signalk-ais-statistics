@@ -639,3 +639,35 @@ a.download[aria-disabled='true']:hover {
 .chart .dot {
   opacity: 0.7;
 }
+
+/* Compare view: date controls and the before and after table. */
+.compare-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 0 0 12px;
+}
+.compare-controls label {
+  font: 700 0.8rem var(--font-data);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.compare-controls input,
+.compare-controls select {
+  font: inherit;
+  min-height: 48px;
+  padding: 0 8px;
+  color: var(--text-main);
+  background: var(--bg-panel);
+  border: 1px solid rgba(var(--theme-color-rgb), 0.5);
+  border-radius: 0;
+  color-scheme: dark;
+}
+.compare-notes p {
+  margin: 8px 0 0;
+}
+table.compare th[scope='row'] {
+  font-weight: normal;
+}
