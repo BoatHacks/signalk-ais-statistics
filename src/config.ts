@@ -299,6 +299,41 @@ export const configSchema = {
   },
 }
 
+/**
+ * The order of the options in the server's config form, grouped as the
+ * README's configuration table: AIS input, publishing, coverage, vessel
+ * mode, message health, weather, propagation alerts. Every option appears
+ * exactly once.
+ */
+export const CONFIG_ORDER: (keyof Config)[] = [
+  'sentenceEvents',
+  'sourceStatistics',
+  'ownPositionMaxAgeSeconds',
+  'targetExpirySeconds',
+  'publishIntervalMinutes',
+  'publishOverlay',
+  'h3Resolution',
+  'coverageDistancePercentile',
+  'coverageRetentionDays',
+  'modeDriftRadiusMeters',
+  'modeDriftMinutes',
+  'jumpSpeedLimitKnots',
+  'jumpSpeedLimitHighSpeedKnots',
+  'jumpSpeedLimitAircraftKnots',
+  'weatherPaths',
+  'propagationAlerts',
+  'propagationFactor',
+  'propagationMinVessels',
+  'propagationSustainMinutes',
+  'propagationWindowMinutes',
+  'propagationNotificationState',
+  'propagationNotificationMethods',
+  'propagationSuppressUnderway',
+]
+
+/** How the server's admin UI renders the config form. */
+export const configUiSchema = { 'ui:order': CONFIG_ORDER }
+
 function num(
   value: unknown,
   fallback: number,

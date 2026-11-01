@@ -6,6 +6,7 @@ import { Aggregator, DAY_MS, HOUR_MS, MINUTE_MS } from './aggregate'
 import { registerRoutes, type RouterLike } from './api'
 import {
   configSchema,
+  configUiSchema,
   pickLive,
   resolveConfig,
   type Config,
@@ -317,6 +318,7 @@ export function createPlugin(app: ServerAPI): Plugin {
     description:
       'AIS reception statistics: counts, distance percentiles, bearing sectors and coverage',
     schema: () => configSchema,
+    uiSchema: () => configUiSchema,
 
     start(options) {
       const config = resolveConfig(options)
