@@ -131,3 +131,24 @@ describe('Aggregator', () => {
     expect(p99[1]![6]).toBeUndefined()
   })
 })
+
+describe('Aggregator sector maxima and names', () => {
+  it('keeps the farthest distance per sector and when it was received', () => {
+    const agg = new Aggregator(T0)
+    agg.add(at('999000001', 50, 10), OWN, T0 + 1000)
+    agg.add(at('999000002', 52, 300), OWN, T0 + 2000)
+    agg.add(at('999000003', 51, 20), OWN, T0 + 3000)
+    const h = agg.lastHour(T0 + 4000)
+    expect(h.sectorMaxNm[0]![3]).toBeCloseTo(300, 0)
+    expect(h.sectorMaxAt[0]![3]).toBe(T0 + 2000)
+    expect(h.sectorMaxNm[1]![3]).toBe(0)
+  })
+
+  it('remembers vessel names from static messages', () => {
+    const agg = new Aggregator(T0)
+    agg.add({ type: 5, mmsi: '999000004', name: 'SYNTHETIC' }, OWN, T0)
+    agg.add(at('999000004', 10, 5), OWN, T0 + 1000)
+    expect(agg.vessel('999000004').name).toBe('SYNTHETIC')
+    expect(agg.vessel('999000005').name).toBeUndefined()
+  })
+})

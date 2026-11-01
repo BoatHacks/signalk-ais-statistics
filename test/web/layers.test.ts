@@ -23,6 +23,13 @@ describe('map layer visibility', () => {
     expect(layerVisible('radar')).toBe(true)
   })
 
+  it('hides the cells beyond the cap until switched on', () => {
+    vi.stubGlobal('localStorage', fakeStorage())
+    expect(layerVisible('capped')).toBe(false)
+    saveLayerVisible('capped', true)
+    expect(layerVisible('capped')).toBe(true)
+  })
+
   it('shows both layers when storage is unavailable', () => {
     vi.stubGlobal('localStorage', {
       getItem: () => {
@@ -33,6 +40,7 @@ describe('map layer visibility', () => {
       },
     })
     expect(layerVisible('cells')).toBe(true)
+    expect(layerVisible('capped')).toBe(false)
     expect(() => saveLayerVisible('cells', false)).not.toThrow()
   })
 })

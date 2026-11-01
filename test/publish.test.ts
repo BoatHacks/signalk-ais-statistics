@@ -29,6 +29,20 @@ describe('buildValues', () => {
     expect(values).toHaveLength(4 + 32 + 2 + 14)
   })
 
+  it('publishes the farthest reception per sector with the sector paths', () => {
+    const agg = new Aggregator(T0)
+    agg.add(
+      { type: 1, mmsi: '999000001', ...destination(OWN, 50, 300) },
+      OWN,
+      T0,
+    )
+    const byPath = new Map(
+      buildValues(agg, T0 + 1000).map((v) => [v.path, v.value]),
+    )
+    expect(byPath.get(paths.sectorMax(3, 'a'))).toBeCloseTo(300 * 1852, -2)
+    expect(byPath.has(paths.sectorMax(3, 'b'))).toBe(false)
+  })
+
   it('publishes only finite numbers under the prefix', () => {
     const agg = new Aggregator(T0)
     const p = destination(OWN, 37, 25)
@@ -71,8 +85,9 @@ describe('publish', () => {
     const byPath = new Map(meta.map((m) => [m.path, m.meta]))
     expect(byPath.get(paths.distanceP99)?.units).toBe('m')
     expect(byPath.get(paths.sectorP99(23, 'b'))?.units).toBe('m')
+    expect(byPath.get(paths.sectorMax(23, 'b'))?.units).toBe('m')
     expect(byPath.get(paths.coverageAreaToday)?.units).toBe('m2')
     expect(byPath.has(paths.messagesTotal)).toBe(false)
-    expect(meta).toHaveLength(5 + 48 + 1)
+    expect(meta).toHaveLength(5 + 48 + 48 + 1)
   })
 })

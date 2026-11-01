@@ -120,6 +120,65 @@ describe('Query with history', () => {
     }
   })
 
+  it('reports the farthest reception per sector with its time', async () => {
+    const far = T0 + 30 * MINUTE_MS + 5000
+    const build = () => {
+      const history = new FakeHistory()
+      const agg = new Aggregator(T0)
+      for (let m = 0; m < 150; m++) {
+        const t = T0 + m * MINUTE_MS
+        agg.add(report(999000001, 50, 10), OWN, t + 1000)
+        if (m === 30) agg.add(report(999000009, 52, 300), OWN, far)
+        history.record(buildValues(agg, t + 59_000), t + 59_000)
+      }
+      return { history, agg }
+    }
+    const now = T0 + 150 * MINUTE_MS
+
+    const live = build()
+    const l = await new Query(live.agg, () => nullHistoryReader).radar(
+      '24h',
+      'a',
+      now,
+    )
+    expect(l.sectors[3]!.maxM).toBeCloseTo(300 * NM, -2)
+    expect(l.sectors[3]!.maxAt).toBe(new Date(far).toISOString())
+    expect(l.sectors[4]!.maxM).toBeNull()
+
+    const h = build()
+    const fromHistory = await new Query(
+      h.agg,
+      () => new HistoryApiReader(h.history),
+    ).radar('24h', 'a', now)
+    expect(fromHistory.source).toBe('history')
+    expect(fromHistory.sectors[3]!.maxM).toBeCloseTo(300 * NM, -2)
+    expect(fromHistory.sectors[3]!.maxAt).toBeNull()
+    expect(fromHistory.sectors[3]!.maxHour).not.toBeNull()
+
+    const maxM = fromHistory.sectors[3]!.maxM!
+    const withLog = await new Query(
+      h.agg,
+      () => new HistoryApiReader(h.history),
+      60,
+      () => {},
+      async () => [
+        {
+          time: new Date(far).toISOString(),
+          mmsi: '999000009',
+          cls: 'A',
+          distanceM: maxM,
+          bearingDeg: 52,
+          lat: 0,
+          lon: 0,
+          ownLat: 0,
+          ownLon: 0,
+        },
+      ],
+    ).radar('24h', 'a', now)
+    expect(withLog.sectors[3]!.maxAt).toBe(new Date(far).toISOString())
+    expect(withLog.sectors[3]!.maxHour).toBeNull()
+  })
+
   it('starts history series on a whole bucket', async () => {
     const history = new FakeHistory()
     const agg = new Aggregator(T0)
