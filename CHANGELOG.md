@@ -44,6 +44,10 @@ uses [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Every sector with a reception shows its farthest-reception tick, drawn
+  from the centre to a dot at that distance, also when the farthest
+  reception is at the wedge's edge. The tick of the chart's farthest
+  reception is broader.
 - The daily long-range files are version 2, with the fastest list beside
   the farthest receptions. Version 1 files still load.
 

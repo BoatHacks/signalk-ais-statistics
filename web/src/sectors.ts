@@ -1,9 +1,11 @@
 // Bearing sectors: one wedge per 15 degree sector, radius the sector's p99
-// distance, north up, and a thin tick along each sector's centre out to its
-// farthest reception. Built once; updates move the wedges and ticks and
-// relabel the rings.
+// distance, north up, and a thin tick along each sector's centre line from
+// the centre out to its farthest reception, ending in a dot. The chart's farthest reception has a
+// broader tick. Built once; updates move the wedges and ticks and relabel
+// the rings.
 import type { SectorStats } from './api'
 import { el, svg } from './format'
+import { sectorLayout } from './ticks'
 import { maxTime } from './time'
 import type { Unit } from './units'
 
@@ -11,8 +13,6 @@ const SIZE = 320
 const C = SIZE / 2
 const R = C - 28
 const RINGS = [0.25, 0.5, 0.75, 1]
-/** Scale room beyond the longest wedge, so the far ticks stay visible. */
-const TICK_ROOM = 1.25
 
 function point(bearing: number, r: number): [number, number] {
   const a = ((bearing - 90) * Math.PI) / 180
@@ -26,6 +26,8 @@ export class SectorChart {
   private readonly wedges: SVGPathElement[] = []
   private readonly ticks: SVGLineElement[] = []
   private readonly tickHits: SVGLineElement[] = []
+  private readonly dots: SVGCircleElement[] = []
+  private readonly dotHits: SVGCircleElement[] = []
   private readonly tip: HTMLElement
   private readonly empty: HTMLElement
   private data:
@@ -74,11 +76,23 @@ export class SectorChart {
       const t = svg('line', { stroke: color, class: 'tick' })
       // A wide invisible line over the thin tick makes it easy to hover.
       const hit = svg('line', { class: 'tick-hit' })
-      hit.addEventListener('pointerenter', () => this.showMax(s))
-      hit.addEventListener('pointerleave', () => (this.tip.hidden = true))
+      const dot = svg('circle', {
+        r: 2.5,
+        fill: color,
+        stroke: color,
+        class: 'tick-dot',
+      })
+      // The dot is all there is when the reception is at the wedge's edge.
+      const dotHit = svg('circle', { r: 7, class: 'dot-hit' })
+      for (const h of [hit, dotHit]) {
+        h.addEventListener('pointerenter', () => this.showMax(s))
+        h.addEventListener('pointerleave', () => (this.tip.hidden = true))
+      }
       this.ticks.push(t)
       this.tickHits.push(hit)
-      this.root.append(t, hit)
+      this.dots.push(dot)
+      this.dotHits.push(dotHit)
+      this.root.append(t, dot, hit, dotHit)
     }
     this.empty = el(
       'p',
@@ -90,35 +104,42 @@ export class SectorChart {
 
   update(stats: SectorStats, unit: Unit, offsetMin?: number): void {
     this.data = { stats, unit, offsetMin }
-    // The scale follows the wedges, with up to a quarter more room for the
-    // ticks; ticks beyond it stop at the rim.
-    const p99 = Math.max(0, ...stats.sectors.map((s) => s.p99M ?? 0))
-    const far = Math.max(0, ...stats.sectors.map((s) => s.maxM ?? 0))
-    const max = p99 > 0 ? Math.min(Math.max(p99, far), p99 * TICK_ROOM) : far
+    const { max, ticks } = sectorLayout(stats, R)
     this.empty.hidden = max > 0
     this.root.style.visibility = max > 0 ? 'visible' : 'hidden'
     if (max === 0) return
     const scale = R / max
     this.ticks.forEach((t, i) => {
       const s = stats.sectors[i]
-      const hit = this.tickHits[i]!
-      const inner = (s?.p99M ?? 0) * scale
-      const outer = Math.min(R, (s?.maxM ?? 0) * scale)
-      if (!s || s.maxM === null || outer <= inner) {
-        for (const l of [t, hit]) l.setAttribute('visibility', 'hidden')
+      const tick = ticks[i]
+      const parts = [t, this.tickHits[i]!, this.dots[i]!, this.dotHits[i]!]
+      if (!s || !tick) {
+        for (const e of parts) e.setAttribute('visibility', 'hidden')
         return
       }
+      for (const e of parts) e.setAttribute('visibility', 'visible')
       const mid = (s.fromDeg + s.toDeg) / 2
-      const [x1, y1] = point(mid, inner)
-      const [x2, y2] = point(mid, outer)
-      for (const l of [t, hit]) {
-        l.setAttribute('visibility', 'visible')
+      const [x2, y2] = point(mid, tick.outer)
+      // The tick starts at the centre; its hover area starts at the wedge's
+      // edge, so the wedge keeps its own hover.
+      const line = (l: SVGLineElement, r: number) => {
+        const [x1, y1] = point(mid, r)
         l.setAttribute('x1', String(x1))
         l.setAttribute('y1', String(y1))
         l.setAttribute('x2', String(x2))
         l.setAttribute('y2', String(y2))
       }
-      t.classList.toggle('clipped', s.maxM * scale > R)
+      line(t, 0)
+      line(this.tickHits[i]!, tick.wedge)
+      for (const c of [this.dots[i]!, this.dotHits[i]!]) {
+        c.setAttribute('cx', String(x2))
+        c.setAttribute('cy', String(y2))
+      }
+      t.classList.toggle('clipped', tick.clipped)
+      t.classList.toggle('farthest', tick.farthest)
+      this.dots[i]!.classList.toggle('clipped', tick.clipped)
+      this.dots[i]!.classList.toggle('farthest', tick.farthest)
+      this.dots[i]!.setAttribute('r', tick.farthest ? '3.5' : '2.5')
     })
     RINGS.forEach((f, i) => {
       this.ringLabels[i]!.textContent = unit.format(max * f)

@@ -475,7 +475,7 @@ class SectorsView extends HTMLElement implements ViewElement {
       el(
         'p',
         { class: 'muted small' },
-        'Radius per 15° sector: the highest hourly p99 distance in the window, from hours with at least 20 reports in the sector. The thin tick reaches out to the farthest reception.',
+        'Radius per 15° sector: the highest hourly p99 distance in the window, from hours with at least 20 reports in the sector. Each thin tick runs from the centre to a dot at the farthest reception in its sector; the broader tick marks the farthest reception of the chart.',
       ),
       el(
         'div',

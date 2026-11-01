@@ -318,9 +318,26 @@ svg.sectors .axis {
 }
 .tick {
   stroke-width: 1;
+  pointer-events: none;
+}
+.tick-dot {
+  pointer-events: none;
+  stroke-width: 0;
 }
 .tick.clipped {
   stroke-dasharray: 3 2;
+}
+.tick.farthest {
+  stroke-width: 2.5;
+}
+/* Beyond the rim: a hollow dot where the tick stops. */
+.tick-dot.clipped {
+  fill: var(--bg-panel);
+  stroke-width: 1.5;
+}
+.dot-hit {
+  fill: transparent;
+  pointer-events: fill;
 }
 .tick-hit {
   stroke: transparent;
