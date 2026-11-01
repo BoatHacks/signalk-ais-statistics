@@ -12,9 +12,9 @@ server; the open points are in SPEC section 13.
 - Count vessels (by type group and class A/B), positions and messages per
   minute and hour.
 - Report how far your receiver reaches: average, median, p95, p99 and max
-  distance, plus a 24-sector bearing radar per class. Percentiles keep the
+  distance, plus 24 bearing sectors per class. Percentiles keep the
   numbers meaningful when a bad position arrives.
-- Keep the far ones visible: a thin tick per radar sector reaches out to
+- Keep the far ones visible: a thin tick per sector reaches out to
   its farthest reception, and a daily log lists the farthest receptions
   with time, vessel name and MMSI, and both positions, so a ducting or
   sporadic E event can be told from a wrong position.
@@ -24,7 +24,7 @@ server; the open points are in SPEC section 13.
   every 5 minutes by default, so any history provider (QuestDB, InfluxDB,
   ...) records it. Windows reach back up to 7 days, so about 14 days of
   history retention for these paths is plenty.
-- Show graphs, a radar and a coverage map in a SignalK web app that works on
+- Show graphs, the bearing sectors and a coverage map in a SignalK web app that works on
   a phone and offline.
 - Offer the coverage footprint as an overlay layer for chart plotters that
   support Plotter Extensions, such as Freeboard-SK 3.4.0 or later.

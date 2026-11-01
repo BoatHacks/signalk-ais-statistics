@@ -137,13 +137,13 @@ positions, and the count of unique vessels per hour and per type group.
 For each of 24 sectors and for each class: number of position reports and
 the p99 distance, per hour bucket, from a coarse per-sector histogram (the
 distance bins merged in pairs, 16 bins). The
-radar shows, per sector, the highest hourly p99 in the window (a
+sectors view shows, per sector, the highest hourly p99 in the window (a
 conservative figure, since percentiles do not merge exactly from hourly
 values), counting only hours with at least 20 reports in that sector. The
 sector's report count still includes every hour.
 
 Each hour bucket also keeps the farthest reception per sector and class and
-when it arrived. The radar draws it as a thin tick beyond the sector's
+when it arrived. The sectors view draws it as a thin tick beyond the sector's
 wedge (from the centre when the sector has no radius), so rare far
 receptions such as sporadic E or tropospheric ducting stay visible without
 moving the radius. The maximum is untrusted like every maximum (2.3).
@@ -237,10 +237,10 @@ including when it is embedded in another page such as an infodisplay panel.
 |---|---|
 | `GET /summary?window=24h` | headline figures: messages, positions, vessels by group, distance avg, p95, p99 and max |
 | `GET /series?metric=&resolution=&from=&to=` | time series for the charts, read from history; `metric` is `messages`, `positions`, `distance` or `vessels`, `resolution` in seconds (at least 60, at most 2000 points) |
-| `GET /radar?window=24h&class=a\|b\|all` | 24 sectors with count and p99 distance (the highest hourly p99 in the window, see 2.6), and the farthest reception `maxM` with its time: `maxAt` when known exactly, otherwise `maxHour`, the start of the hour it fell in |
+| `GET /sectors?window=24h&class=a\|b\|all` | 24 sectors with count and p99 distance (the highest hourly p99 in the window, see 2.6), and the farthest reception `maxM` with its time: `maxAt` when known exactly, otherwise `maxHour`, the start of the hour it fell in. `GET /radar`, the route's earlier name, answers the same |
 | `GET /coverage?window=7d&all=false` | cell ids, GeoJSON for the map, covered area in m²; windows `24h` (today) and `7d`; `all=true` adds the cells beyond the distance cap, marked `capped` |
 | `GET /longrange?window=24h` | the 25 farthest entries of the long-range log (2.7) in the window, farthest first; windows `24h` and `7d` |
-| `GET /overlay/coverage.geojson` | the plotter overlay's GeoJSON: the 7 day footprint and the 24 hour radar wedges |
+| `GET /overlay/coverage.geojson` | the plotter overlay's GeoJSON: the 7 day footprint and the 24 hour sector wedges of class A and B |
 | `GET /status` | live state: tracked targets, own position age, history reachable or not |
 
 Windows accept `1h`, `24h` and `7d`. Responses are JSON in SI units
@@ -258,9 +258,9 @@ persistence contract (section 8). All published values are numeric, so any
 History API provider can store and return them. Every counter is published
 at each publish interval (`publishIntervalMinutes`, default 5), whether or
 not it changed, except the per-sector counters, p99 and maximum distances,
-which are published once an hour and on stop: the radar keeps the highest
+which are published once an hour and on stop: the sectors keep the highest
 hourly p99 and the maximum per sector, so finer updates add nothing. History therefore holds the
-radar's closed hours, and the open hour comes from the live state. A gauge with no data (for example
+sectors' closed hours, and the open hour comes from the live state. A gauge with no data (for example
 no position with a known own position in the last hour) is left out of the
 delta rather than published as zero or null; the web app's distance series
 come from the bin counters, not from these gauges.
@@ -329,20 +329,23 @@ button:
   `/plugins/signalk-ais-statistics/overlay/coverage.geojson`, which the
   plotter fetches with the user's credentials: H3 cell polygons for the last
   7 days (`kind: "cell"`, with `id`, a coverage `intensity` from 0 to 1 and
-  the report count), plus the 24 hour sector radar as wedges from the last
-  known own position (`kind: "radar"`), and a line per sector along its
-  centre bearing from the wedge out to the farthest reception
-  (`kind: "radar-max"`, with `maxM` and its time). A fill layer colours
+  the report count), plus the 24 hour sectors of class A and B as wedges
+  from the last known own position (`kind: "sector"`), and a line per
+  sector along its centre bearing from the wedge out to the farthest
+  reception (`kind: "sector-max"`, with `maxM` and its time). Each sector
+  feature carries its class in `cls` (`a` or `b`). A fill layer colours
   cells by `intensity` on a magenta to purple ramp, which contrasts with
   chart water and land, a line layer outlines each cell in the same ramp,
-  another line layer outlines the radar, and a thin one draws the maxima.
+  another line layer outlines the sectors, teal for class A and orange for
+  class B as on the web app's sectors page, and a thin one draws the
+  maxima in the same class colours.
 - Live updates need a context that calls `overlay.refresh`, so the manifest
   also declares an optional `background.iframe` page,
   `/signalk-ais-statistics/plotterext/refresh.html` (part of the web app
   bundle), that does so hourly. Without it the overlay still shows, and
   refreshes when the plotter reloads it.
 - On the test server the GeoJSON for a few hours of traffic was about 8 KB
-  (12 cells, 15 radar wedges), and all overlay routes answered without
+  (12 cells, 15 sector wedges), and all overlay routes answered without
   authentication on a server that allows read-only access.
 - The overlay is a plotter feature, so it works wherever the plotter
   supports Plotter Extensions; other plotters (for example OpenCPN) are not
@@ -355,16 +358,17 @@ A SignalK web app, listed in the admin UI, with:
 - Overview: type group counts, class A/B split, rates, distance p95 and p99.
 - Charts: positions and messages per hour split by class, distance avg,
   p95 and p99 per hour (max shown separately and marked untrusted).
-- Radar: the 24-sector bearing view for class A and B, with a thin tick
+- Sectors: the 24-sector bearing view for class A and B (`#/sectors`; the
+  older `#/radar` link opens it too), with a thin tick
   per sector out to its farthest reception (hover shows distance and time;
   a tick beyond the scale stops at the rim and is dashed), and below it a
   table of the farthest receptions from the long-range log (2.7): time,
   distance, bearing, class, vessel name and MMSI, its position and the own
   position.
-- Map: the coverage footprint with a window selector (day, 7 days), the 24 hour radar wedges and maxima from the plotter overlay, on-screen
+- Map: the coverage footprint with a window selector (day, 7 days), the 24 hour sector wedges and maxima of class A and B from the plotter overlay, in the class colours of the sectors view, on-screen
   toggles that show or hide the cells, the sparse cells beyond the distance cap
-  (`All cells`, off by default, drawn dashed) and the radar (remembered
-  per browser), and an on-screen basemap switch between OpenStreetMap with
+  (`All cells`, off by default, drawn dashed) and the class A and B
+  sectors (`Sectors A`, `Sectors B`, remembered per browser), and an on-screen basemap switch between OpenStreetMap with
   OpenSeaMap overlay, and the SignalK server's chart provider. Default:
   OSM/OpenSeaMap when the internet is available and the connection is not
   metered, read from `network.internet.state` (`online`, `offline` or
@@ -406,7 +410,7 @@ provider (QuestDB, InfluxDB or any other) and never talks to a database
 directly. Consequences:
 
 - Anything the web app must show over time has to be published as a numeric
-  path (6.2); that is why the radar and histogram bins are published.
+  path (6.2); that is why the sector and histogram bins are published.
 - If no history provider is registered, or it does not answer, the plugin
   runs in live-only mode: deltas are still published, the web app shows the
   current window it holds in memory, and `/status` says history is
@@ -459,10 +463,10 @@ directly. Consequences:
 - Rates and vessel counts per minute and hour.
 - Distance statistics (avg, median, p95, p99, max) over all positions, with
   no filtering.
-- 24 sector radar per class, from per-sector p99.
+- 24 bearing sectors per class, from per-sector p99.
 - Coverage cells and area per day.
 - SignalK path publication (6.2).
-- Web app with overview, charts, radar and map (7).
+- Web app with overview, charts, sectors and map (7).
 - Overlay resource set for chart plotters (6.3).
 
 ### 10.2 Post-MVP / Deferred
@@ -523,7 +527,7 @@ help of `max` (6.2). Verified across a plugin restart on the test server.
 - **Read-only users may use the web app (chosen by the maintainer).** Needs
   explicit route permissions, since SignalK defaults plugin routes to
   admin-only.
-- **Radar keeps the highest hourly p99 per sector, from hours with at
+- **Sectors keep the highest hourly p99 per sector, from hours with at
   least 20 reports in the sector (chosen by the maintainer).** In a
   sector-hour with few reports, p99 lands at the top of its distance bin,
   so sparse hours set the radius by chance and every window showed the
@@ -533,8 +537,8 @@ help of `max` (6.2). Verified across a plugin restart on the test server.
   count but no radius.
 - **Far receptions as a tick and a log, not in the radius (chosen by the
   maintainer).** The 20 report minimum keeps rare far receptions out of
-  the radius, but they can be real propagation worth seeing. The radar
-  draws the sector maximum as a thin tick with its time on hover, and the
+  the radius, but they can be real propagation worth seeing. The sectors
+  view draws the sector maximum as a thin tick with its time on hover, and the
   long-range log keeps who sent each far position and where both stations
   were, which history cannot store. Cost: 48 more hourly paths and a small
   daily file. Rejected: publishing the time of the maximum as a path (an
@@ -577,6 +581,13 @@ help of `max` (6.2). Verified across a plugin restart on the test server.
   the sentence decoder writes them, so a coast station (`00MIDxxxx`) keys
   the same from either input.
 
+- **The bearing view is called "sectors", not "radar" (chosen by the
+  maintainer).** "Radar" invited confusion with a real radar overlay on
+  the plotter. The view, its route, the overlay layers and feature kinds
+  use "sectors"; `GET /radar` and `#/radar` stay as aliases so older links
+  keep working. On the map and in the plotter the sectors are drawn per
+  class, in the same colours as the sectors view.
+
 ## 13. Open Questions
 
 Checked on 2026-10-30 against a test server (SignalK server 2.35.1) with
@@ -587,4 +598,5 @@ unverified.
 1. **Overlay smoothness in Freeboard-SK.** The overlay is served and
    small, but nobody has yet looked at it in the plotter, and how large a
    GeoJSON source it handles smoothly (hundreds of cells over 7 days) is
-   untested.
+   untested. Whether the class A teal and class B orange sector outlines
+   read well on chart water and land there is also unchecked.

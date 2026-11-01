@@ -6,7 +6,7 @@ start with [README.md](README.md).
 ## What this is
 
 A SignalK server plugin (TypeScript) that computes AIS reception statistics
-on the vessel: counts, distance percentiles, a bearing radar and coverage.
+on the vessel: counts, distance percentiles, bearing sectors and coverage.
 It publishes numeric paths under `sensors.ais.statistics.*`, reads history
 back through the SignalK History API, serves a web app, and offers the
 coverage footprint as a Freeboard-SK plotter overlay.

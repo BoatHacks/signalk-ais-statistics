@@ -6,6 +6,18 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- The bearing view is called "Sectors" instead of "Radar", so it is not
+  mistaken for a radar overlay. The page is `#/sectors` and the REST route
+  `GET /sectors`; the old `#/radar` and `GET /radar` keep working.
+- The map and the plotter overlay draw the 24 hour sectors per class,
+  teal for class A and orange for class B as on the sectors page. The map
+  has a toggle for each class ("Sectors A", "Sectors B"); a saved choice
+  for the old "Radar 24h" toggle carries over to both. The overlay's
+  sector features are now `kind: "sector"` and `"sector-max"` with the
+  class in `cls`.
+
 ## [0.4.0] - 2026-11-01
 
 ### Added

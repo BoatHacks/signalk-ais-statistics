@@ -22,7 +22,7 @@ plugin's data directory.
  │                                                        Live state                       │
  │                                                              │                          │
  ├─ /plugins/signalk-ais-statistics/* ◄── REST API ◄── Query layer ◄── HistoryReader ◄─────┘
- ├─ public/ web app (graphs, radar, map) ──────────────► REST API
+ ├─ public/ web app (graphs, sectors, map) ────────────► REST API
  └─ resources API (plotterExtensions) ◄── Overlay provider ◄── Coverage
 ```
 
@@ -61,7 +61,7 @@ is filtered (SPEC 2.3). Coverage applies its own percentile cap (see 2.5 below).
 ### 2.4 Aggregator
 Keeps the cumulative counters since start, the minute buckets of the last
 hour (rolling gauges), the hour buckets of the last 24 hours (live-only
-windows and the radar), and a vessel registry of MMSI to last seen, ship
+windows and the sectors), and a vessel registry of MMSI to last seen, ship
 type and name (pruned after 24 hours, capped at 50000) that answers unique counts
 for any window up to 24 hours. For each decoded message it updates counts,
 the fixed log-spaced distance histogram of `histogram.ts` (average, median,
@@ -77,7 +77,7 @@ to the 50 farthest (SPEC 2.7), fills in names the registry learns later
 that day, and writes `longrange-YYYY-MM-DD.json` beside the coverage files
 hourly, at the day change and on stop. Writes are queued so two never
 share a temporary file. Earlier days are read on first use and pruned with
-`coverageRetentionDays`. It also gives the radar exact times for the
+`coverageRetentionDays`. It also gives the sectors exact times for the
 sector maxima read from history.
 
 ### 2.5 Coverage
@@ -121,7 +121,7 @@ buckets by window, never finer than the publish interval), with reset detection:
 predecessor starts a new segment counted from zero, and the bucket's `max`
 adds what was counted before a restart inside that bucket (a `max` above
 the bucket's `last` also marks one). Series start on a whole multiple of
-their resolution, so hourly bars begin on the hour. The radar reads the
+their resolution, so hourly bars begin on the hour. The sectors query reads the
 closed hours from history and adds the open hour from the live bucket,
 because the sector paths are published hourly. Only hours with at least
 20 reports in a sector count toward its p99 (`MIN_SECTOR_REPORTS`). The
@@ -148,7 +148,8 @@ Registers a read-only `plotterExtensions` resource provider through
 plugin runs (the pattern `@meri-imperiumi/signalk-internet` uses). The
 MapLibre style is inline in the manifest; its GeoJSON source is the
 read-only route `/overlay/coverage.geojson`, built on request from Coverage
-and the radar (wedges and `radar-max` lines). A static background page in the web app bundle calls
+and the class A and B sectors (`sector` wedges and `sector-max` lines,
+each with its class in `cls`). A static background page in the web app bundle calls
 `overlay.refresh` hourly through the plotter extension bus (SPEC 6.3).
 Nothing is written into the package directory at run time.
 
@@ -164,11 +165,12 @@ provider); its default follows the internet-status plugin's online and
 metered state when present, and a manual choice is remembered in
 `localStorage`. Toggles show or hide the coverage cells, the cells beyond
 the distance cap (fetched with `all=true`, drawn dashed, off by default)
-and the radar (`layers.ts`, also remembered in `localStorage`). The radar
-view draws the sector maxima as ticks with a wide invisible hover line,
+and the class A and B sectors (`layers.ts`, also remembered in
+`localStorage`; a saved choice for the older single radar toggle carries
+over to both). The sectors view draws the sector maxima as ticks with a wide invisible hover line,
 leaves a quarter more room on the scale for them, and lists `/longrange`
-in a table. The radar wedges
-come from the overlay GeoJSON route, and the cell and radar colours are
+in a table. The map's sector wedges
+come from the overlay GeoJSON route, and the cell and sector colours are
 imported from `src/style.ts`, which the plotter overlay uses too, so the
 app map and the plotter look the same.
 
@@ -257,8 +259,8 @@ src/
   history.ts          HistoryReader interface and History API implementation
   query.ts            windowed queries
   api.ts              REST routes
-  overlay.ts          plotterExtensions provider, manifest and radar wedges
-  style.ts            coverage and radar colours shared by overlay and web app
+  overlay.ts          plotterExtensions provider, manifest and sector wedges
+  style.ts            coverage and sector colours shared by overlay and web app
   geo.ts              haversine, bearing, sector
   types/              typings for untyped dependencies
 web/src/              web app source, built into public/ by web/build.mjs

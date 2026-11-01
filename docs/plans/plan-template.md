@@ -1,6 +1,6 @@
 # Implementation Plan: <issue # / short title>
 
-Name the file after the issue, for example `issue-12-sector-radar.md`. Keep
+Name the file after the issue, for example `issue-12-sector-ticks.md`. Keep
 it short: this is a working plan, not a spec. If it needs to restate
 requirements at length, those belong in [SPEC.md](../../SPEC.md) and this
 plan should link there.
