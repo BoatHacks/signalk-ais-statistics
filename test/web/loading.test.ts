@@ -8,7 +8,7 @@ function target() {
     classList: {
       add: (c: string) => void classes.add(c),
       remove: (c: string) => void classes.delete(c),
-    } as unknown as DOMTokenList,
+    },
   }
 }
 
