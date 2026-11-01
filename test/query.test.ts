@@ -439,3 +439,106 @@ describe('Query message health', () => {
     })
   })
 })
+
+describe('Query.weather', () => {
+  const PRESSURE = 'environment.outside.pressure'
+  const AIR = 'environment.outside.temperature'
+  const HUMIDITY = 'environment.outside.relativeHumidity'
+
+  /** A pressure ramp from 100000 to 102000 Pa and a steady air temperature. */
+  function weatherHistory(hours: number): FakeHistory {
+    const history = new FakeHistory()
+    for (let m = 0; m < hours * 60; m += 10) {
+      const t = T0 + m * MINUTE_MS
+      history.record(
+        [
+          { path: PRESSURE, value: 100000 + (2000 * m) / (hours * 60) },
+          { path: AIR, value: 288.15 },
+        ],
+        t,
+      )
+    }
+    return history
+  }
+
+  function query(history: FakeHistory | undefined, paths: string[]) {
+    return new Query(
+      new Aggregator(T0),
+      () => (history ? new HistoryApiReader(history) : nullHistoryReader),
+      60,
+      () => {},
+      undefined,
+      () => paths,
+    )
+  }
+
+  it('reads hourly averages in one request, from the full hour', async () => {
+    const history = weatherHistory(24)
+    const q = query(history, [PRESSURE, AIR, HUMIDITY])
+    const w = await q.weather(T0 + 30 * MINUTE_MS, T0 + 24 * HOUR_MS)
+    expect(history.requests).toHaveLength(1)
+    const req = history.requests[0]!
+    expect(req.resolution).toBe(3600)
+    expect(req.from!.epochMilliseconds).toBe(T0)
+    expect(req.pathSpecs.map((p) => p.aggregate)).toEqual([
+      'average',
+      'average',
+      'average',
+    ])
+    expect(w.available).toBe(true)
+    expect(w.aggregate).toBe('average')
+    expect(w.times[0]).toBe(new Date(T0).toISOString())
+    expect(w.times).toHaveLength(24)
+    // Humidity has no samples, so it is left out.
+    expect(w.series.map((s) => s.path)).toEqual([PRESSURE, AIR])
+    const p = w.series[0]!.values
+    // The first hour averages samples at 0 to 50 minutes of the ramp.
+    expect(p[0]).toBeCloseTo(100000 + (2000 * 25) / 1440, 3)
+    expect(p[23]! > p[0]!).toBe(true)
+    for (const v of w.series[1]!.values) expect(v).toBeCloseTo(288.15, 9)
+  })
+
+  it('falls back to last when the provider rejects average, and stays there', async () => {
+    const history = weatherHistory(6)
+    history.rejects.add('average')
+    const errors: unknown[] = []
+    const q = new Query(
+      new Aggregator(T0),
+      () => new HistoryApiReader(history),
+      60,
+      (e) => errors.push(e),
+      undefined,
+      () => [PRESSURE],
+    )
+    const w = await q.weather(T0, T0 + 6 * HOUR_MS)
+    expect(w.aggregate).toBe('last')
+    expect(w.historyError).toBeUndefined()
+    expect(w.series[0]!.values).toHaveLength(6)
+    expect(errors).toHaveLength(1)
+    history.requests = []
+    await q.weather(T0, T0 + 6 * HOUR_MS)
+    expect(history.requests.map((r) => r.pathSpecs[0]!.aggregate)).toEqual([
+      'last',
+    ])
+  })
+
+  it('reports a failed read without series', async () => {
+    const history = weatherHistory(6)
+    history.rejects.add('average')
+    history.rejects.add('last')
+    const w = await query(history, [PRESSURE]).weather(T0, T0 + 6 * HOUR_MS)
+    expect(w.available).toBe(true)
+    expect(w.series).toEqual([])
+    expect(w.historyError).toBeTruthy()
+  })
+
+  it('is unavailable without a provider and empty without paths', async () => {
+    expect(
+      (await query(undefined, [PRESSURE]).weather(T0, T0 + HOUR_MS)).available,
+    ).toBe(false)
+    const history = weatherHistory(2)
+    const w = await query(history, []).weather(T0, T0 + HOUR_MS)
+    expect(w).toMatchObject({ available: true, series: [] })
+    expect(history.requests).toHaveLength(0)
+  })
+})
