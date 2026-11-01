@@ -544,6 +544,10 @@ It follows the SignalK plugin UI guideline the maintainer adopted (a dark
 - Views selected by hash routes (`#/charts?window=7d`); one WebSocket for
   mode, time offset and internet state, throttled to one update per 5 s,
   reconnecting with backoff and showing an offline banner while down.
+- A button or tab whose click starts a load fades out and in, one cycle
+  per 0.5 s, until the load ends (chosen by the maintainer). Loads under
+  200 ms do not blink, the minute refresh shows nothing, and with reduced
+  motion the control dims instead.
 - The plugin's app icon (`signalk.appIcon`) is also the favicon.
 
 ## 8. Persistence

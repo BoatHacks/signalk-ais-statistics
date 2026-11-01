@@ -10,6 +10,8 @@ uses [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- A tab, window or map button whose click starts a load fades out and in
+  (0.5 s per cycle) until the data or basemap tiles have loaded.
 - Message health (#16): seven counters under
   `sensors.ais.statistics.health.*` for decode errors, incomplete
   multipart messages, duplicates on the same event and across events

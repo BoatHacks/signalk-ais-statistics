@@ -28,6 +28,7 @@ import {
 import { createMap } from './map'
 import { downloadLink, setLink } from './downloads'
 import { SETTINGS_SAVED } from './settings'
+import { showLoading } from './loading'
 import { SectorChart } from './sectors'
 import {
   VIEWS,
@@ -760,13 +761,17 @@ const views = Object.fromEntries(
 ) as unknown as Record<View, ViewElement>
 const tabLinks = new Map<View, HTMLAnchorElement>()
 const windowLinks = new Map<WindowName, HTMLAnchorElement>()
+/** The link the user clicked, which shows the load it starts. */
+let clicked: HTMLAnchorElement | undefined
 for (const v of VIEWS) {
   const a = el('a', { href: '#' }, VIEW_LABELS[v])
+  a.addEventListener('click', () => (clicked = a))
   tabLinks.set(v, a)
   nav.append(a)
 }
 for (const w of WINDOWS) {
   const a = el('a', { href: '#' }, w)
+  a.addEventListener('click', () => (clicked = a))
   windowLinks.set(w, a)
   windows.append(a)
 }
@@ -931,9 +936,14 @@ function renderLive(): void {
 
 window.addEventListener(SETTINGS_SAVED, () => void updateStatus())
 
+let stopLoading: (() => void) | undefined
 window.addEventListener('hashchange', () => {
   route = parseRoute(location.hash)
-  void render()
+  const done = render()
+  // The minute refresh stays quiet; only a click shows its load.
+  stopLoading?.()
+  stopLoading = clicked ? showLoading(clicked, done) : undefined
+  clicked = undefined
 })
 
 connectLive((s) => {
