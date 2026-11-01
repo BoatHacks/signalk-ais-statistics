@@ -122,6 +122,7 @@ describe('REST API', () => {
       '/longrange',
       '/overlay/coverage.geojson',
       '/radar',
+      '/sectors',
       '/series',
       '/status',
       '/summary',
@@ -173,7 +174,7 @@ describe('REST API', () => {
   it('rejects bad parameters with 400', async () => {
     const { call } = await setup()
     expect((await call('/summary', { window: '2h' })).status).toBe(400)
-    expect((await call('/radar', { class: 'c' })).status).toBe(400)
+    expect((await call('/sectors', { class: 'c' })).status).toBe(400)
     expect((await call('/series', { metric: 'x' })).status).toBe(400)
     expect(
       (await call('/series', { metric: 'messages', resolution: '10' })).status,
@@ -193,12 +194,15 @@ describe('REST API', () => {
     expect((await call('/coverage', { window: '1h' })).status).toBe(400)
   })
 
-  it('serves radar, series, coverage and status', async () => {
+  it('serves sectors, series, coverage and status', async () => {
     const { call } = await setup()
-    const radar = (await call('/radar', { window: '1h', class: 'a' })).body as {
-      sectors: { count: number }[]
-    }
-    expect(radar.sectors[6]!.count).toBe(20)
+    const sectors = (await call('/sectors', { window: '1h', class: 'a' }))
+      .body as { sectors: { count: number }[] }
+    expect(sectors.sectors[6]!.count).toBe(20)
+    // The route's earlier name answers the same.
+    expect((await call('/radar', { window: '1h', class: 'a' })).body).toEqual(
+      sectors,
+    )
     const series = (await call('/series', { metric: 'positions' })).body as {
       classA: number[]
     }

@@ -12,15 +12,28 @@ function fakeStorage() {
 describe('map layer visibility', () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  it('shows both layers until one is switched off', () => {
+  it('shows the layers until one is switched off', () => {
     vi.stubGlobal('localStorage', fakeStorage())
     expect(layerVisible('cells')).toBe(true)
-    expect(layerVisible('radar')).toBe(true)
-    saveLayerVisible('radar', false)
-    expect(layerVisible('radar')).toBe(false)
+    expect(layerVisible('sectorsA')).toBe(true)
+    expect(layerVisible('sectorsB')).toBe(true)
+    saveLayerVisible('sectorsA', false)
+    expect(layerVisible('sectorsA')).toBe(false)
+    expect(layerVisible('sectorsB')).toBe(true)
     expect(layerVisible('cells')).toBe(true)
-    saveLayerVisible('radar', true)
-    expect(layerVisible('radar')).toBe(true)
+    saveLayerVisible('sectorsA', true)
+    expect(layerVisible('sectorsA')).toBe(true)
+  })
+
+  it('carries a saved radar choice over to both sector layers', () => {
+    const storage = fakeStorage()
+    storage.setItem('signalk-ais-statistics.layer.radar', 'off')
+    vi.stubGlobal('localStorage', storage)
+    expect(layerVisible('sectorsA')).toBe(false)
+    expect(layerVisible('sectorsB')).toBe(false)
+    saveLayerVisible('sectorsB', true)
+    expect(layerVisible('sectorsB')).toBe(true)
+    expect(layerVisible('sectorsA')).toBe(false)
   })
 
   it('hides the cells beyond the cap until switched on', () => {

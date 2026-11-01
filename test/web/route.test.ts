@@ -7,7 +7,12 @@ describe('hash routes', () => {
       view: 'charts',
       window: '7d',
     })
-    expect(parseRoute('#/radar')).toEqual({ view: 'radar', window: '24h' })
+    expect(parseRoute('#/sectors')).toEqual({ view: 'sectors', window: '24h' })
+    // The view's earlier name still opens it.
+    expect(parseRoute('#/radar?window=7d')).toEqual({
+      view: 'sectors',
+      window: '7d',
+    })
   })
 
   it('falls back to the overview and 24 hours', () => {

@@ -80,8 +80,8 @@ describe('plugin', () => {
     }
     const kinds = overlay.features.map((x) => x.properties.kind).sort()
     expect(kinds.filter((k) => k === 'cell')).toHaveLength(2)
-    // One report per sector is too sparse for a radar wedge.
-    expect(kinds).not.toContain('radar')
+    // One report per sector is too sparse for a sector wedge.
+    expect(kinds).not.toContain('sector')
 
     await plugin.stop()
     expect(f.app.listenerCount('nmea0183')).toBe(0)
