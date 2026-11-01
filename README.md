@@ -24,6 +24,11 @@ server; the open points are in SPEC section 13.
   list of the fastest vessels shows the implied speed beside the reported
   SOG, so a fast ferry can be told from a bad position. These only count;
   nothing is dropped.
+- Raise an alert while your range is well above normal, as in a ducting
+  or sporadic E opening (off by default): at twice the usual range, with
+  at least 3 vessels beyond it, for 15 minutes. It is a SignalK
+  notification, quiet (visual) by default and held back while underway,
+  and the web app shows a banner and lets you try and save the thresholds.
 - Track coverage: which areas you have actually received traffic from, per
   day, for a moving boat. Cells are kept apart for stationary and underway
   (from `navigation.state`, or from your own position drifting less than

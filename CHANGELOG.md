@@ -31,6 +31,20 @@ uses [Semantic Versioning](https://semver.org/).
   `GET /coverage` and the coverage download take `mode`, and `GET /status`
   reports `mode` and `modeSource`. Paths, sectors and the plotter overlay
   stay combined.
+- Propagation alerts (#13, setting `propagationAlerts`, off by default):
+  a SignalK notification on
+  `notifications.sensors.ais.statistics.propagation` while the p99
+  distance of the last 15 minutes is at least twice the normal range (the
+  median hourly p99 of 7 days, from hours with at least 20 reports) and at
+  least 3 vessels are heard beyond normal, both for 15 minutes. It clears
+  after 15 minutes without them, and on stop. State `warn`, visual only and
+  held back while underway by default; factor, vessels, duration, window,
+  state and methods are settings. Alerts start once 24 hours of normal
+  range are known. `sensors.ais.statistics.propagation.ratio` publishes the
+  recent p99 over the normal one, `GET /propagation` reports the state and
+  the last hour of checks, the web app shows a banner while the alert is
+  active, and the sectors page has a card where factor, vessels and
+  duration can be tried against the last hour and saved.
 
 ### Changed
 

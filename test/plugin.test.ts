@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { destination } from '../src/geo'
-import { paths } from '../src/paths'
+import { PROPAGATION_NOTIFICATION_PATH, paths } from '../src/paths'
 import { PLUGIN_ID, createPlugin } from '../src/plugin'
 import { asOwn, classA, classB, OWN, staticA } from './fixtures/ais'
 import { fakeApp } from './fixtures/app'
@@ -421,5 +421,119 @@ describe('plugin', () => {
     const plugin = createPlugin({} as never)
     const schema = (plugin.schema as () => { properties: object })()
     expect(Object.keys(schema.properties)).toContain('h3Resolution')
+  })
+
+  describe('propagation alerts', () => {
+    type Delta = (typeof f.deltas)[number]
+    let f: ReturnType<typeof fakeApp>
+    const notifications = (deltas: Delta[]) =>
+      deltas
+        .flatMap((d) => d.delta.updates.flatMap((u) => u.values))
+        .filter((v) => v.path === PROPAGATION_NOTIFICATION_PATH)
+        .map((v) => v.value as unknown as { state: string; method: string[] })
+
+    /** A minute of reports: `near` senders at 10 nm, `far` at 40 nm. */
+    function minute(near: number, far: number) {
+      f.position(OWN.lat, OWN.lon)
+      for (let i = 0; i < near; i++)
+        f.app.emit('nmea0183', sentenceAt(999000000 + i, 200, 10))
+      for (let i = 0; i < far; i++)
+        f.app.emit('nmea0183', sentenceAt(999100000 + i, 40, 40))
+    }
+
+    async function minutes(n: number, near: number, far: number) {
+      for (let m = 0; m < n; m++) {
+        minute(near, far)
+        await vi.advanceTimersByTimeAsync(60_000)
+      }
+    }
+
+    it('publishes nothing while off, the default', async () => {
+      f = fakeApp(await mkdtemp(join(tmpdir(), 'ais-plugin-')))
+      const plugin = createPlugin(f.app as never)
+      const r = fakeRouter()
+      plugin.registerWithRouter!(r.router as never)
+      await plugin.start({}, () => undefined)
+      await minutes(10, 25, 5)
+      await plugin.stop()
+      expect(notifications(f.deltas)).toEqual([])
+      const all = f.deltas.flatMap((d) =>
+        d.delta.updates.flatMap((u) => u.values.map((v) => v.path)),
+      )
+      expect(all).not.toContain(paths.propagationRatio)
+    })
+
+    it('learns the normal range live, alerts, holds back while underway and clears on stop', async () => {
+      f = fakeApp(await mkdtemp(join(tmpdir(), 'ais-plugin-')))
+      const plugin = createPlugin(f.app as never)
+      const r = fakeRouter()
+      plugin.registerWithRouter!(r.router as never)
+      await plugin.start(
+        {
+          propagationAlerts: true,
+          propagationNotificationState: 'alarm',
+          sentenceEvents: ['nmea0183'],
+        },
+        () => undefined,
+      )
+      type P = { enabled: boolean; state: string; baselineHours: number }
+      // 25 hours of near reports, one per sender and minute; no history.
+      for (let h = 0; h < 25; h++) await minutes(60, 1, 0)
+      const learnt = (await r.call('/propagation')).body as P
+      expect(learnt).toMatchObject({ enabled: true, state: 'normal' })
+      expect(learnt.baselineHours).toBeGreaterThanOrEqual(24)
+      expect(notifications(f.deltas)).toEqual([])
+
+      await minutes(17, 25, 5)
+      expect(notifications(f.deltas)).toEqual([
+        expect.objectContaining({ state: 'alarm', method: ['visual'] }),
+      ])
+      const ratios = f.deltas
+        .flatMap((d) => d.delta.updates.flatMap((u) => u.values))
+        .filter((v) => v.path === paths.propagationRatio)
+      expect(ratios.at(-1)!.value).toBeGreaterThanOrEqual(2)
+      expect(f.metadata.get(paths.propagationRatio)?.units).toBe('ratio')
+
+      // Underway holds the alert back; stationary brings it back.
+      f.navState('sailing')
+      await minutes(1, 25, 5)
+      expect(notifications(f.deltas).at(-1)).toMatchObject({ state: 'normal' })
+      expect(((await r.call('/propagation')).body as P).state).toBe(
+        'suppressed',
+      )
+      f.navState('moored')
+      await minutes(1, 25, 5)
+      expect(notifications(f.deltas).at(-1)).toMatchObject({ state: 'alarm' })
+
+      await plugin.stop()
+      expect(notifications(f.deltas).at(-1)).toMatchObject({
+        state: 'normal',
+        method: [],
+      })
+    })
+
+    it('applies saved alert settings to the running detector', async () => {
+      f = fakeApp(await mkdtemp(join(tmpdir(), 'ais-plugin-')))
+      const plugin = createPlugin(f.app as never)
+      const r = fakeRouter()
+      plugin.registerWithRouter!(r.router as never)
+      await plugin.start({ propagationAlerts: true }, () => undefined)
+      const res = await r.post('/settings', {
+        propagationFactor: 3,
+        propagationMinVessels: 5,
+        propagationSustainMinutes: 30,
+      })
+      expect(res.status).toBe(200)
+      const p = (await r.call('/propagation')).body as {
+        rule: Record<string, number>
+      }
+      expect(p.rule).toEqual({
+        factor: 3,
+        minVessels: 5,
+        sustainMinutes: 30,
+        windowMinutes: 15,
+      })
+      await plugin.stop()
+    })
   })
 })

@@ -130,7 +130,7 @@ maintainer's answers to each issue's open questions are in its
 use "sectors" for the bearing view, following the maintainer's rename of
 "radar" to "sectors" in the code and web app (SPEC 12).
 
-- [ ] Propagation alerts (#13, [plan](issue-13-propagation-alerts.md))
+- [x] Propagation alerts (#13, [plan](issue-13-propagation-alerts.md))
 - [x] Antenna and receiver comparison (#14, [plan](issue-14-source-comparison.md))
 - [x] Range vs weather (#15, [plan](issue-15-range-vs-weather.md))
 - [x] Message health (#16, [plan](issue-16-message-health.md))

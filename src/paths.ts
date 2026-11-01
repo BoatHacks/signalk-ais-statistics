@@ -86,7 +86,16 @@ export const paths = {
     p(`vessels.byGroup.${group}.last24h`),
   coverageAreaToday: p('coverage.area.today'),
   coverageCellsToday: p('coverage.cells.today'),
+  /** Recent p99 distance over the normal p99, unitless (SPEC 2.10). */
+  propagationRatio: p('propagation.ratio'),
 }
+
+/**
+ * The propagation alert (SPEC 2.10). A notification, not a statistic: its
+ * value is an object, and it lives under `notifications.` as SignalK
+ * expects, so it is not one of `paths`.
+ */
+export const PROPAGATION_NOTIFICATION_PATH = `notifications.${PATH_PREFIX}.propagation`
 
 /** All distance bin counter paths, in bin order. */
 export const distanceBinPaths: string[] = Array.from(

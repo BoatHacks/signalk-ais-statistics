@@ -18,7 +18,26 @@ export interface Config {
   weatherPaths: string[]
   modeDriftRadiusMeters: number
   modeDriftMinutes: number
+  propagationAlerts: boolean
+  propagationFactor: number
+  propagationMinVessels: number
+  propagationSustainMinutes: number
+  propagationWindowMinutes: number
+  propagationNotificationState: NotificationState
+  propagationNotificationMethods: NotificationMethod[]
+  propagationSuppressUnderway: boolean
 }
+
+/** SignalK notification states an alert may raise (SPEC 2.10). */
+export const NOTIFICATION_STATES = [
+  'alert',
+  'warn',
+  'alarm',
+  'emergency',
+] as const
+export type NotificationState = (typeof NOTIFICATION_STATES)[number]
+export const NOTIFICATION_METHODS = ['visual', 'sound'] as const
+export type NotificationMethod = (typeof NOTIFICATION_METHODS)[number]
 
 export const DEFAULT_CONFIG: Config = {
   targetExpirySeconds: 3600,
@@ -41,6 +60,14 @@ export const DEFAULT_CONFIG: Config = {
   ],
   modeDriftRadiusMeters: 200,
   modeDriftMinutes: 10,
+  propagationAlerts: false,
+  propagationFactor: 2,
+  propagationMinVessels: 3,
+  propagationSustainMinutes: 15,
+  propagationWindowMinutes: 15,
+  propagationNotificationState: 'warn',
+  propagationNotificationMethods: ['visual'],
+  propagationSuppressUnderway: true,
 }
 
 /**
@@ -202,6 +229,73 @@ export const configSchema = {
       minimum: 2,
       maximum: 60,
     },
+    propagationAlerts: {
+      type: 'boolean',
+      title: 'Propagation alerts',
+      description:
+        'Raise a notification while the reception range is well above normal, as in a tropospheric ducting opening. Normal is the median hourly p99 distance of the last 7 days, so alerts start once 24 hours with at least 20 reports are known. Adds one path, propagation.ratio.',
+      default: DEFAULT_CONFIG.propagationAlerts,
+    },
+    propagationFactor: {
+      type: 'number',
+      title: 'Propagation alert: range factor',
+      description:
+        'The p99 distance of the recent window must be at least this many times the normal p99.',
+      default: DEFAULT_CONFIG.propagationFactor,
+      minimum: 1.2,
+      maximum: 10,
+    },
+    propagationMinVessels: {
+      type: 'number',
+      title: 'Propagation alert: vessels beyond normal',
+      description:
+        'At least this many vessels must have been received beyond the normal p99 distance in the recent window, so one bogus position cannot raise the alert.',
+      default: DEFAULT_CONFIG.propagationMinVessels,
+      minimum: 1,
+      maximum: 50,
+    },
+    propagationSustainMinutes: {
+      type: 'number',
+      title: 'Propagation alert: duration (minutes)',
+      description:
+        'Both conditions must hold this long before the alert is raised, and fail this long before it clears.',
+      default: DEFAULT_CONFIG.propagationSustainMinutes,
+      minimum: 1,
+      maximum: 60,
+    },
+    propagationWindowMinutes: {
+      type: 'number',
+      title: 'Propagation alert: recent window (minutes)',
+      description:
+        'The recent p99 distance and the vessels beyond normal are taken over this many minutes.',
+      default: DEFAULT_CONFIG.propagationWindowMinutes,
+      minimum: 5,
+      maximum: 60,
+    },
+    propagationNotificationState: {
+      type: 'string',
+      title: 'Propagation alert: notification state',
+      description:
+        'The SignalK notification state the alert is raised with; displays rank alarm and emergency above warn and alert.',
+      default: DEFAULT_CONFIG.propagationNotificationState,
+      enum: [...NOTIFICATION_STATES],
+    },
+    propagationNotificationMethods: {
+      type: 'array',
+      title: 'Propagation alert: notification methods',
+      description:
+        'How displays should present the alert. Visual alone asks them to stay silent.',
+      items: { type: 'string', enum: [...NOTIFICATION_METHODS] },
+      uniqueItems: true,
+      default: DEFAULT_CONFIG.propagationNotificationMethods,
+    },
+    propagationSuppressUnderway: {
+      type: 'boolean',
+      title: 'Propagation alert: quiet while underway',
+      description:
+        'No alert while the vessel is underway, when range changes with the position anyway. While the mode is unknown, alerts are not held back.',
+      default: DEFAULT_CONFIG.propagationSuppressUnderway,
+    },
   },
 }
 
@@ -279,6 +373,36 @@ export function resolveConfig(options: unknown): Config {
       2000,
     ),
     modeDriftMinutes: num(o.modeDriftMinutes, d.modeDriftMinutes, 2, 60),
+    propagationAlerts:
+      typeof o.propagationAlerts === 'boolean'
+        ? o.propagationAlerts
+        : d.propagationAlerts,
+    propagationFactor: num(o.propagationFactor, d.propagationFactor, 1.2, 10),
+    propagationMinVessels: Math.round(
+      num(o.propagationMinVessels, d.propagationMinVessels, 1, 50),
+    ),
+    propagationSustainMinutes: Math.round(
+      num(o.propagationSustainMinutes, d.propagationSustainMinutes, 1, 60),
+    ),
+    propagationWindowMinutes: Math.round(
+      num(o.propagationWindowMinutes, d.propagationWindowMinutes, 5, 60),
+    ),
+    propagationNotificationState: (
+      NOTIFICATION_STATES as readonly unknown[]
+    ).includes(o.propagationNotificationState)
+      ? (o.propagationNotificationState as NotificationState)
+      : d.propagationNotificationState,
+    propagationNotificationMethods: Array.isArray(
+      o.propagationNotificationMethods,
+    )
+      ? NOTIFICATION_METHODS.filter((m) =>
+          (o.propagationNotificationMethods as unknown[]).includes(m),
+        )
+      : [...d.propagationNotificationMethods],
+    propagationSuppressUnderway:
+      typeof o.propagationSuppressUnderway === 'boolean'
+        ? o.propagationSuppressUnderway
+        : d.propagationSuppressUnderway,
   }
 }
 
@@ -288,7 +412,12 @@ export function resolveConfig(options: unknown): Config {
  * in the server's config form. Each key needs `minimum` and `maximum` in
  * the schema, which bound what the web app sends.
  */
-export const LIVE_SETTINGS = ['coverageDistancePercentile'] as const
+export const LIVE_SETTINGS = [
+  'coverageDistancePercentile',
+  'propagationFactor',
+  'propagationMinVessels',
+  'propagationSustainMinutes',
+] as const
 export type LiveSetting = (typeof LIVE_SETTINGS)[number]
 export type LiveSettings = Pick<Config, LiveSetting>
 

@@ -89,6 +89,7 @@ describe('publish', () => {
     expect(byPath.get(paths.sectorMax(23, 'b'))?.units).toBe('m')
     expect(byPath.get(paths.coverageAreaToday)?.units).toBe('m2')
     expect(byPath.has(paths.messagesTotal)).toBe(false)
-    expect(meta).toHaveLength(5 + 48 + 48 + 1)
+    expect(byPath.get(paths.propagationRatio)?.units).toBe('ratio')
+    expect(meta).toHaveLength(5 + 48 + 48 + 1 + 1)
   })
 })

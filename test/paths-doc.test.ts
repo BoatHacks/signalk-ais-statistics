@@ -124,12 +124,16 @@ describe('docs/paths.md', () => {
         agg.add({ type, mmsi: String(999000100 + s * 2 + type), ...p }, OWN, t)
       }
     const coverage = { cells: 3, areaKm2: 100 }
-    const sources = new Sources(['nmea0183'], t).values().map((v) => v.path)
+    // Source counters and the propagation ratio are added by the plugin.
+    const sources = [
+      ...new Sources(['nmea0183'], t).values().map((v) => v.path),
+      paths.propagationRatio,
+    ]
     const full = [
       ...buildValues(agg, t + 1000, coverage).map((v) => v.path),
       ...sources,
     ]
-    // Source counters go out at every tick, as the plugin sends them.
+    // Both go out at every tick, as the plugin sends them.
     const between = new Set([
       ...buildValues(agg, t + 1000, coverage, { sectors: false }).map(
         (v) => v.path,

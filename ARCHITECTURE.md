@@ -114,6 +114,25 @@ picks for `/summary?source=`; sectors, series and coverage use the main
 query only. Reusing the aggregator keeps the live hour buckets, reset
 detection and percentile code the same for both.
 
+### 2.4c Propagation detector
+`propagation.ts`, only while `propagationAlerts` is on (SPEC 2.9, #13). A
+side view of the located reports: the plugin hands each one to
+`PropagationDetector.see` beside the long-range log, and the detector
+keeps per sender the farthest report of each minute in the recent window
+(at most `MAX_SENDERS` senders, oldest first out). Once a minute the plugin
+calls `check` with the aggregator's minute buckets: the window's p99 comes
+from their bins (`windowP99Nm`), the vessels beyond normal from the
+per-sender minutes, and the pure `step` advances the rule (fire after the
+sustain time, clear after the same time without). The detector keeps the
+last 60 checks; `replay` runs the same rule over them, which the web app
+imports for its trial settings. The normal range comes from
+`baselineFrom` over `Query.series('distance', 3600, 7 days)`, read once an
+hour and when history comes or goes, so history and live-only mode take
+the same path. On each change of the alert the plugin publishes the
+notification through `publishNotification`, and `normal` on stop. The plugin
+passes the own vessel mode from `VesselMode` (2.2a) to `status` and
+`state`, which hold an active alert back while underway if set. Nothing is persisted.
+
 ### 2.5a Long-range log
 `longrange.ts` keeps, per UTC day, the farthest reception of each MMSI up
 to the 50 farthest (SPEC 2.7), fills in names the registry learns later
@@ -150,7 +169,9 @@ minutes by default, a divisor of the hour); the sector paths go out on the
 tick that closes each hour, on the first tick after a start and on stop.
 Counters are
 running totals since the plugin started; gauges are rolling one-hour or
-24-hour figures. Gauges without data are left out (SPEC 6.2).
+24-hour figures. Gauges without data are left out (SPEC 6.2). The propagation ratio is
+added by the plugin, like the per-source counters, and the propagation
+notification goes out on its own delta when the alert changes.
 Distances and areas are converted from the internal nautical miles and
 square kilometres to metres and square metres here and at the REST
 boundary, and default SI metadata is suggested on start.
@@ -211,7 +232,9 @@ whole hours (`rangeParam`), `/coverage` takes them as UTC days
 (`dayRangeParam`), each at most 7 days and never with `window`.
 `/summary?source=<label>` answers from that source's query, and
 `/sources` lists the labels (empty while per-source statistics are off).
-`/coverage` and `/export/coverage.csv` take `mode` (`modeParam`). The one write route, `POST
+`/coverage` and `/export/coverage.csv` take `mode` (`modeParam`).
+`/propagation` answers the detector's status, or `{ enabled: false }`
+while alerts are off. The one write route, `POST
 /settings`, validates live settings with `parseLiveSettings` from
 `config.ts` and hands them to the plugin, which merges them into the stored
 configuration, saves it and applies them (for example
@@ -237,7 +260,8 @@ Nothing is written into the package directory at run time.
 ### 2.11 Web app
 Static bundle under `public/`, served by the server as a SignalK web app.
 Statistics come from the REST API; a single SignalK WebSocket carries
-`environment.mode`, the ship's time offset and the internet state. No
+`environment.mode`, the ship's time offset, the internet state and the
+propagation notification, which drives the alert banner. No
 external CDNs for its own assets. Views per SPEC 7, each a custom element
 that builds its DOM once and then updates text and attributes only;
 charts reuse their SVG paths and rects. Pure helpers (`units.ts`,
@@ -275,7 +299,11 @@ app map and the plotter look the same. The compare view keeps its date
 and length in the hash (`route.ts`); `compare.ts` holds the window
 arithmetic and the per-hour comparison of counts, and the view asks
 `/summary`, `/sectors` and `/coverage` once per window with `from` and
-`to`. Its two sector charts share a scale (`sectorScale`).
+`to`. Its two sector charts share a scale (`sectorScale`). The
+propagation card at the top of the sectors view (`propagation-panel.ts`)
+loads `/propagation`, and its sliders replay the returned checks through
+`trial` in `propagation.ts`, which reuses `replay` from
+`src/propagation.ts`; it saves through `POST /settings` like the cap.
 
 ## 3. Data Models
 
@@ -321,6 +349,10 @@ Published path names are the persistence schema, so they are defined once in
   (`online`, `offline`, `metered`); read by the web app to choose the
   default basemap.
 - **Freeboard-SK**: consumes the plotter extension manifest.
+- **Notifications**: the propagation alert (SPEC 2.9) is a delta on
+  `notifications.sensors.ais.statistics.propagation` through the same delta
+  handler; the server, Freeboard-SK and other displays show it as they show
+  any notification.
 
 ## 6. Security Considerations
 
@@ -369,6 +401,7 @@ src/
   health.ts           duplicate detector and implausible jump tracker
   coverage.ts         H3 cells, daily files, area, GeoJSON
   longrange.ts        daily log of the farthest receptions and fastest senders
+  propagation.ts      propagation alert rule, normal range and detector
   publish.ts          SignalK deltas
   history.ts          HistoryReader interface and History API implementation
   query.ts            windowed queries

@@ -68,6 +68,11 @@ export interface ApiDeps {
    */
   saveSettings?: (values: Partial<LiveSettings>) => Promise<LiveSettings>
   /**
+   * The propagation alert (SPEC 2.10): `{ enabled: false }` while the
+   * setting is off. Undefined while stopped.
+   */
+  propagation?: () => object | undefined
+  /**
    * Days the coverage and long-range files are kept, the reach of an `all`
    * export. Undefined while stopped.
    */
@@ -544,6 +549,15 @@ export function registerRoutes(router: RouterLike, deps: ApiDeps): void {
       const g = footprintGeoJson(f)
       const extras = deps.overlayExtras ? await deps.overlayExtras() : []
       return { ...g, features: [...g.features, ...extras] }
+    }, cachedRoute()),
+  )
+
+  r.get(
+    '/propagation',
+    handle(() => {
+      const p = deps.propagation?.()
+      if (!p) throw new NotRunning()
+      return p
     }, cachedRoute()),
   )
 

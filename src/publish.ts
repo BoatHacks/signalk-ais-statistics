@@ -12,6 +12,7 @@ import {
   SECTOR_CLASSES,
   SECTOR_COUNT,
   TYPE_GROUPS,
+  PROPAGATION_NOTIFICATION_PATH,
   healthPaths,
   paths,
 } from './paths'
@@ -72,6 +73,14 @@ export function defaultMetadata(): PathMeta[] {
           `Farthest class ${cls.toUpperCase()} reception in this sector, last hour (untrusted)`,
         ),
       )
+  })
+  out.push({
+    path: paths.propagationRatio,
+    meta: {
+      units: 'ratio',
+      description:
+        'Recent 99th percentile AIS reception distance over the normal one (median hourly p99 of 7 days)',
+    },
   })
   out.push({
     path: paths.coverageAreaToday,
@@ -165,5 +174,23 @@ export function publish(
   sink.handleMessage(pluginId, {
     context: 'vessels.self',
     updates: [{ timestamp: new Date(time).toISOString(), values }],
+  })
+}
+
+/** Publishes the propagation alert notification (SPEC 2.10, 6.2). */
+export function publishNotification(
+  sink: DeltaSink,
+  pluginId: string,
+  value: object,
+  time: number,
+): void {
+  sink.handleMessage(pluginId, {
+    context: 'vessels.self',
+    updates: [
+      {
+        timestamp: new Date(time).toISOString(),
+        values: [{ path: PROPAGATION_NOTIFICATION_PATH, value }],
+      },
+    ],
   })
 }

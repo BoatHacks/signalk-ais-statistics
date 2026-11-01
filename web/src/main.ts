@@ -54,6 +54,8 @@ import {
   type CompareWindow,
 } from './compare'
 import { connectLive, displayUnits, type LiveState } from './signalk'
+import { PropagationPanel } from './propagation-panel'
+import { bannerText } from './propagation'
 import { formatDateTime } from './time'
 import { formatPosition, makeUnit, type Unit } from './units'
 
@@ -484,9 +486,12 @@ class SectorsView extends HTMLElement implements ViewElement {
   private fastest?: SpeedTable
   private jumps?: SpeedTable
   private renderDownloads?: (window: '24h' | '7d') => void
+  private propagation?: PropagationPanel
 
   connectedCallback(): void {
     if (this.a) return
+    this.propagation = new PropagationPanel()
+    this.append(this.propagation.element)
     this.a = new SectorChart(COLORS.a)
     this.b = new SectorChart(COLORS.b)
     this.source = el('p', { class: 'muted small' })
@@ -570,6 +575,9 @@ class SectorsView extends HTMLElement implements ViewElement {
   }
 
   async load(ctx: Context): Promise<void> {
+    void this.propagation!.load(ctx.units.distance, (t) =>
+      formatDateTime(t, ctx.offsetMin),
+    )
     const [a, b, lr] = await Promise.all([
       get<SectorStats>('/sectors', { window: ctx.window, class: 'a' }),
       get<SectorStats>('/sectors', { window: ctx.window, class: 'b' }),
@@ -1048,6 +1056,12 @@ customElements.define('ais-compare', CompareView)
 const app = document.getElementById('app')!
 const statusLine = el('p', { class: 'status muted' })
 const banner = el('div', { class: 'banner theme-offline', hidden: '' })
+// The propagation alert, live from the server; it links to the sectors page.
+const alertBanner = el('a', {
+  class: 'banner alert-banner theme-orange',
+  href: '#/sectors',
+  hidden: '',
+})
 const nav = el('nav', { class: 'tabs' })
 const windows = el('nav', { class: 'segmented', 'aria-label': 'Window' })
 const error = el('p', { class: 'error theme-red', hidden: '' })
@@ -1059,7 +1073,7 @@ const settings = el(
   el(
     'p',
     { class: 'muted small' },
-    'The settings in effect, read only. Change them in the server admin under Server, Plugin Config, AIS Statistics. The coverage distance cap can also be tried and saved on the map.',
+    'The settings in effect, read only. Change them in the server admin under Server, Plugin Config, AIS Statistics. The coverage distance cap can also be tried and saved on the map, and the propagation alert factor, vessels and duration on the sectors page.',
   ),
   el('table', {}, settingsBody),
 )
@@ -1091,6 +1105,7 @@ app.append(
   ),
   statusLine,
   banner,
+  alertBanner,
   nav,
   windows,
   error,
@@ -1104,6 +1119,7 @@ let live: LiveState = {
   mode: 'day',
   offsetMin: undefined,
   internet: undefined,
+  propagation: undefined,
 }
 let units = {
   distance: makeUnit('m', undefined),
@@ -1154,6 +1170,14 @@ const SETTING_LABELS: Record<string, string> = {
   sourceStatistics: 'Statistics per server event',
   modeDriftRadiusMeters: 'Stationary drift radius (metres)',
   modeDriftMinutes: 'Stationary drift time (minutes)',
+  propagationAlerts: 'Propagation alerts',
+  propagationFactor: 'Propagation alert: range factor',
+  propagationMinVessels: 'Propagation alert: vessels beyond normal',
+  propagationSustainMinutes: 'Propagation alert: duration (minutes)',
+  propagationWindowMinutes: 'Propagation alert: recent window (minutes)',
+  propagationNotificationState: 'Propagation alert: notification state',
+  propagationNotificationMethods: 'Propagation alert: notification methods',
+  propagationSuppressUnderway: 'Propagation alert: quiet while underway',
 }
 
 function renderSettings(config: Record<string, unknown> | undefined): void {
@@ -1264,6 +1288,9 @@ function renderLive(): void {
     live.retryInS === null
       ? 'Connecting to the SignalK server...'
       : `Connection to the SignalK server lost. Retrying in ${live.retryInS} s.`
+  const alert = bannerText(live.propagation)
+  alertBanner.hidden = alert === undefined
+  alertBanner.textContent = alert ?? ''
 }
 
 window.addEventListener(SETTINGS_SAVED, () => void updateStatus())
