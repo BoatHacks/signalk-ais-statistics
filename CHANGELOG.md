@@ -32,6 +32,13 @@ uses [Semantic Versioning](https://semver.org/).
   /export/coverage.csv`, `/export/longrange.csv` and
   `/export/longrange.geojson`. Anonymise drops MMSIs, names and all
   positions from the receptions, so an anonymised download is CSV only.
+- Range vs weather (#15): on the 24h and 7d charts, hourly p99 range next
+  to air pressure, air or water temperature, humidity or air minus water
+  temperature, and a scatter of the two with Pearson's r. Hours with fewer
+  than 20 reports stay out of the scatter. The weather comes from the
+  history provider as hourly averages, so the provider must record those
+  paths; the plugin stores nothing new. The paths are a setting,
+  `weatherPaths` (at most 8), served by `GET /weather`.
 
 ### Changed
 

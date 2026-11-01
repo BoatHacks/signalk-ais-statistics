@@ -1,8 +1,9 @@
 // In-process fake of a History API provider, behaving like the provider
 // recorded in docs/findings.md: buckets start at the request's `from`,
 // `last` returns null before the first sample and repeats the previous
-// value for buckets without a new sample; `max` is null for buckets without
-// samples.
+// value for buckets without a new sample; `max` and `average` are null for
+// buckets without samples. Aggregates listed in `rejects` fail the request,
+// like a provider that does not offer them.
 import type { HistoryApi, ValuesRequest } from '@signalk/server-api/history'
 import type { PathValue } from '../../src/publish'
 
@@ -14,6 +15,7 @@ interface Sample {
 export class FakeHistory implements HistoryApi {
   private samples = new Map<string, Sample[]>()
   requests: ValuesRequest[] = []
+  rejects = new Set<string>()
 
   record(values: PathValue[], time: number): void {
     for (const v of values) {
@@ -27,6 +29,9 @@ export class FakeHistory implements HistoryApi {
     this.requests.push(query)
     if (!query.from || !query.to || !query.resolution)
       throw new Error('fake history needs from, to and resolution')
+    for (const spec of query.pathSpecs)
+      if (this.rejects.has(spec.aggregate))
+        throw new Error(`unsupported aggregate ${spec.aggregate}`)
     const from = query.from.epochMilliseconds
     const to = query.to.epochMilliseconds
     const step = query.resolution * 1000
@@ -39,9 +44,15 @@ export class FakeHistory implements HistoryApi {
           const before = list.filter((s) => s.time < t + step)
           row.push(before.length ? before[before.length - 1]!.value : null)
         } else {
-          const inside = list.filter((s) => s.time >= t && s.time < t + step)
+          const inside = list
+            .filter((s) => s.time >= t && s.time < t + step)
+            .map((s) => s.value)
           row.push(
-            inside.length ? Math.max(...inside.map((s) => s.value)) : null,
+            inside.length === 0
+              ? null
+              : spec.aggregate === 'average'
+                ? inside.reduce((a, b) => a + b, 0) / inside.length
+                : Math.max(...inside),
           )
         }
       }

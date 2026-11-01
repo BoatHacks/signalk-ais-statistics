@@ -1,11 +1,13 @@
 // The only component that reads history (ARCHITECTURE 2.7). It goes through
-// the SignalK History API of the server's default provider and uses only
-// the `last` and `max` aggregates that every provider is expected to have.
+// the SignalK History API of the server's default provider and uses the
+// `last` and `max` aggregates that every provider is expected to have. The
+// one exception is `average`, used only for the weather paths, whose
+// callers fall back to `last` when a provider rejects it.
 import { Temporal } from '@js-temporal/polyfill'
 import type { Path } from '@signalk/server-api'
 import type { HistoryApi } from '@signalk/server-api/history'
 
-export type Aggregate = 'last' | 'max'
+export type Aggregate = 'last' | 'max' | 'average'
 
 export interface Series {
   /** Bucket timestamps in milliseconds, ascending. */

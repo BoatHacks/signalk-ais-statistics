@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { compileFormula, formatSI, makeUnit } from '../../web/src/units'
+import {
+  compileFormula,
+  formatSI,
+  makeUnit,
+  quantityUnit,
+} from '../../web/src/units'
 
 describe('compileFormula', () => {
   it('evaluates arithmetic on value with precedence and parentheses', () => {
@@ -59,5 +64,27 @@ describe('makeUnit', () => {
     const u = makeUnit('m', { formula: 'oops(', symbol: 'nmi' })
     expect(u.format(12300)).toBe('12.3 km')
     expect(makeUnit('m2', undefined).format(4.1e6)).toBe('4.1 km²')
+  })
+})
+
+describe('quantityUnit', () => {
+  it('shows pressure in hPa, temperature in °C and ratios in percent', () => {
+    expect(quantityUnit('Pa', undefined).format(101325)).toBe('1013 hPa')
+    expect(quantityUnit('K', undefined).format(288.15)).toBe('15 °C')
+    expect(quantityUnit('ratio', undefined).format(0.82)).toBe('82 %')
+  })
+
+  it('follows the server display unit when there is one', () => {
+    const f = quantityUnit('K', {
+      formula: '(value - 273.15) * 9 / 5 + 32',
+      symbol: '°F',
+    })
+    expect(f.format(373.15)).toBe('212 °F')
+  })
+
+  it('shows unknown units as they are', () => {
+    expect(quantityUnit('V', undefined).format(12.6)).toBe('12.6 V')
+    expect(quantityUnit(undefined, undefined).format(3)).toBe('3')
+    expect(quantityUnit('Pa', undefined).format(null)).toBe('no data')
   })
 })

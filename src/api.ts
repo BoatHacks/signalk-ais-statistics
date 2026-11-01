@@ -70,6 +70,8 @@ export const CACHE_MS = 60_000
 export const LONG_RANGE_LIMIT = 25
 /** Senders the long-range route returns in each fastest list. */
 export const FASTEST_LIMIT = 10
+/** The longest weather range, as for every other window (SPEC 12). */
+export const WEATHER_MAX_MS = 7 * DAY_MS
 
 interface Getter {
   get(path: string, ...handlers: RequestHandler[]): unknown
@@ -296,6 +298,18 @@ export function registerRoutes(router: RouterLike, deps: ApiDeps): void {
           `at most ${MAX_SERIES_POINTS} points; raise the resolution`,
         )
       return query().series(metric as Metric, resolution, from, to)
+    }, cachedRoute()),
+  )
+
+  r.get(
+    '/weather',
+    handle((req) => {
+      const to = timeParam(req, 'to', now())
+      const from = timeParam(req, 'from', to - DAY_MS)
+      if (from >= to) throw new BadRequest('from must be before to')
+      if (to - from > WEATHER_MAX_MS)
+        throw new BadRequest('the range is at most 7 days')
+      return query().weather(from, to)
     }, cachedRoute()),
   )
 

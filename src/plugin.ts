@@ -233,6 +233,7 @@ export function createPlugin(app: ServerAPI): Plugin {
         config.publishIntervalMinutes * 60,
         (err) => log('reading history failed, answered from live data', err),
         (from, to) => s.longRange.entries(from, to, MAX_PER_DAY * 8),
+        () => s.config.weatherPaths,
       )
       state = s
 

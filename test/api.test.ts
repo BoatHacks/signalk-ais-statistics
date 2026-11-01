@@ -138,6 +138,7 @@ describe('REST API', () => {
       '/series',
       '/status',
       '/summary',
+      '/weather',
       'POST /settings',
     ])
     for (const [key, r] of routes)
@@ -492,5 +493,30 @@ describe('REST API downloads', () => {
       '/export/longrange.geojson',
     ])
       expect((await stopped.call(path)).status, path).toBe(503)
+  })
+})
+
+describe('weather route', () => {
+  it('answers unavailable without a history provider', async () => {
+    const { call } = await setup()
+    const r = await call('/weather')
+    expect(r.status).toBe(200)
+    expect(r.body).toMatchObject({ available: false, series: [] })
+  })
+
+  it('accepts up to 7 days and rejects longer or reversed ranges', async () => {
+    const { call } = await setup()
+    const to = new Date(T0).toISOString()
+    const week = new Date(T0 - 7 * 86_400_000).toISOString()
+    const more = new Date(T0 - 7 * 86_400_000 - 1).toISOString()
+    expect((await call('/weather', { from: week, to })).status).toBe(200)
+    expect((await call('/weather', { from: more, to })).status).toBe(400)
+    expect((await call('/weather', { from: to, to: week })).status).toBe(400)
+    expect((await call('/weather', { from: 'yesterday' })).status).toBe(400)
+  })
+
+  it('answers 503 when stopped', async () => {
+    const { call } = await setup(true, false)
+    expect((await call('/weather')).status).toBe(503)
   })
 })

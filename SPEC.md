@@ -317,6 +317,7 @@ effective live settings.
 |---|---|
 | `GET /summary?window=24h` | headline figures: messages, positions, vessels by group, distance avg, p95, p99 and max, and `health`: the health counts (2.8) and `received`, their denominator |
 | `GET /series?metric=&resolution=&from=&to=` | time series for the charts, read from history; `metric` is `messages`, `positions`, `distance`, `vessels` or `health` (each health counter and `received` per bucket), `resolution` in seconds (at least 60, at most 2000 points) |
+| `GET /weather?from=&to=` | the configured weather paths (9) read back from history as hourly averages (`aggregate` says `average`, or `last` for a provider that rejects it), buckets starting on the full hour, at most 7 days; only paths with data; `available` is false without a provider and `historyError` is set when the read fails, with no live fallback |
 | `GET /sectors?window=24h&class=a\|b\|all` | 24 sectors with count and p99 distance (the highest hourly p99 in the window, see 2.6), and the farthest reception `maxM` with its time: `maxAt` when known exactly, otherwise `maxHour`, the start of the hour it fell in |
 | `GET /coverage?window=7d&all=false&cap=` | cell ids, GeoJSON for the map, covered area in m²; windows `24h` (today) and `7d`; `all=true` adds the cells beyond the distance cap, marked `capped`; `cap` (50 to 100) tries another distance cap percentile for this answer only, and `capPercentile` gives the percentile applied |
 | `GET /longrange?window=24h` | the 25 farthest entries of the long-range log (2.7) in the window, farthest first, and the two speed lists of 2.8, 10 senders each, fastest first, speeds in m/s: `fastest` (plausible) and `implausibleJumps`; windows `24h` and `7d` |
@@ -471,7 +472,18 @@ A SignalK web app, listed in the admin UI, with:
 - Charts: positions and messages per hour split by class, distance avg,
   p95 and p99 per hour (max shown separately and marked untrusted), the
   class A and B mix as a share per bucket, and the health shares per
-  bucket.
+  bucket. On the 24h and 7d windows, a range vs weather section (#15):
+  hourly p99 range next to one weather series picked from the configured
+  paths (and "Air minus water temperature" when both temperatures have
+  data, as a proxy for inversions), the weather on a right axis spanning
+  its minimum to maximum, and below it a scatter of hourly p99 against that
+  series with Pearson's r. Hours with fewer than 20 reports stay out of the
+  scatter and r, the same minimum as the sectors (2.6); r needs at least
+  24 such hours. The choice of series is remembered per browser. The
+  section shows only with a history provider that holds at least one of
+  the paths; the 1h window shows a note instead. Weather values use the
+  path's display unit, otherwise hPa for pressure, °C for temperature and
+  percent for ratios.
 - Sectors: the 24-sector bearing view for class A and B (`#/sectors`), with a thin tick
   per sector out to its farthest reception (hover shows distance and time;
   a tick beyond the scale stops at the rim and is dashed), and below it a
@@ -548,12 +560,16 @@ directly. Consequences:
 - Providers differ in sampling and in whether they re-record unchanged
   values, so the plugin publishes every value at its interval and readers
   must treat a missing sample as "unchanged", not as a gap. The provider's
-  path filters must allow `sensors.ais.statistics.*`.
+  path filters must allow `sensors.ais.statistics.*`, and the weather paths
+  (9) for the range vs weather section.
 - Readers may only rely on aggregates every provider is expected to have.
   The provider checked offers `average`, `min`, `max`, `first`, `last`,
   `mid`, `middle_index`, `sma` and `ema`, with no `sum` or `count`. The
   plugin uses `last` and `max` only, which is why counts are published as
-  cumulative counters (4.1).
+  cumulative counters (4.1). The one exception is the weather paths, read
+  with `average` for hourly means (chosen by the maintainer); a weather
+  read the provider rejects is retried with `last`, which the plugin then
+  keeps using until it restarts.
 - The one thing the History API cannot carry is the set of covered H3
   cells. The plugin therefore writes one small cell-set file per UTC day in
   its own data directory (a few KB), `coverage-YYYY-MM-DD.json`, pruned by
@@ -589,6 +605,7 @@ directly. Consequences:
 | `jumpSpeedLimitKnots` | 60 | implied speed above which a position counts as an implausible jump (2.8) |
 | `jumpSpeedLimitHighSpeedKnots` | 120 | the same for ship types 20 to 29 (WIG) and 40 to 49 (high-speed craft) |
 | `jumpSpeedLimitAircraftKnots` | 600 | the same for message 9 (SAR aircraft) |
+| `weatherPaths` | `environment.outside.pressure`, `environment.outside.temperature`, `environment.outside.relativeHumidity`, `environment.water.temperature` | numeric paths of this vessel for range vs weather (7), read from history; at most 8 (one history request), dotted names without wildcards; an empty list hides the section |
 
 ### 9.1 Live settings
 
@@ -754,6 +771,18 @@ help of `max` (6.2). Verified across a plugin restart on the test server.
   of state, and is ranked by implied speed with the reported speed over
   ground beside it, plausible speeds and implausible jumps in separate top
   10 lists.
+
+- **Range vs weather reads the weather from history (chosen by the
+  maintainer, #15).** The weather is already on the server, so the plugin
+  publishes and stores nothing for it and the section needs a history
+  provider. The series are any numeric paths from a setting, defaulting to
+  the standard weather paths. Hourly averages are read, a documented
+  exception to the `last` and `max` rule (8) with a fallback to `last`;
+  only one provider has been checked for `average`. The range side reuses
+  the hourly distance series the charts already load, so the section adds
+  one history request. Correlation is shown as the plots and Pearson's r;
+  hours with fewer than 20 reports stay out of r, as for the sectors. The
+  window stays at most 7 days.
 
 ## 13. Open Questions
 

@@ -2,11 +2,55 @@ import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_CONFIG,
   LIVE_SETTINGS,
+  MAX_WEATHER_PATHS,
   configSchema,
   liveBounds,
   parseLiveSettings,
   resolveConfig,
 } from '../src/config'
+
+describe('weatherPaths', () => {
+  it('defaults to the standard weather paths', () => {
+    expect(resolveConfig({}).weatherPaths).toEqual([
+      'environment.outside.pressure',
+      'environment.outside.temperature',
+      'environment.outside.relativeHumidity',
+      'environment.water.temperature',
+    ])
+  })
+
+  it('trims, drops duplicates, wildcards and bad names', () => {
+    const c = resolveConfig({
+      weatherPaths: [
+        ' environment.outside.pressure ',
+        'environment.outside.pressure',
+        'environment.*.temperature',
+        'environment..wind',
+        '',
+        7,
+        'environment.wind.speedTrue',
+      ],
+    })
+    expect(c.weatherPaths).toEqual([
+      'environment.outside.pressure',
+      'environment.wind.speedTrue',
+    ])
+  })
+
+  it('keeps at most eight, so one history request reads them', () => {
+    const many = Array.from({ length: 12 }, (_, i) => `environment.p${i}`)
+    const c = resolveConfig({ weatherPaths: many })
+    expect(MAX_WEATHER_PATHS).toBe(8)
+    expect(c.weatherPaths).toEqual(many.slice(0, 8))
+  })
+
+  it('accepts an empty list, which hides the panel', () => {
+    expect(resolveConfig({ weatherPaths: [] }).weatherPaths).toEqual([])
+    expect(resolveConfig({ weatherPaths: 'x' }).weatherPaths).toEqual(
+      DEFAULT_CONFIG.weatherPaths,
+    )
+  })
+})
 
 describe('resolveConfig', () => {
   it('defaults to H3 resolution 6, cells about 7 km across', () => {

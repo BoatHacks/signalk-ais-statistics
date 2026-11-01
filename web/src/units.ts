@@ -137,6 +137,47 @@ export function makeUnit(si: SIUnit, meta: DisplayUnits | undefined): Unit {
   }
 }
 
+function unitOf(symbol: string, f: Fn): Unit {
+  const show = (v: number) => (symbol ? `${short(v)} ${symbol}` : short(v))
+  return {
+    symbol,
+    toDisplay: f,
+    format: (v) =>
+      v === null || v === undefined || !Number.isFinite(v)
+        ? 'no data'
+        : show(f(v)),
+    formatDisplay: show,
+  }
+}
+
+/** Display units for SI units when the server names no preference. */
+const QUANTITY_DEFAULTS: Record<string, [string, Fn]> = {
+  Pa: ['hPa', (v) => v / 100],
+  K: ['°C', (v) => v - 273.15],
+  ratio: ['%', (v) => v * 100],
+  rad: ['°', (v) => (v * 180) / Math.PI],
+  'm/s': ['kn', (v) => v / MPS_PER_KNOT],
+}
+
+/**
+ * A unit for any numeric path, such as a weather path: the server's
+ * display unit when it has one, otherwise a familiar unit for the path's
+ * SI `units` (hPa, °C, percent), otherwise the SI value as it is.
+ */
+export function quantityUnit(
+  units: string | undefined,
+  meta: DisplayUnits | undefined,
+): Unit {
+  if (units === 'm' || units === 'm2') return makeUnit(units, meta)
+  const identity = meta?.formula?.replace(/\s/g, '').toLowerCase() === 'value'
+  const f =
+    meta?.formula && !identity ? compileFormula(meta.formula) : undefined
+  if (f && meta?.symbol) return unitOf(meta.symbol, f)
+  const d = units === undefined ? undefined : QUANTITY_DEFAULTS[units]
+  if (d) return unitOf(d[0], d[1])
+  return unitOf(units ?? '', (v) => v)
+}
+
 /** Latitude and longitude to three decimals (about 100 m), with hemispheres. */
 export function formatPosition(lat: number, lon: number): string {
   const f = (v: number, pos: string, neg: string) =>
