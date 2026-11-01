@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
+  CONFIG_ORDER,
   DEFAULT_CONFIG,
   LIVE_SETTINGS,
   MAX_WEATHER_PATHS,
   configSchema,
+  configUiSchema,
   liveBounds,
   parseLiveSettings,
   resolveConfig,
@@ -202,5 +204,13 @@ describe('propagation alert options', () => {
       ]),
     )
     expect(LIVE_SETTINGS).not.toContain('propagationWindowMinutes')
+  })
+
+  it('orders every option in the config form exactly once', () => {
+    expect([...CONFIG_ORDER].sort()).toEqual(
+      Object.keys(configSchema.properties).sort(),
+    )
+    expect(new Set(CONFIG_ORDER).size).toBe(CONFIG_ORDER.length)
+    expect(configUiSchema['ui:order']).toBe(CONFIG_ORDER)
   })
 })

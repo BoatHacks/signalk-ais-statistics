@@ -48,6 +48,11 @@ uses [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- The plugin config form shows the options in groups: AIS input,
+  publishing, coverage, vessel mode, message health, weather and
+  propagation alerts.
+- The README covers install, each view, live settings, every option,
+  history provider setup, the plotter overlay and troubleshooting.
 - Coverage day files are written as version 2, with cells per mode.
   Version 1 files still load, their cells counting as mode unknown (shown
   under All only). An older plugin version does not read version 2 files,
