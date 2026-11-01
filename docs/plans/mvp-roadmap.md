@@ -135,5 +135,5 @@ use "sectors" for the bearing view, following the maintainer's rename of
 - [ ] Range vs weather (#15, [plan](issue-15-range-vs-weather.md))
 - [x] Message health (#16, [plan](issue-16-message-health.md))
 - [ ] Stationary vs underway coverage (#17, [plan](issue-17-stationary-underway.md))
-- [ ] Export (#19, [plan](issue-19-export.md))
+- [x] Export (#19, [plan](issue-19-export.md))
 - [ ] 1.0 basics: settings, README, tests, path docs (#20, [plan](issue-20-basics.md))

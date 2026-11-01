@@ -115,8 +115,8 @@ computed by merging the bucket histograms.
 
 ### 2.4 Coverage
 
-- Coverage is the set of H3 cells (resolution configurable, default 5,
-  edge about 8 km) that contained at least one target position in the
+- Coverage is the set of H3 cells (resolution configurable, default 6,
+  about 7 km across) that contained at least one target position in the
   window, except sparse cells farther than the window's
   `coverageDistancePercentile` of distances (default p99, 100 disables): a
   cell beyond that cap stays when it has at least 3 reports, because
@@ -320,9 +320,35 @@ effective live settings.
 | `GET /sectors?window=24h&class=a\|b\|all` | 24 sectors with count and p99 distance (the highest hourly p99 in the window, see 2.6), and the farthest reception `maxM` with its time: `maxAt` when known exactly, otherwise `maxHour`, the start of the hour it fell in |
 | `GET /coverage?window=7d&all=false&cap=` | cell ids, GeoJSON for the map, covered area in m²; windows `24h` (today) and `7d`; `all=true` adds the cells beyond the distance cap, marked `capped`; `cap` (50 to 100) tries another distance cap percentile for this answer only, and `capPercentile` gives the percentile applied |
 | `GET /longrange?window=24h` | the 25 farthest entries of the long-range log (2.7) in the window, farthest first, and the two speed lists of 2.8, 10 senders each, fastest first, speeds in m/s: `fastest` (plausible) and `implausibleJumps`; windows `24h` and `7d` |
+| `GET /export/coverage.csv?window=7d&all=false` | download: one row per H3 cell, `h3_cell,resolution,reports,min_distance_m,capped`, ordered by cell id; `all=true` adds the cells beyond the distance cap with `capped` true; no polygons |
+| `GET /export/longrange.csv?window=7d&anonymise=false` | download: every long-range entry (2.7) in the window, oldest first, `time,mmsi,name,class,ship_type,distance_m,bearing_deg,lat,lon,own_lat,own_lon`; anonymised, only `time,class,ship_type,distance_m,bearing_deg` |
+| `GET /export/longrange.geojson?window=7d` | download: the same entries as GeoJSON points at the reported position, the other fields as properties; full detail only, `anonymise=true` answers 400 |
 | `GET /overlay/coverage.geojson` | the plotter overlay's GeoJSON: the 7 day footprint and the 24 hour sector wedges of class A and B |
 | `GET /status` | live state: tracked targets, own position age, history reachable or not |
 | `POST /settings` | saves live settings (body `{ "coverageDistancePercentile": 95 }`), readwrite users only; see above |
+
+The downloads (decisions on #19) take the windows `24h`, `7d` and `all`.
+`24h` and `7d` mean what they mean on `/coverage` (UTC days, `24h` is today)
+and `/longrange` (rolling); `all` is every day the files still hold, today
+included, which `coverageRetentionDays` decides (8). There is no archive
+and no import. They answer as attachments with `Cache-Control: no-store`
+and a file name such as `ais-longrange-7d-2026-11-01-anon.csv` (set,
+window, UTC day of the export, `-anon` when anonymised; a coverage file
+with `all=true` is named `coverage-allcells`); errors stay JSON. CSV
+follows RFC 4180 (comma, CRLF, header row, UTF-8), numbers in plain
+decimals with a dot, times in ISO 8601 UTC, units in SI as the column
+names say, an empty field for an unknown name or ship type. Vessel names
+are untrusted AIS input, so a text field starting with `=`, `+`, `-`, `@`,
+tab or CR gets a leading `'` against spreadsheet formula injection.
+
+Exports carry full detail by default. `anonymise=true` drops the MMSI, the
+name, the own position and the target position of every long-range entry,
+since a target position with distance and bearing gives the own position
+back; time, class, ship type, distance and bearing stay. Coverage is
+always its own download and anonymise does not change it: the cells hold
+no MMSIs or own position, but a footprint centred on a harbour can hint at
+the berth, so the user decides whether to share that file. The fastest and
+implausible-jump lists (2.8) are not exported.
 
 Windows accept `1h`, `24h` and `7d`. Responses are JSON in SI units
 named in the field (`p99M` in metres, `areaM2` in square metres); the web
@@ -454,7 +480,10 @@ A SignalK web app, listed in the admin UI, with:
   position. Below that, the fastest vessels and the implausible jumps
   (2.8), each with time, implied speed, reported speed over ground, the
   limit, the time between the two positions, class, vessel and both
-  positions, rows in the class colours of the sectors view.
+  positions, rows in the class colours of the sectors view. Under the
+  farthest receptions table, download links (6.1) for the table's window
+  and for all retained days, as CSV and GeoJSON, with an `Anonymise`
+  checkbox; while it is ticked the GeoJSON links are greyed out.
 - Map: the coverage footprint with a window selector (day, 7 days), the 24 hour sector wedges and maxima of class A and B from the plotter overlay, in the class colours of the sectors view, on-screen
   toggles that show or hide the cells, the sparse cells beyond the distance cap
   (`All cells`, off by default, drawn dashed) and the class A and B
@@ -472,7 +501,10 @@ A SignalK web app, listed in the admin UI, with:
   server charts button is greyed out with a short note under it and the map
   uses OSM/OpenSeaMap, since the chart basemap would stay blank.
   Under the map, a distance cap slider (50th percentile to off) redraws the
-  cells at once and offers save and reset (live settings, 9.1).
+  cells at once and offers save and reset (live settings, 9.1). Below it,
+  coverage CSV downloads (6.1) for the shown window and for all retained
+  days, including the cells beyond the cap while `All cells` is on, with a
+  one-line note that a footprint can hint at the berth.
 - Settings: a collapsed panel at the foot of every page lists the settings
   in effect, read only, and says where to change them.
 
@@ -536,7 +568,8 @@ directly. Consequences:
   `longrange-YYYY-MM-DD.json`, at most 50 entries (about 15 KB) and, from
   file version 2, the two speed lists (2.8, at most 10 each, about 6 KB), written
   hourly, at the day change and on stop, loaded back on start and pruned
-  with the cell files. A version 1 file loads with an empty fastest list,
+  with the cell files. The downloads (6.1) read these files, so
+  `coverageRetentionDays` is also how far back an export reaches. A version 1 file loads with an empty fastest list,
   and version 1 code reads a version 2 file's farthest entries and ignores
   the rest. Everything else is stateless across restarts; the
   last counter values are published once more on stop.
@@ -549,7 +582,7 @@ directly. Consequences:
 | `h3Resolution` | 6 | coverage cell size: 6 is about 7 km across (36 km²); 5 was too coarse (chosen by the maintainer) |
 | `coverageDistancePercentile` | 99 | coverage skips cells with fewer than 3 reports beyond this percentile of the window's distances; 100 disables the cap |
 | `ownPositionMaxAgeSeconds` | 60 | staleness limit for own position |
-| `coverageRetentionDays` | 14 | how long daily cell-set and long-range log files are kept; the map and the overlay show up to 7 days, so two weeks leaves room (chosen by the maintainer) |
+| `coverageRetentionDays` | 14 | how long daily cell-set and long-range log files are kept; the map and the overlay show up to 7 days, so two weeks leaves room (chosen by the maintainer); also the reach of an `all` download |
 | `publishIntervalMinutes` | 5 | how often the statistics paths are published; a divisor of 60; sector paths go out hourly regardless |
 | `publishOverlay` | true | register the plotter extension overlay |
 | `sentenceEvents` | `nmea0183`, `N2KAnalyzerOut` | server events to read AIS from: raw sentences or canboat PGNs; any event names |
