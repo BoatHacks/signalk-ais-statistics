@@ -158,6 +158,14 @@ h3 {
   content: '[ OFFLINE ] ';
   color: var(--color-orange);
 }
+a.alert-banner {
+  display: block;
+  color: var(--text-main);
+  text-decoration: none;
+}
+a.alert-banner::before {
+  content: '[ PROPAGATION ] ';
+}
 .error {
   border: 1px solid rgba(var(--theme-color-rgb), 0.5);
   color: var(--color-red);

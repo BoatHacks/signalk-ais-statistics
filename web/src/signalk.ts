@@ -1,8 +1,10 @@
 // Live connection to the SignalK server for the few values the app shows
 // around the statistics: day or night mode, the ship's time zone and the
-// internet state. One WebSocket, throttled subscriptions, reconnect with
+// internet state, and the propagation alert. One WebSocket, throttled subscriptions, reconnect with
 // backoff, and an offline flag the app shows while the socket is down.
+import { PROPAGATION_NOTIFICATION_PATH } from '../../src/paths'
 import { backoffDelay } from './backoff'
+import type { AlertNotification } from './propagation'
 import { parseOffset } from './time'
 import type { DisplayUnits } from './units'
 
@@ -14,12 +16,15 @@ export interface LiveState {
   /** Ship time offset from UTC in minutes, when the vessel publishes it. */
   offsetMin: number | undefined
   internet: string | undefined
+  /** The plugin's propagation alert notification, when one was sent. */
+  propagation: AlertNotification | undefined
 }
 
 const PATHS = [
   'environment.mode',
   'environment.time.timezoneOffset',
   'network.internet.state',
+  PROPAGATION_NOTIFICATION_PATH,
 ]
 // Nothing here changes quickly, so ask for at most one update every 5 s.
 const PERIOD_MS = 5000
@@ -31,6 +36,7 @@ export function connectLive(onChange: (s: LiveState) => void): void {
     mode: 'day',
     offsetMin: undefined,
     internet: undefined,
+    propagation: undefined,
   }
   let attempt = 0
   const emit = () => onChange({ ...state })
@@ -42,6 +48,11 @@ export function connectLive(onChange: (s: LiveState) => void): void {
       state.offsetMin = parseOffset(value)
     else if (path === 'network.internet.state')
       state.internet = typeof value === 'string' ? value : undefined
+    else if (path === PROPAGATION_NOTIFICATION_PATH)
+      state.propagation =
+        value && typeof value === 'object'
+          ? (value as AlertNotification)
+          : undefined
   }
 
   const open = () => {

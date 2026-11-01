@@ -38,6 +38,9 @@ export function loginStatus(): Promise<LoginStatus | undefined> {
 
 export interface LiveSettings {
   coverageDistancePercentile: number
+  propagationFactor: number
+  propagationMinVessels: number
+  propagationSustainMinutes: number
 }
 
 /** Saves live settings; answers the effective values. */
