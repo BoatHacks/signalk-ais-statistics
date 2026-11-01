@@ -8,11 +8,8 @@ describe('hash routes', () => {
       window: '7d',
     })
     expect(parseRoute('#/sectors')).toEqual({ view: 'sectors', window: '24h' })
-    // The view's earlier name still opens it.
-    expect(parseRoute('#/radar?window=7d')).toEqual({
-      view: 'sectors',
-      window: '7d',
-    })
+    // No alias for the view's earlier name: it falls back like any other.
+    expect(parseRoute('#/radar')).toEqual({ view: 'overview', window: '24h' })
   })
 
   it('falls back to the overview and 24 hours', () => {

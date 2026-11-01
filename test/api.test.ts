@@ -121,7 +121,6 @@ describe('REST API', () => {
       '/coverage',
       '/longrange',
       '/overlay/coverage.geojson',
-      '/radar',
       '/sectors',
       '/series',
       '/status',
@@ -199,10 +198,6 @@ describe('REST API', () => {
     const sectors = (await call('/sectors', { window: '1h', class: 'a' }))
       .body as { sectors: { count: number }[] }
     expect(sectors.sectors[6]!.count).toBe(20)
-    // The route's earlier name answers the same.
-    expect((await call('/radar', { window: '1h', class: 'a' })).body).toEqual(
-      sectors,
-    )
     const series = (await call('/series', { metric: 'positions' })).body as {
       classA: number[]
     }
