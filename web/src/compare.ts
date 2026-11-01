@@ -33,7 +33,7 @@ function window(from: number, to: number): CompareWindow {
  * to today gives a shorter after window.
  */
 export function compareWindows(
-  c: CompareParams,
+  c: Pick<CompareParams, 'date' | 'days'>,
   now: number,
 ): { before: CompareWindow; after: CompareWindow } {
   const start = Date.parse(c.date)

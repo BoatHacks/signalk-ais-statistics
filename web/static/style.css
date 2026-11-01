@@ -709,3 +709,11 @@ table.compare th[scope='row'] {
   white-space: normal;
   padding: 6px;
 }
+.compare-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px 12px;
+}
+.compare-source[hidden] {
+  display: none;
+}

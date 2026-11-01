@@ -10,6 +10,7 @@ import {
   type FastEntry,
   type LongRange,
   type SectorStats,
+  type SourceInfo,
   type Series,
   type Weather,
   type Status,
@@ -194,11 +195,7 @@ class OverviewView extends HTMLElement implements ViewElement {
     this.groupsEmpty = el('p', { class: 'muted' }, 'No vessels in this window.')
     this.source = el('p', { class: 'muted small' })
     this.healthLine = el('p', { class: 'health-line' })
-    this.healthHint = el(
-      'p',
-      { class: 'hint theme-orange', hidden: '' },
-      'Many messages arrive twice. One receiver may reach two of the configured server events (Server events to read AIS from); remove one of them.',
-    )
+    this.healthHint = el('p', { class: 'hint theme-orange', hidden: '' }, '')
     const health = el('div', { class: 'groups sk-card' })
     for (const k of Object.keys(HEALTH_LABELS) as HealthKind[]) {
       const value = el('span', { class: 'num' })
@@ -263,7 +260,12 @@ class OverviewView extends HTMLElement implements ViewElement {
       h.received > 0
         ? `${formatShare(goodShare(h))} of ${int(h.received)} received messages are good: decodable, complete, not a copy, and with a usable position.`
         : 'No messages received in this window.'
-    this.healthHint!.hidden = !duplicateHint(h)
+    // With per-source statistics on, copies across events are receiver
+    // overlap, not a fault; the hint then counts same-event copies only.
+    this.healthHint!.hidden = !duplicateHint(h, perSourceStats)
+    this.healthHint!.textContent = perSourceStats
+      ? 'Many messages arrive twice on the same server event. A receiver may be connected twice, or a multiplexer may repeat its input.'
+      : 'Many messages arrive twice. One receiver may reach two of the configured server events (Server events to read AIS from); remove one of them. If two receivers are meant to overlap, turn on Statistics per server event.'
     for (const [k, value] of this.healthRows)
       value.textContent = `${int(h.counts[k])} (${formatShare(share(h.counts[k], h.received))})`
     this.source!.textContent = sourceText(s.source, s.historyError)
@@ -747,6 +749,9 @@ interface CompareRow {
 class CompareView extends HTMLElement implements ViewElement {
   private date?: HTMLInputElement
   private days?: HTMLSelectElement
+  private source?: HTMLSelectElement
+  private sourceControl?: HTMLElement
+  private sourceList = ''
   private heads?: { before: HTMLElement; after: HTMLElement }
   private rows = new Map<string, CompareRow>()
   private charts?: { before: SectorChart; after: SectorChart }
@@ -765,11 +770,24 @@ class CompareView extends HTMLElement implements ViewElement {
       location.hash = formatRoute({
         view: 'compare',
         window: route.window,
-        compare: { date: this.date!.value, days },
+        compare: {
+          date: this.date!.value,
+          days,
+          source: this.source!.value || 'all',
+        },
       })
     }
     this.date.addEventListener('change', go)
     this.days.addEventListener('change', go)
+    this.source = el('select', { id: 'compare-source' })
+    this.source.addEventListener('change', go)
+    // Shown only while per-source statistics are on.
+    this.sourceControl = el(
+      'span',
+      { class: 'compare-source', hidden: '' },
+      el('label', { for: 'compare-source' }, 'Source'),
+      this.source,
+    )
     this.heads = {
       before: el('th', { class: 'num' }),
       after: el('th', { class: 'num' }),
@@ -833,6 +851,7 @@ class CompareView extends HTMLElement implements ViewElement {
         this.date,
         el('label', { for: 'compare-days' }, 'Days each side'),
         this.days,
+        this.sourceControl,
       ),
       el(
         'div',
@@ -865,6 +884,22 @@ class CompareView extends HTMLElement implements ViewElement {
     )
   }
 
+  /** The source picker: all, then each counted event. */
+  private renderSources(sources: SourceInfo[], selected: string): void {
+    const key = sources.map((x) => x.label).join(',')
+    if (key !== this.sourceList) {
+      this.sourceList = key
+      this.source!.replaceChildren(
+        el('option', { value: 'all' }, 'All sources'),
+        ...sources.map((x) => el('option', { value: x.label }, x.event)),
+      )
+    }
+    this.sourceControl!.hidden = sources.length === 0
+    this.source!.value = sources.some((x) => x.label === selected)
+      ? selected
+      : 'all'
+  }
+
   async load(ctx: Context): Promise<void> {
     const c = ctx.compare ?? defaultCompare(Date.now())
     const now = Date.now()
@@ -872,14 +907,19 @@ class CompareView extends HTMLElement implements ViewElement {
     this.date!.max = new Date(now).toISOString().slice(0, 10)
     this.days!.value = String(c.days)
     const { before, after } = compareWindows(c, now)
+    const { sources } = await get<{ sources: SourceInfo[] }>('/sources')
+    this.renderSources(sources, c.source)
+    // A source that is not counted (any more) falls back to all of them.
+    const source = sources.some((x) => x.label === c.source) ? c.source : 'all'
     const range = (w: CompareWindow) => ({
       from: new Date(w.from).toISOString(),
       to: new Date(w.to).toISOString(),
     })
+    const bySource: Record<string, string> = source === 'all' ? {} : { source }
     const days = (w: CompareWindow) => ({ from: w.fromDay, to: w.toDay })
     const [sb, sa, xb, xa, cb, ca] = await Promise.all([
-      get<Summary>('/summary', range(before)),
-      get<Summary>('/summary', range(after)),
+      get<Summary>('/summary', { ...range(before), ...bySource }),
+      get<Summary>('/summary', { ...range(after), ...bySource }),
       get<SectorStats>('/sectors', { ...range(before), class: 'all' }),
       get<SectorStats>('/sectors', { ...range(after), class: 'all' }),
       get<CoverageResponse>('/coverage', days(before)),
@@ -965,6 +1005,10 @@ class CompareView extends HTMLElement implements ViewElement {
     if (!coverageKept.before || !coverageKept.after)
       notes.push(
         `Coverage is kept from ${cb.retainedFrom} on (Coverage retention in the plugin settings), so it is not compared for a window that starts earlier.`,
+      )
+    if (source !== 'all')
+      notes.push(
+        `The table counts what the ${sources.find((x) => x.label === source)!.event} server event delivered; its maximum distance is known from live data only. The sectors and coverage below are for all sources.`,
       )
     if (sb.source === 'history' && sa.source === 'history')
       notes.push('From the server history.')
@@ -1104,6 +1148,7 @@ const SETTING_LABELS: Record<string, string> = {
   jumpSpeedLimitHighSpeedKnots: 'Jump speed, high-speed and WIG craft (knots)',
   jumpSpeedLimitAircraftKnots: 'Jump speed, SAR aircraft (knots)',
   weatherPaths: 'Weather paths (range vs weather)',
+  sourceStatistics: 'Statistics per server event',
 }
 
 function renderSettings(config: Record<string, unknown> | undefined): void {
@@ -1133,9 +1178,13 @@ function renderSettings(config: Record<string, unknown> | undefined): void {
   )
 }
 
+/** Whether the plugin counts per server event, from its status. */
+let perSourceStats = false
+
 async function updateStatus(): Promise<void> {
   try {
     const s = await get<Status>('/status')
+    perSourceStats = s.config?.sourceStatistics === true
     renderSettings(s.running ? s.config : undefined)
     statusLine.textContent = !s.running
       ? 'The plugin is not running.'
