@@ -97,6 +97,29 @@ describe('Query with history', () => {
     }
   })
 
+  it('leaves sparse hours out of the radar distance', async () => {
+    for (const reader of ['history', 'live'] as const) {
+      const history = new FakeHistory()
+      const agg = new Aggregator(T0)
+      run(agg, history, T0, 120)
+      // A third hour with only 5 far reports in the same sector.
+      for (let m = 0; m < 60; m++) {
+        const t = T0 + (120 + m) * MINUTE_MS
+        if (m < 5) agg.add(report(999000003, 50, 40), OWN, t + 1000)
+        history.record(buildValues(agg, t + 59_000), t + 59_000)
+      }
+      const q = new Query(agg, () =>
+        reader === 'history'
+          ? new HistoryApiReader(history)
+          : nullHistoryReader,
+      )
+      const r = await q.radar('24h', 'a', T0 + 3 * HOUR_MS + MINUTE_MS)
+      expect(r.source).toBe(reader)
+      expect(r.sectors[3]!.count).toBe(125)
+      expect(r.sectors[3]!.p99M).toBeLessThan(15 * NM)
+    }
+  })
+
   it('starts history series on a whole bucket', async () => {
     const history = new FakeHistory()
     const agg = new Aggregator(T0)

@@ -111,7 +111,8 @@ adds what was counted before a restart inside that bucket (a `max` above
 the bucket's `last` also marks one). Series start on a whole multiple of
 their resolution, so hourly bars begin on the hour. The radar reads the
 closed hours from history and adds the open hour from the live bucket,
-because the sector paths are published hourly. A null before
+because the sector paths are published hourly. Only hours with at least
+20 reports in a sector count toward its p99 (`MIN_SECTOR_REPORTS`). A null before
 the first sample counts as zero and a later null as unchanged. Window percentiles come
 from the summed increments of the distance bin counters. The one-hour window
 and chart spans of up to an hour use the live minute buckets once the
