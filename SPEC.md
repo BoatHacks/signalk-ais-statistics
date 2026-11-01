@@ -114,10 +114,13 @@ computed by merging the bucket histograms.
 
 - Coverage is the set of H3 cells (resolution configurable, default 5,
   edge about 8 km) that contained at least one target position in the
-  window, except cells farther than the window's
-  `coverageDistancePercentile` of distances (default p99, 100 disables).
-  Distance statistics themselves stay unfiltered; only coverage is capped,
-  so bogus positions cannot inflate the footprint or the overlay.
+  window, except sparse cells farther than the window's
+  `coverageDistancePercentile` of distances (default p99, 100 disables): a
+  cell beyond that cap stays when it has at least 3 reports, because
+  repeated far reports are real reception, while a bogus position is almost
+  always a single report. Distance statistics themselves stay unfiltered;
+  only coverage is capped, so bogus positions cannot inflate the footprint
+  or the overlay. The web map can show the left-out cells too (7).
 - Covered area is the cell count times the mean cell area. This is a
   reception footprint, not a guaranteed range, and depends on where traffic
   was.
@@ -359,7 +362,7 @@ A SignalK web app, listed in the admin UI, with:
   distance, bearing, class, vessel name and MMSI, its position and the own
   position.
 - Map: the coverage footprint with a window selector (day, 7 days), the 24 hour radar wedges and maxima from the plotter overlay, on-screen
-  toggles that show or hide the cells, the cells beyond the distance cap
+  toggles that show or hide the cells, the sparse cells beyond the distance cap
   (`All cells`, off by default, drawn dashed) and the radar (remembered
   per browser), and an on-screen basemap switch between OpenStreetMap with
   OpenSeaMap overlay, and the SignalK server's chart provider. Default:
@@ -441,7 +444,7 @@ directly. Consequences:
 |---|---|---|
 | `targetExpirySeconds` | 3600 | live tracking expiry |
 | `h3Resolution` | 6 | coverage cell size: 6 is about 7 km across (36 km²); 5 was too coarse (chosen by the maintainer) |
-| `coverageDistancePercentile` | 99 | coverage skips cells beyond this percentile of the window's distances; 100 disables the cap |
+| `coverageDistancePercentile` | 99 | coverage skips cells with fewer than 3 reports beyond this percentile of the window's distances; 100 disables the cap |
 | `ownPositionMaxAgeSeconds` | 60 | staleness limit for own position |
 | `coverageRetentionDays` | 14 | how long daily cell-set and long-range log files are kept; the map and the overlay show up to 7 days, so two weeks leaves room (chosen by the maintainer) |
 | `publishIntervalMinutes` | 5 | how often the statistics paths are published; a divisor of 60; sector paths go out hourly regardless |
@@ -500,7 +503,10 @@ directly. Consequences:
   decoded traffic and nothing is silently discarded. Cost: the max and
   anything derived from it is untrusted. Coverage is the exception and gets
   a configurable percentile cap, because bogus cells would make the overlay
-  useless.
+  useless. The cap hides only cells with fewer than 3 reports (chosen by the
+  maintainer): on a test receiver nearly all capped cells were the real
+  edge of reception, with hundreds of reports between them, and only a few
+  single-report cells were bogus.
 - **Counts as cumulative counters (chosen by the maintainer).** History
   providers lack sum and count aggregates; a window total is `last(end)`
   minus `last(start)`, and counter resets are detected by the reader with the

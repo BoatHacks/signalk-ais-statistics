@@ -59,7 +59,7 @@ export const configSchema = {
       type: 'number',
       title: 'Coverage distance percentile cap',
       description:
-        'Coverage skips cells farther than this percentile of the distances in the window, so bogus positions do not inflate the footprint. 100 disables the cap.',
+        'Coverage skips cells with fewer than 3 reports that lie farther than this percentile of the distances in the window, so bogus positions do not inflate the footprint. 100 disables the cap.',
       default: DEFAULT_CONFIG.coverageDistancePercentile,
       minimum: 50,
       maximum: 100,

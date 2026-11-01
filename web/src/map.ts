@@ -162,7 +162,7 @@ export function createMap(): MapView {
   ] as const) {
     const btn = el('button', { type: 'button', 'data-layer': name }, label)
     if (name === 'capped')
-      btn.title = 'Also show cells beyond the distance percentile cap'
+      btn.title = 'Also show sparse cells beyond the distance percentile cap'
     btn.addEventListener('click', () => {
       visible[name] = !visible[name]
       saveLayerVisible(name, visible[name])
@@ -304,8 +304,8 @@ export function createMap(): MapView {
           c.capM === null || c.cappedCells === 0
             ? ''
             : visible.capped
-              ? ` Including ${c.cappedCells} cells beyond ${units.distance.format(c.capM)} (the distance percentile cap), dashed.`
-              : ` ${c.cappedCells} cells beyond ${units.distance.format(c.capM)} (the distance percentile cap) are not shown; All cells shows them.`
+              ? ` Including ${c.cappedCells} sparse cells beyond ${units.distance.format(c.capM)} (the distance percentile cap), dashed.`
+              : ` ${c.cappedCells} cells beyond ${units.distance.format(c.capM)} (the distance percentile cap) with fewer than 3 reports are not shown; All cells shows them.`
         info.textContent =
           c.cells + c.cappedCells === 0
             ? 'No coverage recorded in this window yet.'
