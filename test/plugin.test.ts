@@ -86,7 +86,10 @@ describe('plugin', () => {
     await plugin.stop()
     expect(f.app.listenerCount('nmea0183')).toBe(0)
     expect(f.positionListeners.size).toBe(0)
-    expect(await readdir(dir)).toEqual(['coverage-2030-01-01.json'])
+    expect((await readdir(dir)).sort()).toEqual([
+      'coverage-2030-01-01.json',
+      'longrange-2030-01-01.json',
+    ])
     expect((await r.call('/summary')).status).toBe(503)
     expect(f.errors).toEqual([])
   })

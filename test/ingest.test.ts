@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Ingest } from '../src/ingest'
+import { Ingest, cleanName } from '../src/ingest'
 import {
   asOwn,
   badChecksum,
@@ -42,8 +42,20 @@ describe('Ingest', () => {
     const [p1, p2] = staticA(999000004, 70)
     expect(ingest.push(p1!)).toBeUndefined()
     const msg = ingest.push(p2!)
-    expect(msg).toMatchObject({ type: 5, mmsi: '999000004', shipType: 70 })
+    expect(msg).toMatchObject({
+      type: 5,
+      mmsi: '999000004',
+      shipType: 70,
+      name: 'SYNTHETIC',
+    })
     expect(msg?.lat).toBeUndefined()
+  })
+
+  it('cleans vessel names of padding', () => {
+    expect(cleanName('SYNTHETIC@@@@')).toBe('SYNTHETIC')
+    expect(cleanName('  TWO   WORDS ')).toBe('TWO WORDS')
+    expect(cleanName('@@@@')).toBeUndefined()
+    expect(cleanName(42)).toBeUndefined()
   })
 
   it('keeps interleaved multipart messages apart', () => {

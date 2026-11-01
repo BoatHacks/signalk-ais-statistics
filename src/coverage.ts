@@ -43,6 +43,8 @@ export interface Footprint {
   cells: { id: string; minDistanceNm: number; reports: number }[]
   /** Cells left out by the cap. */
   cappedCells: number
+  /** The cells left out by the cap, for views that show them anyway. */
+  capped: { id: string; minDistanceNm: number; reports: number }[]
   areaKm2: number
 }
 
@@ -238,16 +240,18 @@ export class Coverage {
         ? undefined
         : percentileNm(merged.distanceBins, this.percentile / 100)
     const cells: Footprint['cells'] = []
-    let cappedCells = 0
+    const capped: Footprint['capped'] = []
     for (const [id, [minDistanceNm, reports]] of Object.entries(merged.cells)) {
-      if (cap !== undefined && minDistanceNm > cap) cappedCells++
+      if (cap !== undefined && minDistanceNm > cap)
+        capped.push({ id, minDistanceNm, reports })
       else cells.push({ id, minDistanceNm, reports })
     }
     return {
       resolution: this.resolution,
       capNm: cap ?? null,
       cells,
-      cappedCells,
+      cappedCells: capped.length,
+      capped,
       areaKm2: cells.length * getHexagonAreaAvg(this.resolution, 'km2'),
     }
   }
@@ -263,6 +267,8 @@ export interface CellFeature {
     reports: number
     /** Metres. */
     minDistanceM: number
+    /** Beyond the distance cap; only present when capped cells are included. */
+    capped?: true
   }
   geometry: { type: 'Polygon'; coordinates: number[][][] }
 }
@@ -270,15 +276,23 @@ export interface CellFeature {
 /**
  * GeoJSON of a footprint, one polygon per cell. `intensity` (0 to 1) is
  * the cell's report count on a log scale relative to the busiest cell.
+ * With `includeCapped`, the cells beyond the distance cap follow, marked
+ * `capped`.
  */
-export function footprintGeoJson(f: Footprint): {
+export function footprintGeoJson(
+  f: Footprint,
+  includeCapped = false,
+): {
   type: 'FeatureCollection'
   features: CellFeature[]
 } {
-  const maxLog = Math.log1p(Math.max(1, ...f.cells.map((c) => c.reports)))
+  const list = includeCapped
+    ? [...f.cells, ...f.capped.map((c) => ({ ...c, capped: true as const }))]
+    : f.cells
+  const maxLog = Math.log1p(Math.max(1, ...list.map((c) => c.reports)))
   return {
     type: 'FeatureCollection',
-    features: f.cells.map((c) => ({
+    features: list.map((c) => ({
       type: 'Feature',
       id: c.id,
       properties: {
@@ -287,6 +301,7 @@ export function footprintGeoJson(f: Footprint): {
         intensity: Math.round((Math.log1p(c.reports) / maxLog) * 1000) / 1000,
         reports: c.reports,
         minDistanceM: Math.round(c.minDistanceNm * M_PER_NM),
+        ...('capped' in c ? { capped: true as const } : {}),
       },
       geometry: {
         type: 'Polygon',

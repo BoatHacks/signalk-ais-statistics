@@ -3,7 +3,7 @@
 A SignalK server plugin that turns the AIS traffic your server already
 receives into reception statistics for your own AIS station.
 
-**Status: 0.2.0.** The plugin, its REST API, the web
+**Status: 0.4.0.** The plugin, its REST API, the web
 app and the plotter overlay are unit tested and run on a development
 server; the open points are in SPEC section 13.
 
@@ -14,6 +14,10 @@ server; the open points are in SPEC section 13.
 - Report how far your receiver reaches: average, median, p95, p99 and max
   distance, plus a 24-sector bearing radar per class. Percentiles keep the
   numbers meaningful when a bad position arrives.
+- Keep the far ones visible: a thin tick per radar sector reaches out to
+  its farthest reception, and a daily log lists the farthest receptions
+  with time, vessel name and MMSI, and both positions, so a ducting or
+  sporadic E event can be told from a wrong position.
 - Track coverage: which areas you have actually received traffic from, per
   day, for a moving boat.
 - Publish all of it as numeric SignalK paths under `sensors.ais.statistics.*`,

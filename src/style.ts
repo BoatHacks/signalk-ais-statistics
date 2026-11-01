@@ -10,6 +10,8 @@ export const CELL_LINE_WIDTH = 1
 
 export const RADAR_COLOUR = '#d94801'
 export const RADAR_LINE_WIDTH = 1.5
+/** The farthest reception per sector: a thin tick beyond the wedge. */
+export const RADAR_MAX_LINE_WIDTH = 1
 
 /** Overlay opacity the plotter applies on top of the layer paint. */
 export const OVERLAY_OPACITY = 0.8

@@ -11,7 +11,7 @@ It publishes numeric paths under `sensors.ais.statistics.*`, reads history
 back through the SignalK History API, serves a web app, and offers the
 coverage footprint as a Freeboard-SK plotter overlay.
 
-**Current state: 0.2.0, the MVP (roadmap items 1 to 8), released.**
+**Current state: 0.4.0, the MVP (roadmap items 1 to 8) plus item 10.**
 The remaining open point is the Freeboard-SK visual check (SPEC section 13).
 The roadmap is [docs/plans/mvp-roadmap.md](docs/plans/mvp-roadmap.md).
 
@@ -49,8 +49,8 @@ The roadmap is [docs/plans/mvp-roadmap.md](docs/plans/mvp-roadmap.md).
     the History API has no `sum` or `count` aggregate (SPEC 4.1, 8).
   - The plugin reads history only through the History API and uses only the
     aggregates every provider is expected to have (`last`, `max`).
-  - Cell sets live in small daily files in the plugin data directory; they are
-    the only state the plugin owns (SPEC 8).
+  - Cell sets and the long-range log live in small daily files in the
+    plugin data directory; they are the only state the plugin owns (SPEC 8).
   - Published path names are defined once, in `src/paths.ts`.
 - **Do not trust unverified assumptions.** If code depends on something listed
   in SPEC section 13, run the spike in the roadmap first and record the result.

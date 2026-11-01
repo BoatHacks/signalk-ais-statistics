@@ -4,7 +4,7 @@
 // fields arrive as canboat names, which a local copy of the canboat lookup
 // tables (the same ones n2k-signalk uses) turns back into AIS codes.
 import { LOOKUPS, type LookupName } from './n2k-lookups'
-import type { AisMessage, IngestStats } from './ingest'
+import { cleanName, type AisMessage, type IngestStats } from './ingest'
 
 /** PGNs that each carry one received AIS message. */
 const AIS_PGNS = new Set([
@@ -94,6 +94,8 @@ export class N2kIngest {
     const shipType = lookup('SHIP_TYPE', f.typeOfShip)
     if (shipType !== undefined && (type === 5 || type === 24))
       msg.shipType = shipType
+    const name = cleanName(f.name)
+    if (name && (type === 5 || type === 19 || type === 24)) msg.name = name
     return msg
   }
 }

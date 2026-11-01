@@ -132,3 +132,10 @@ export function makeUnit(si: SIUnit, meta: DisplayUnits | undefined): Unit {
     formatDisplay: (v) => formatSI(v, si),
   }
 }
+
+/** Latitude and longitude to three decimals (about 100 m), with hemispheres. */
+export function formatPosition(lat: number, lon: number): string {
+  const f = (v: number, pos: string, neg: string) =>
+    `${Math.abs(v).toFixed(3)}° ${v < 0 ? neg : pos}`
+  return `${f(lat, 'N', 'S')}, ${f(lon, 'E', 'W')}`
+}

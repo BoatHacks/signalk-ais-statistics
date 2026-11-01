@@ -14,6 +14,7 @@ const root = path.join(__dirname, '..')
 const out = path.resolve(process.argv[2] ?? path.join(root, 'docs/screenshots'))
 const { Aggregator } = require(path.join(root, 'dist/aggregate'))
 const { Coverage } = require(path.join(root, 'dist/coverage'))
+const { LongRangeLog } = require(path.join(root, 'dist/longrange'))
 const { Query } = require(path.join(root, 'dist/query'))
 const { nullHistoryReader } = require(path.join(root, 'dist/history'))
 const { registerRoutes } = require(path.join(root, 'dist/api'))
@@ -31,45 +32,76 @@ function synthetic() {
   const agg = new Aggregator(start)
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ais-shots-'))
   const cov = new Coverage(dir, 6, 90, 99, start)
+  const log = new LongRangeLog(dir, 14, start)
   let seed = 1
   const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647
+  const quiet = start + 18.8 * 3600e3
   for (let t = start; t < now; t += 20e3) {
+    if (t <= quiet && quiet < t + 20e3) {
+      // Two far receptions in the quietest hour: a bogus position and one
+      // carried by ducting (SPEC 2.3). That hour has too few reports to set
+      // a radius, so they show as ticks and in the long-range table.
+      for (const [mmsi, type, bearing, d] of [
+        [999000901, 1, 300, 2500],
+        [999000902, 18, 250, 160],
+      ]) {
+        const loc = agg.add(
+          { type, mmsi: String(mmsi), ...destination(OWN, bearing, d) },
+          OWN,
+          t,
+        )
+        if (loc) {
+          cov.add(loc.lat, loc.lon, loc.distanceNm, t)
+          log.add(loc, agg.vessel(loc.mmsi))
+        }
+      }
+    }
     const busy = 1 + 0.6 * Math.sin((t - start) / 3600e3 / 4)
-    const n = Math.floor(rnd() * 3 * busy)
+    const n = Math.floor(rnd() * 8 * busy)
     for (let i = 0; i < n; i++) {
       const mmsi = 999000000 + Math.floor(rnd() * 120)
       const bearing = rnd() * 360
       // An island to the east shortens the range there.
       const range = (bearing > 60 && bearing < 160 ? 12 : 30) * busy
-      // A rare bogus position, as real receivers see them (SPEC 2.3).
-      const d = rnd() < 0.0002 ? 2500 : Math.pow(rnd(), 0.7) * range
+      const d = Math.pow(rnd(), 0.7) * range
       const p = destination(OWN, bearing, d)
       const type = mmsi % 3 === 0 ? 18 : 1
       const loc = agg.add({ type, mmsi: String(mmsi), ...p }, OWN, t)
-      if (loc) cov.add(loc.lat, loc.lon, loc.distanceNm, t)
+      if (loc) {
+        cov.add(loc.lat, loc.lon, loc.distanceNm, t)
+        log.add(loc, agg.vessel(loc.mmsi))
+      }
       if (rnd() < 0.05)
         agg.add(
           {
             type: type === 1 ? 5 : 24,
             mmsi: String(mmsi),
             shipType: [30, 37, 60, 70, 80, 52][mmsi % 6],
+            name: `SYNTHETIC ${mmsi % 1000}`,
           },
           OWN,
           t,
         )
     }
   }
-  return { agg, cov }
+  return { agg, cov, log }
 }
 
-function serve({ agg, cov }) {
+function serve({ agg, cov, log }) {
   const routes = new Map()
-  const query = new Query(agg, () => nullHistoryReader)
+  const query = new Query(
+    agg,
+    () => nullHistoryReader,
+    60,
+    () => {},
+    (from, to) => log.entries(from, to, 400),
+  )
   registerRoutes(
     { access: () => ({ get: (p, h) => routes.set(p, h) }) },
     {
       query: () => query,
       coverage: () => cov,
+      longRange: () => log,
       overlayExtras: async () =>
         radarFeatures(await query.radar('24h', 'all', Date.now()), OWN),
       status: () => ({

@@ -1,15 +1,23 @@
-// Map layer visibility (SPEC 7): the coverage cells and the radar can each
-// be switched off, and the choice is remembered per browser.
-export type Layer = 'cells' | 'radar'
+// Map layer visibility (SPEC 7): the coverage cells, the cells beyond the
+// distance cap and the radar can each be switched on or off, and the choice
+// is remembered per browser.
+export type Layer = 'cells' | 'capped' | 'radar'
 
 const key = (l: Layer) => `signalk-ais-statistics.layer.${l}`
 
-/** Both layers are shown unless switched off in this browser. */
+/** Cells beyond the cap start hidden; the other layers start shown. */
+const DEFAULTS: Record<Layer, boolean> = {
+  cells: true,
+  capped: false,
+  radar: true,
+}
+
 export function layerVisible(l: Layer): boolean {
   try {
-    return localStorage.getItem(key(l)) !== 'off'
+    const v = localStorage.getItem(key(l))
+    return v === null ? DEFAULTS[l] : v === 'on'
   } catch {
-    return true
+    return DEFAULTS[l]
   }
 }
 

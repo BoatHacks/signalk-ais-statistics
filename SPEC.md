@@ -139,6 +139,24 @@ conservative figure, since percentiles do not merge exactly from hourly
 values), counting only hours with at least 20 reports in that sector. The
 sector's report count still includes every hour.
 
+Each hour bucket also keeps the farthest reception per sector and class and
+when it arrived. The radar draws it as a thin tick beyond the sector's
+wedge (from the centre when the sector has no radius), so rare far
+receptions such as sporadic E or tropospheric ducting stay visible without
+moving the radius. The maximum is untrusted like every maximum (2.3).
+
+### 2.7 Long-range log
+
+The farthest receptions are kept with what history cannot carry: when,
+from whom and from where. Per UTC day the plugin keeps the farthest
+position report of each MMSI, up to the 50 farthest vessels of the day.
+An entry holds the reception time, MMSI, vessel name when known (from
+message 5, 19 or 24 part A, or the matching NMEA 2000 PGNs, filled in
+later that day if it arrives after the position), class, ship type,
+distance, bearing, the reported position and the own position at
+reception. Entries are not judged: a far one can be real propagation or a
+wrong position sent by the vessel, and the log is there to tell them apart.
+
 ## 3. State / Lifecycle Model
 
 No domain lifecycle beyond a per-target tracking record: a target is
@@ -173,6 +191,7 @@ subtraction.
 - The open minute and hour buckets.
 - The set of cells observed in the current UTC day, flushed hourly to the
   day's cell-set file (section 8).
+- The current UTC day's long-range log (2.7), flushed hourly to its file.
 
 History is not kept by the plugin. See section 8.
 
@@ -215,8 +234,9 @@ including when it is embedded in another page such as an infodisplay panel.
 |---|---|
 | `GET /summary?window=24h` | headline figures: messages, positions, vessels by group, distance avg, p95, p99 and max |
 | `GET /series?metric=&resolution=&from=&to=` | time series for the charts, read from history; `metric` is `messages`, `positions`, `distance` or `vessels`, `resolution` in seconds (at least 60, at most 2000 points) |
-| `GET /radar?window=24h&class=a\|b\|all` | 24 sectors with count and p99 distance (the highest hourly p99 in the window, see 2.6) |
-| `GET /coverage?window=7d` | cell ids, GeoJSON for the map, covered area in m²; windows `24h` (today) and `7d` |
+| `GET /radar?window=24h&class=a\|b\|all` | 24 sectors with count and p99 distance (the highest hourly p99 in the window, see 2.6), and the farthest reception `maxM` with its time: `maxAt` when known exactly, otherwise `maxHour`, the start of the hour it fell in |
+| `GET /coverage?window=7d&all=false` | cell ids, GeoJSON for the map, covered area in m²; windows `24h` (today) and `7d`; `all=true` adds the cells beyond the distance cap, marked `capped` |
+| `GET /longrange?window=24h` | the 25 farthest entries of the long-range log (2.7) in the window, farthest first; windows `24h` and `7d` |
 | `GET /overlay/coverage.geojson` | the plotter overlay's GeoJSON: the 7 day footprint and the 24 hour radar wedges |
 | `GET /status` | live state: tracked targets, own position age, history reachable or not |
 
@@ -234,9 +254,9 @@ server's history provider records of these, so the paths are part of the
 persistence contract (section 8). All published values are numeric, so any
 History API provider can store and return them. Every counter is published
 at each publish interval (`publishIntervalMinutes`, default 5), whether or
-not it changed, except the per-sector counters and p99 distances, which are
-published once an hour and on stop: the radar keeps the highest hourly p99
-per sector, so finer updates add nothing. History therefore holds the
+not it changed, except the per-sector counters, p99 and maximum distances,
+which are published once an hour and on stop: the radar keeps the highest
+hourly p99 and the maximum per sector, so finer updates add nothing. History therefore holds the
 radar's closed hours, and the open hour comes from the live state. A gauge with no data (for example
 no position with a known own position in the last hour) is left out of the
 delta rather than published as zero or null; the web app's distance series
@@ -252,6 +272,8 @@ Gauges, in SI units like every SignalK path:
 - `distance.avg`, `distance.median`, `distance.p95`, `distance.p99`,
   `distance.max` in metres, over the last hour
 - `sectors.<nnn>.<class>.p99` in metres, over the last hour
+- `sectors.<nnn>.<class>.max` in metres, the farthest reception in the
+  last hour (untrusted, 2.3)
 - `vessels.last1h` and `vessels.last24h`, and
   `vessels.byGroup.<group>.last1h` and `.last24h`
 - `coverage.area.today` in square metres, and `coverage.cells.today`
@@ -305,10 +327,12 @@ button:
   plotter fetches with the user's credentials: H3 cell polygons for the last
   7 days (`kind: "cell"`, with `id`, a coverage `intensity` from 0 to 1 and
   the report count), plus the 24 hour sector radar as wedges from the last
-  known own position (`kind: "radar"`). A fill layer colours cells by
-  `intensity` on a magenta to purple ramp, which contrasts with chart water
-  and land, a line layer outlines each cell in the same ramp, and another
-  line layer outlines the radar.
+  known own position (`kind: "radar"`), and a line per sector along its
+  centre bearing from the wedge out to the farthest reception
+  (`kind: "radar-max"`, with `maxM` and its time). A fill layer colours
+  cells by `intensity` on a magenta to purple ramp, which contrasts with
+  chart water and land, a line layer outlines each cell in the same ramp,
+  another line layer outlines the radar, and a thin one draws the maxima.
 - Live updates need a context that calls `overlay.refresh`, so the manifest
   also declares an optional `background.iframe` page,
   `/signalk-ais-statistics/plotterext/refresh.html` (part of the web app
@@ -328,10 +352,16 @@ A SignalK web app, listed in the admin UI, with:
 - Overview: type group counts, class A/B split, rates, distance p95 and p99.
 - Charts: positions and messages per hour split by class, distance avg,
   p95 and p99 per hour (max shown separately and marked untrusted).
-- Radar: the 24-sector bearing view for class A and B.
-- Map: the coverage footprint with a window selector (day, 7 days), the 24 hour radar wedges from the plotter overlay, on-screen
-  toggles that show or hide the cells and the radar (remembered per
-  browser), and an on-screen basemap switch between OpenStreetMap with
+- Radar: the 24-sector bearing view for class A and B, with a thin tick
+  per sector out to its farthest reception (hover shows distance and time;
+  a tick beyond the scale stops at the rim and is dashed), and below it a
+  table of the farthest receptions from the long-range log (2.7): time,
+  distance, bearing, class, vessel name and MMSI, its position and the own
+  position.
+- Map: the coverage footprint with a window selector (day, 7 days), the 24 hour radar wedges and maxima from the plotter overlay, on-screen
+  toggles that show or hide the cells, the cells beyond the distance cap
+  (`All cells`, off by default, drawn dashed) and the radar (remembered
+  per browser), and an on-screen basemap switch between OpenStreetMap with
   OpenSeaMap overlay, and the SignalK server's chart provider. Default:
   OSM/OpenSeaMap when the internet is available and the connection is not
   metered, read from `network.internet.state` (`online`, `offline` or
@@ -398,8 +428,12 @@ directly. Consequences:
   histogram, so a window's coverage cap is computed from the files alone. A
   day holds at most 20000 cells. Files are written atomically every hour,
   at the UTC day change and on stop, and today's file is merged back in on
-  start. Everything else is stateless across restarts; the last counter
-  values are published once more on stop.
+  start.
+- The long-range log (2.7) is kept the same way, one file per UTC day,
+  `longrange-YYYY-MM-DD.json`, at most 50 entries (about 15 KB), written
+  hourly, at the day change and on stop, loaded back on start and pruned
+  with the cell files. Everything else is stateless across restarts; the
+  last counter values are published once more on stop.
 
 ## 9. Configuration
 
@@ -409,7 +443,7 @@ directly. Consequences:
 | `h3Resolution` | 6 | coverage cell size: 6 is about 7 km across (36 km²); 5 was too coarse (chosen by the maintainer) |
 | `coverageDistancePercentile` | 99 | coverage skips cells beyond this percentile of the window's distances; 100 disables the cap |
 | `ownPositionMaxAgeSeconds` | 60 | staleness limit for own position |
-| `coverageRetentionDays` | 14 | how long daily cell-set files are kept; the map and the overlay show up to 7 days, so two weeks leaves room (chosen by the maintainer) |
+| `coverageRetentionDays` | 14 | how long daily cell-set and long-range log files are kept; the map and the overlay show up to 7 days, so two weeks leaves room (chosen by the maintainer) |
 | `publishIntervalMinutes` | 5 | how often the statistics paths are published; a divisor of 60; sector paths go out hourly regardless |
 | `publishOverlay` | true | register the plotter extension overlay |
 | `sentenceEvents` | `nmea0183`, `N2KAnalyzerOut` | server events to read AIS from: raw sentences or canboat PGNs; any event names |
@@ -436,7 +470,7 @@ directly. Consequences:
 - Optional rejection of bogus positions (range cap, speed filter) with
   counters: not needed while percentiles carry the distance figures and
   coverage has its own percentile cap.
-- Per-MMSI history and a "best catches" list.
+- Per-MMSI history. The long-range log (2.7) covers the "best catches".
 
 ## 11. References
 
@@ -458,7 +492,9 @@ directly. Consequences:
   functional without a provider.
 - **Covered cells stored in a small plugin file, not in history.** A
   consequence of the above: the History API is numeric, and cell id lists
-  are not. This is the only state the plugin owns (chosen by the maintainer).
+  are not. These and the long-range log (2.7), which holds names and
+  positions for the same reason, are the only state the plugin owns
+  (chosen by the maintainer).
 - **Keep everything, report p95 and p99 (chosen by the maintainer, replacing
   an earlier range cap with counters).** Statistics always reflect all
   decoded traffic and nothing is silently discarded. Cost: the max and
@@ -489,6 +525,15 @@ help of `max` (6.2). Verified across a plugin restart on the test server.
   hour" reading, over a median of hourly p99s, a lower percentile, or 768
   per-sector bin counters. A sector with no hour of 20 reports shows its
   count but no radius.
+- **Far receptions as a tick and a log, not in the radius (chosen by the
+  maintainer).** The 20 report minimum keeps rare far receptions out of
+  the radius, but they can be real propagation worth seeing. The radar
+  draws the sector maximum as a thin tick with its time on hover, and the
+  long-range log keeps who sent each far position and where both stations
+  were, which history cannot store. Cost: 48 more hourly paths and a small
+  daily file. Rejected: publishing the time of the maximum as a path (an
+  epoch is awkward in history) and one log entry per sector-hour (about
+  1,100 a day for times the per-vessel log usually has).
 - **Lean history by default (chosen by the maintainer).** The plugin
   publishes every 5 minutes, sends the sector paths once an hour, offers
   windows up to 7 days and keeps coverage files for 14 days. Per-minute

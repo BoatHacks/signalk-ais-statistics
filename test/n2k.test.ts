@@ -47,7 +47,7 @@ describe('N2kIngest', () => {
 
   it('leaves out an unknown ship type name', () => {
     const msg = new N2kIngest().push(staticAPgn(999000006, 'No such type'))
-    expect(msg).toEqual({ type: 5, mmsi: '999000006' })
+    expect(msg).toEqual({ type: 5, mmsi: '999000006', name: 'SYNTHETIC' })
   })
 
   it('skips the own transponder', () => {

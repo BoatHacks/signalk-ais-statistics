@@ -12,6 +12,7 @@ import {
   type HistoryReader,
 } from './history'
 import { Ingest, type IngestStats } from './ingest'
+import { LongRangeLog, MAX_PER_DAY } from './longrange'
 import { N2kIngest } from './n2k'
 import { OwnPosition } from './ownposition'
 import {
@@ -47,6 +48,7 @@ interface Running {
   own: OwnPosition
   agg: Aggregator
   coverage: Coverage
+  longRange: LongRangeLog
   query: Query
   history: HistoryReader
   /** Hour index of the last delta that carried the sector paths. */
@@ -115,6 +117,11 @@ export function createPlugin(app: ServerAPI): Plugin {
       .flush()
       .then(() => s.coverage.prune(Date.now()))
       .catch((err: unknown) => log('writing coverage failed', err))
+    s.longRange.enrich((mmsi) => s.agg.vessel(mmsi))
+    s.longRange
+      .flush()
+      .then(() => s.longRange.prune(Date.now()))
+      .catch((err: unknown) => log('writing the long-range log failed', err))
   }
 
   function status() {
@@ -170,6 +177,11 @@ export function createPlugin(app: ServerAPI): Plugin {
           config.coverageDistancePercentile,
           now,
         ),
+        longRange: new LongRangeLog(
+          app.getDataDirPath(),
+          config.coverageRetentionDays,
+          now,
+        ),
         query: undefined as unknown as Query,
         history: nullHistoryReader,
         stops: [],
@@ -179,12 +191,16 @@ export function createPlugin(app: ServerAPI): Plugin {
         () => s.history,
         config.publishIntervalMinutes * 60,
         (err) => log('reading history failed, answered from live data', err),
+        (from, to) => s.longRange.entries(from, to, MAX_PER_DAY * 8),
       )
       state = s
 
       s.coverage
         .load(now)
         .catch((err: unknown) => log('reading coverage failed', err))
+      s.longRange
+        .load(now)
+        .catch((err: unknown) => log('reading the long-range log failed', err))
       void findHistory(s)
       void setMetadata()
 
@@ -196,13 +212,15 @@ export function createPlugin(app: ServerAPI): Plugin {
             typeof input === 'string' ? sentences.push(input) : pgns.push(input)
           if (!msg) return
           const located = s.agg.add(msg, s.own.at(time), time)
-          if (located)
+          if (located) {
             s.coverage.add(
               located.lat,
               located.lon,
               located.distanceNm,
               located.time,
             )
+            s.longRange.add(located, s.agg.vessel(located.mmsi))
+          }
         } catch (err) {
           // Never let one bad sentence or PGN escape into the server.
           log('processing AIS input failed', err)
@@ -288,12 +306,17 @@ export function createPlugin(app: ServerAPI): Plugin {
       await s.coverage
         .flush()
         .catch((err: unknown) => log('writing coverage failed', err))
+      s.longRange.enrich((mmsi) => s.agg.vessel(mmsi))
+      await s.longRange
+        .flush()
+        .catch((err: unknown) => log('writing the long-range log failed', err))
     },
 
     registerWithRouter(router) {
       registerRoutes(router as unknown as RouterLike, {
         query: () => state?.query,
         coverage: () => state?.coverage,
+        longRange: () => state?.longRange,
         status,
         overlayExtras: async () => {
           const s = state

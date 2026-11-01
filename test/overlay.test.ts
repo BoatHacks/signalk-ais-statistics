@@ -55,6 +55,7 @@ describe('overlay manifest', () => {
       ['cells', 'fill', 'cell'],
       ['cell-outlines', 'line', 'cell'],
       ['radar', 'line', 'radar'],
+      ['radar-max', 'line', 'radar-max'],
     ])
   })
 })
@@ -70,8 +71,39 @@ describe('radarFeatures', () => {
       toDeg: s * 15 + 15,
       count: s === 2 ? 5 : 0,
       p99M: s === 2 ? 20 * 1852 : null,
+      maxM: null,
+      maxAt: null,
+      maxHour: null,
     })),
   }
+
+  it('draws a tick from the wedge out to the farthest reception', () => {
+    const withMax: Radar = {
+      ...radar,
+      sectors: radar.sectors.map((s) =>
+        s.sector === 2
+          ? { ...s, maxM: 300 * 1852, maxAt: '2030-01-01T12:00:00.000Z' }
+          : s.sector === 5
+            ? { ...s, maxM: 4 * 1852, maxHour: '2030-01-01T11:00:00.000Z' }
+            : s,
+      ),
+    }
+    const ticks = (
+      radarFeatures(withMax, { lat: 0, lon: 0 }) as {
+        properties: Record<string, unknown>
+        geometry: { type: string; coordinates: number[][] }
+      }[]
+    ).filter((f) => f.properties.kind === 'radar-max')
+    expect(ticks.map((t) => t.properties.sector)).toEqual([2, 5])
+    expect(ticks[0]!.geometry.type).toBe('LineString')
+    expect(ticks[0]!.properties).toMatchObject({
+      maxM: 300 * 1852,
+      maxAt: '2030-01-01T12:00:00.000Z',
+    })
+    // Sector 5 has no wedge, so its tick starts at own position.
+    expect(ticks[1]!.geometry.coordinates[0]).toEqual([0, 0])
+    expect(ticks[1]!.properties.maxHour).toBe('2030-01-01T11:00:00.000Z')
+  })
 
   it('draws a closed wedge per sector with data', () => {
     const f = radarFeatures(radar, { lat: 0, lon: 0 }) as {

@@ -61,13 +61,24 @@ is filtered (SPEC 2.3). Coverage applies its own percentile cap (see 2.5 below).
 ### 2.4 Aggregator
 Keeps the cumulative counters since start, the minute buckets of the last
 hour (rolling gauges), the hour buckets of the last 24 hours (live-only
-windows and the radar), and a vessel registry of MMSI to last seen and ship
-type (pruned after 24 hours, capped at 50000) that answers unique counts
+windows and the radar), and a vessel registry of MMSI to last seen, ship
+type and name (pruned after 24 hours, capped at 50000) that answers unique counts
 for any window up to 24 hours. For each decoded message it updates counts,
 the fixed log-spaced distance histogram of `histogram.ts` (average, median,
 p95 and p99 derive from it; the exact maximum is kept beside it) and a
-coarse per-sector histogram. Pure and clock-injectable: every call takes
-the reception time.
+coarse per-sector histogram with the farthest reception per sector and its
+time. A located report comes back with its bearing, class and the own
+position, for Coverage and the long-range log. Pure and clock-injectable:
+every call takes the reception time.
+
+### 2.5a Long-range log
+`longrange.ts` keeps, per UTC day, the farthest reception of each MMSI up
+to the 50 farthest (SPEC 2.7), fills in names the registry learns later
+that day, and writes `longrange-YYYY-MM-DD.json` beside the coverage files
+hourly, at the day change and on stop. Writes are queued so two never
+share a temporary file. Earlier days are read on first use and pruned with
+`coverageRetentionDays`. It also gives the radar exact times for the
+sector maxima read from history.
 
 ### 2.5 Coverage
 Maps each position to an H3 cell (`h3-js`), keeps the cells of the current
@@ -112,7 +123,10 @@ the bucket's `last` also marks one). Series start on a whole multiple of
 their resolution, so hourly bars begin on the hour. The radar reads the
 closed hours from history and adds the open hour from the live bucket,
 because the sector paths are published hourly. Only hours with at least
-20 reports in a sector count toward its p99 (`MIN_SECTOR_REPORTS`). A null before
+20 reports in a sector count toward its p99 (`MIN_SECTOR_REPORTS`). The
+sector maxima come from the live buckets with their exact time, or from the
+hourly `max` paths with the hour's start, which a matching long-range log
+entry (same sector and class, within a metre) replaces with the exact time. A null before
 the first sample counts as zero and a later null as unchanged. Window percentiles come
 from the summed increments of the distance bin counters. The one-hour window
 and chart spans of up to an hour use the live minute buckets once the
@@ -133,7 +147,7 @@ Registers a read-only `plotterExtensions` resource provider through
 plugin runs (the pattern `@meri-imperiumi/signalk-internet` uses). The
 MapLibre style is inline in the manifest; its GeoJSON source is the
 read-only route `/overlay/coverage.geojson`, built on request from Coverage
-and the radar. A static background page in the web app bundle calls
+and the radar (wedges and `radar-max` lines). A static background page in the web app bundle calls
 `overlay.refresh` hourly through the plotter extension bus (SPEC 6.3).
 Nothing is written into the package directory at run time.
 
@@ -147,8 +161,12 @@ charts reuse their SVG paths and rects. Pure helpers (`units.ts`,
 `time.ts`, `route.ts`, `backoff.ts`) are unit tested under `test/web`. The map has a basemap switch (OSM/OpenSeaMap or the server's chart
 provider); its default follows the internet-status plugin's online and
 metered state when present, and a manual choice is remembered in
-`localStorage`. Toggles show or hide the coverage cells and the radar
-wedges (`layers.ts`, also remembered in `localStorage`). The radar wedges
+`localStorage`. Toggles show or hide the coverage cells, the cells beyond
+the distance cap (fetched with `all=true`, drawn dashed, off by default)
+and the radar (`layers.ts`, also remembered in `localStorage`). The radar
+view draws the sector maxima as ticks with a wide invisible hover line,
+leaves a quarter more room on the scale for them, and lists `/longrange`
+in a table. The radar wedges
 come from the overlay GeoJSON route, and the cell and radar colours are
 imported from `src/style.ts`, which the plotter overlay uses too, so the
 app map and the plotter look the same.
@@ -203,7 +221,9 @@ Published path names are the persistence schema, so they are defined once in
 - Trust boundary is the AIS feed: any vessel, or anyone with an AIS
   transmitter, can send arbitrary content. The decoder runs on untrusted
   input, so decode failures are contained per sentence, and memory is bounded
-  (tracked targets, cell set per day and counters are capped).
+  (tracked targets, cell set per day, long-range log entries and counters
+  are capped). Vessel names are cut to 40 characters and shown as text,
+  never as HTML.
 - Spoofed positions are the identified practical risk. Distance figures are
   made robust with percentiles (SPEC 2.3) and coverage with a percentile cap
   (SPEC 2.4).
@@ -231,6 +251,7 @@ src/
   ownposition.ts      own position and staleness
   aggregate.ts        counters, buckets, sectors, vessel registry
   coverage.ts         H3 cells, daily files, area, GeoJSON
+  longrange.ts        daily log of the farthest receptions
   publish.ts          SignalK deltas
   history.ts          HistoryReader interface and History API implementation
   query.ts            windowed queries

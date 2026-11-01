@@ -9,6 +9,7 @@ declare module 'ggencoder' {
     lat?: number
     lon?: number
     cargo?: number
+    shipname?: string
     part?: number
   }
   export const AisDecode: new (

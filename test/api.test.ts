@@ -7,6 +7,7 @@ import { registerRoutes } from '../src/api'
 import { Coverage } from '../src/coverage'
 import { destination } from '../src/geo'
 import { nullHistoryReader } from '../src/history'
+import { LongRangeLog } from '../src/longrange'
 import { Query } from '../src/query'
 import { OWN } from './fixtures/ais'
 import { fakeRouter } from './fixtures/router'
@@ -22,15 +23,27 @@ async function setup(withAccess = true) {
     99,
     T0,
   )
+  const longRange = new LongRangeLog(
+    await mkdtemp(join(tmpdir(), 'ais-api-')),
+    14,
+    T0,
+  )
   for (let i = 0; i < 20; i++) {
     const p = destination(OWN, 100, 10 + i)
     const located = agg.add({ type: 1, mmsi: `99900000${i}`, ...p }, OWN, T0)
-    if (located) coverage.add(located.lat, located.lon, located.distanceNm, T0)
+    if (located) {
+      coverage.add(located.lat, located.lon, located.distanceNm, T0)
+      longRange.add(located, {})
+    }
   }
+  // One far, bogus-looking report that the coverage cap leaves out.
+  const far = destination(OWN, 200, 900)
+  coverage.add(far.lat, far.lon, 900, T0)
   const f = fakeRouter(withAccess)
   registerRoutes(f.router, {
     query: () => new Query(agg, () => nullHistoryReader),
     coverage: () => coverage,
+    longRange: () => longRange,
     status: () => ({ history: false }),
     now: () => T0 + 1000,
   })
@@ -106,6 +119,7 @@ describe('REST API', () => {
     const { routes } = await setup()
     expect([...routes.keys()].sort()).toEqual([
       '/coverage',
+      '/longrange',
       '/overlay/coverage.geojson',
       '/radar',
       '/series',
@@ -113,6 +127,32 @@ describe('REST API', () => {
       '/summary',
     ])
     for (const r of routes.values()) expect(r.access).toBe('readonly')
+  })
+
+  it('includes the cells beyond the cap when asked', async () => {
+    const { call } = await setup()
+    type Cov = {
+      cappedCells: number
+      geojson: { features: { properties: { capped?: boolean } }[] }
+    }
+    const capped = (await call('/coverage', { window: '24h' })).body as Cov
+    expect(capped.cappedCells).toBeGreaterThan(0)
+    expect(capped.geojson.features.some((f) => f.properties.capped)).toBe(false)
+    const all = (await call('/coverage', { window: '24h', all: 'true' }))
+      .body as Cov
+    expect(
+      all.geojson.features.filter((f) => f.properties.capped),
+    ).toHaveLength(capped.cappedCells)
+    expect((await call('/coverage', { all: 'yes' })).status).toBe(400)
+  })
+
+  it('serves the farthest receptions of a window', async () => {
+    const { call } = await setup()
+    const r = await call('/longrange', { window: '24h' })
+    const entries = (r.body as { entries: { mmsi: string }[] }).entries
+    expect(entries[0]!.mmsi).toBe('9990000019')
+    expect(entries).toHaveLength(20)
+    expect((await call('/longrange', { window: '1h' })).status).toBe(400)
   })
 
   it('falls back to admin-only routes on servers without access()', async () => {
