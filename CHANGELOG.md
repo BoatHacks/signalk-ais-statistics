@@ -6,6 +6,20 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-01
+
+### Fixed
+
+- Chart bars for the 24 hour and 7 day windows start on the full hour.
+  They followed the minute the page was loaded, so hourly bars were
+  labelled like 08:50 and looked like minutes.
+- The radar for the 24 hour and 7 day windows includes the current hour.
+  Since 0.3.0 the sector paths go out once an hour, and up to 59 minutes
+  of sector counts were missing.
+- Counts across a plugin restart are no longer lost when the counter
+  restarted inside a bucket and climbed back to its previous value or
+  higher before the bucket ended.
+
 ## [0.3.0] - 2026-11-01
 
 ### Added
