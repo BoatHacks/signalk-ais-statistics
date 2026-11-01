@@ -262,21 +262,21 @@ h3 {
 
 /* Charts. */
 .chart-wrap,
-.radar-wrap {
+.sectors-wrap {
   position: relative;
   padding: 8px;
 }
-.radar-wrap {
+.sectors-wrap {
   padding: 0;
 }
 svg.chart,
-svg.radar {
+svg.sectors {
   width: 100%;
   height: auto;
   display: block;
   touch-action: pan-y;
 }
-svg.radar {
+svg.sectors {
   max-width: 420px;
   margin: 0 auto;
 }
@@ -289,7 +289,7 @@ svg.radar {
   fill: var(--text-muted);
   font: 11px var(--font-data);
 }
-svg.radar .axis {
+svg.sectors .axis {
   paint-order: stroke;
   stroke: var(--bg-panel);
   stroke-width: 3px;
@@ -371,15 +371,15 @@ svg.radar .axis {
 .empty {
   margin: 8px;
 }
-.radars {
+.sector-charts {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
   gap: 12px;
 }
-.radars > .sk-card {
+.sector-charts > .sk-card {
   padding: 4px 12px 12px;
 }
-.radars h2 {
+.sector-charts h2 {
   margin-top: 8px;
 }
 
@@ -408,6 +408,14 @@ svg.radar .axis {
   background-color: rgba(17, 20, 20, 0.8);
   border: 1px solid rgba(var(--theme-color-rgb), 0.5);
   padding: 4px;
+}
+/* The class colour in front of a sector layer toggle. */
+.map-switcher .swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 6px;
+  border-radius: 2px;
 }
 /* Shown under the basemap switch when the server has no charts. */
 .map-note {

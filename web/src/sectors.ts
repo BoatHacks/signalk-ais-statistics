@@ -1,8 +1,8 @@
-// Bearing radar: one wedge per 15 degree sector, radius the sector's p99
+// Bearing sectors: one wedge per 15 degree sector, radius the sector's p99
 // distance, north up, and a thin tick along each sector's centre out to its
 // farthest reception. Built once; updates move the wedges and ticks and
 // relabel the rings.
-import type { Radar } from './api'
+import type { SectorStats } from './api'
 import { el, svg } from './format'
 import { maxTime } from './time'
 import type { Unit } from './units'
@@ -19,7 +19,7 @@ function point(bearing: number, r: number): [number, number] {
   return [C + r * Math.cos(a), C + r * Math.sin(a)]
 }
 
-export class RadarChart {
+export class SectorChart {
   readonly element: HTMLElement
   private readonly root: SVGSVGElement
   private readonly ringLabels: SVGTextElement[] = []
@@ -29,13 +29,14 @@ export class RadarChart {
   private readonly tip: HTMLElement
   private readonly empty: HTMLElement
   private data:
-    { radar: Radar; unit: Unit; offsetMin: number | undefined } | undefined
+    | { stats: SectorStats; unit: Unit; offsetMin: number | undefined }
+    | undefined
 
   constructor(color: string) {
-    this.element = el('div', { class: 'radar-wrap' })
+    this.element = el('div', { class: 'sectors-wrap' })
     this.root = svg('svg', {
       viewBox: `0 0 ${SIZE} ${SIZE}`,
-      class: 'radar',
+      class: 'sectors',
       role: 'img',
     })
     for (const f of RINGS) {
@@ -87,19 +88,19 @@ export class RadarChart {
     this.element.append(this.root, this.tip, this.empty)
   }
 
-  update(radar: Radar, unit: Unit, offsetMin?: number): void {
-    this.data = { radar, unit, offsetMin }
+  update(stats: SectorStats, unit: Unit, offsetMin?: number): void {
+    this.data = { stats, unit, offsetMin }
     // The scale follows the wedges, with up to a quarter more room for the
     // ticks; ticks beyond it stop at the rim.
-    const p99 = Math.max(0, ...radar.sectors.map((s) => s.p99M ?? 0))
-    const far = Math.max(0, ...radar.sectors.map((s) => s.maxM ?? 0))
+    const p99 = Math.max(0, ...stats.sectors.map((s) => s.p99M ?? 0))
+    const far = Math.max(0, ...stats.sectors.map((s) => s.maxM ?? 0))
     const max = p99 > 0 ? Math.min(Math.max(p99, far), p99 * TICK_ROOM) : far
     this.empty.hidden = max > 0
     this.root.style.visibility = max > 0 ? 'visible' : 'hidden'
     if (max === 0) return
     const scale = R / max
     this.ticks.forEach((t, i) => {
-      const s = radar.sectors[i]
+      const s = stats.sectors[i]
       const hit = this.tickHits[i]!
       const inner = (s?.p99M ?? 0) * scale
       const outer = Math.min(R, (s?.maxM ?? 0) * scale)
@@ -123,7 +124,7 @@ export class RadarChart {
       this.ringLabels[i]!.textContent = unit.format(max * f)
     })
     this.wedges.forEach((w, i) => {
-      const s = radar.sectors[i]
+      const s = stats.sectors[i]
       if (!s || s.p99M === null) {
         w.setAttribute('d', '')
         return
@@ -136,14 +137,14 @@ export class RadarChart {
   }
 
   private show(i: number): void {
-    const s = this.data?.radar.sectors[i]
+    const s = this.data?.stats.sectors[i]
     if (!s || !this.data) return
     this.tip.textContent = `${s.fromDeg}° to ${s.toDeg}°: p99 ${this.data.unit.format(s.p99M)}, ${s.count.toLocaleString()} positions`
     this.tip.hidden = false
   }
 
   private showMax(i: number): void {
-    const s = this.data?.radar.sectors[i]
+    const s = this.data?.stats.sectors[i]
     if (!s || !this.data || s.maxM === null) return
     this.tip.textContent = `${s.fromDeg}° to ${s.toDeg}°: farthest ${this.data.unit.format(s.maxM)}, ${maxTime(s, this.data.offsetMin)}`
     this.tip.hidden = false

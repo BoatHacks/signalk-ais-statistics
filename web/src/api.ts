@@ -25,7 +25,7 @@ export interface Summary {
   distance: Distance
 }
 
-export interface Radar {
+export interface SectorStats {
   source: 'history' | 'live'
   /** Set when history failed and the answer fell back to live data. */
   historyError?: string

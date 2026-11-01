@@ -19,7 +19,7 @@ const { Query } = require(path.join(root, 'dist/query'))
 const { nullHistoryReader } = require(path.join(root, 'dist/history'))
 const { registerRoutes } = require(path.join(root, 'dist/api'))
 const { destination } = require(path.join(root, 'dist/geo'))
-const { radarFeatures } = require(path.join(root, 'dist/overlay'))
+const { sectorFeatures } = require(path.join(root, 'dist/overlay'))
 
 const API = '/plugins/signalk-ais-statistics'
 const APP = '/signalk-ais-statistics'
@@ -102,8 +102,10 @@ function serve({ agg, cov, log }) {
       query: () => query,
       coverage: () => cov,
       longRange: () => log,
-      overlayExtras: async () =>
-        radarFeatures(await query.radar('24h', 'all', Date.now()), OWN),
+      overlayExtras: async () => [
+        ...sectorFeatures(await query.sectors('24h', 'a', Date.now()), OWN),
+        ...sectorFeatures(await query.sectors('24h', 'b', Date.now()), OWN),
+      ],
       status: () => ({
         running: true,
         noData: false,
@@ -174,7 +176,7 @@ async function main() {
   const shots = [
     ['overview', 1280, 900, 'day'],
     ['charts', 1280, 1500, 'day'],
-    ['radar', 1280, 900, 'day'],
+    ['sectors', 1280, 900, 'day'],
     ['map', 1280, 900, 'day'],
     ['overview-phone', 390, 844, 'night'],
   ]

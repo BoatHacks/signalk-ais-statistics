@@ -1,4 +1,4 @@
-// AIS Statistics web app (SPEC 7): overview, charts, radar and map as
+// AIS Statistics web app (SPEC 7): overview, charts, sectors and map as
 // custom elements that build their DOM once and update values in place.
 // Statistics come from the plugin's REST API; day or night mode, ship time
 // and the internet state come over one SignalK WebSocket.
@@ -6,7 +6,7 @@ import {
   HttpError,
   get,
   type LongRange,
-  type Radar,
+  type SectorStats,
   type Series,
   type Status,
   type Summary,
@@ -14,7 +14,7 @@ import {
 import { Chart } from './charts'
 import { el, int } from './format'
 import { createMap } from './map'
-import { RadarChart } from './radar'
+import { SectorChart } from './sectors'
 import {
   VIEWS,
   WINDOWS,
@@ -46,7 +46,7 @@ const GROUP_LABELS: Record<string, string> = {
 const VIEW_LABELS: Record<View, string> = {
   overview: 'Overview',
   charts: 'Charts',
-  radar: 'Radar',
+  sectors: 'Sectors',
   map: 'Map',
 }
 const DISTANCE_PATH = 'sensors.ais.statistics.distance.p99'
@@ -327,17 +327,17 @@ class ChartsView extends HTMLElement implements ViewElement {
   }
 }
 
-class RadarView extends HTMLElement implements ViewElement {
-  private a?: RadarChart
-  private b?: RadarChart
+class SectorsView extends HTMLElement implements ViewElement {
+  private a?: SectorChart
+  private b?: SectorChart
   private source?: HTMLElement
   private longRange?: HTMLTableSectionElement
   private longRangeEmpty?: HTMLElement
 
   connectedCallback(): void {
     if (this.a) return
-    this.a = new RadarChart(COLORS.a)
-    this.b = new RadarChart(COLORS.b)
+    this.a = new SectorChart(COLORS.a)
+    this.b = new SectorChart(COLORS.b)
     this.source = el('p', { class: 'muted small' })
     this.append(
       el(
@@ -347,7 +347,7 @@ class RadarView extends HTMLElement implements ViewElement {
       ),
       el(
         'div',
-        { class: 'radars' },
+        { class: 'sector-charts' },
         el(
           'div',
           { class: 'sk-card' },
@@ -402,8 +402,8 @@ class RadarView extends HTMLElement implements ViewElement {
 
   async load(ctx: Context): Promise<void> {
     const [a, b, lr] = await Promise.all([
-      get<Radar>('/radar', { window: ctx.window, class: 'a' }),
-      get<Radar>('/radar', { window: ctx.window, class: 'b' }),
+      get<SectorStats>('/sectors', { window: ctx.window, class: 'a' }),
+      get<SectorStats>('/sectors', { window: ctx.window, class: 'b' }),
       get<LongRange>('/longrange', {
         window: ctx.window === '1h' ? '24h' : ctx.window,
       }).catch(() => ({ entries: [] }) as LongRange),
@@ -452,7 +452,7 @@ class MapViewElement extends HTMLElement implements ViewElement {
 customElements.define('ais-stat', StatTile)
 customElements.define('ais-overview', OverviewView)
 customElements.define('ais-charts', ChartsView)
-customElements.define('ais-radar', RadarView)
+customElements.define('ais-sectors', SectorsView)
 customElements.define('ais-map', MapViewElement)
 
 // Shell: header, offline banner, tabs, window selector and the views.

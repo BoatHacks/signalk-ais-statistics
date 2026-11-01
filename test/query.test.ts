@@ -69,21 +69,21 @@ describe('Query with history', () => {
     expect(s.messages).toBe(26)
   })
 
-  it('builds the radar from sector counters and the highest p99', async () => {
+  it('builds the sectors from sector counters and the highest p99', async () => {
     const history = new FakeHistory()
     const agg = new Aggregator(T0)
     run(agg, history, T0, 180)
     const q = new Query(agg, () => new HistoryApiReader(history))
-    const r = await q.radar('24h', 'a', T0 + 180 * MINUTE_MS)
+    const r = await q.sectors('24h', 'a', T0 + 180 * MINUTE_MS)
     expect(r.sectors).toHaveLength(24)
     expect(r.sectors[3]!.count).toBe(180)
     expect(r.sectors[3]!.p99M).toBeGreaterThan(7 * NM)
     expect(r.sectors[13]!.count).toBe(0)
-    const all = await q.radar('24h', 'all', T0 + 180 * MINUTE_MS)
+    const all = await q.sectors('24h', 'all', T0 + 180 * MINUTE_MS)
     expect(all.sectors[13]!.count).toBe(180)
   })
 
-  it('adds the open hour of the radar from live data, once', async () => {
+  it('adds the open hour of the sectors from live data, once', async () => {
     const history = new FakeHistory()
     const agg = new Aggregator(T0)
     run(agg, history, T0, 120)
@@ -91,13 +91,13 @@ describe('Query with history', () => {
     run(agg, new FakeHistory(), T0 + 120 * MINUTE_MS, 30)
     const q = new Query(agg, () => new HistoryApiReader(history))
     for (const w of ['24h', '7d'] as const) {
-      const r = await q.radar(w, 'a', T0 + 150 * MINUTE_MS)
+      const r = await q.sectors(w, 'a', T0 + 150 * MINUTE_MS)
       expect(r.source).toBe('history')
       expect(r.sectors[3]!.count).toBe(150)
     }
   })
 
-  it('leaves sparse hours out of the radar distance', async () => {
+  it('leaves sparse hours out of the sector distances', async () => {
     for (const reader of ['history', 'live'] as const) {
       const history = new FakeHistory()
       const agg = new Aggregator(T0)
@@ -113,7 +113,7 @@ describe('Query with history', () => {
           ? new HistoryApiReader(history)
           : nullHistoryReader,
       )
-      const r = await q.radar('24h', 'a', T0 + 3 * HOUR_MS + MINUTE_MS)
+      const r = await q.sectors('24h', 'a', T0 + 3 * HOUR_MS + MINUTE_MS)
       expect(r.source).toBe(reader)
       expect(r.sectors[3]!.count).toBe(125)
       expect(r.sectors[3]!.p99M).toBeLessThan(15 * NM)
@@ -136,7 +136,7 @@ describe('Query with history', () => {
     const now = T0 + 150 * MINUTE_MS
 
     const live = build()
-    const l = await new Query(live.agg, () => nullHistoryReader).radar(
+    const l = await new Query(live.agg, () => nullHistoryReader).sectors(
       '24h',
       'a',
       now,
@@ -149,7 +149,7 @@ describe('Query with history', () => {
     const fromHistory = await new Query(
       h.agg,
       () => new HistoryApiReader(h.history),
-    ).radar('24h', 'a', now)
+    ).sectors('24h', 'a', now)
     expect(fromHistory.source).toBe('history')
     expect(fromHistory.sectors[3]!.maxM).toBeCloseTo(300 * NM, -2)
     expect(fromHistory.sectors[3]!.maxAt).toBeNull()
@@ -174,7 +174,7 @@ describe('Query with history', () => {
           ownLon: 0,
         },
       ],
-    ).radar('24h', 'a', now)
+    ).sectors('24h', 'a', now)
     expect(withLog.sectors[3]!.maxAt).toBe(new Date(far).toISOString())
     expect(withLog.sectors[3]!.maxHour).toBeNull()
   })
@@ -227,7 +227,7 @@ describe('Query when history fails', () => {
     expect(s.messages).toBe(240)
     expect(s.historyError).toBe(HISTORY_FAILED)
     expect(s.historyError).not.toContain('memory')
-    const r = await q.radar('24h', 'all', now)
+    const r = await q.sectors('24h', 'all', now)
     expect(r.source).toBe('live')
     expect(r.historyError).toBe(HISTORY_FAILED)
     const series = await q.series('messages', 3600, now - 7 * 86400e3, now)
@@ -273,7 +273,7 @@ describe('Query in live-only mode', () => {
     expect(hour.messages).toBe(120)
     const week = await q.summary('7d', now)
     expect(week.vessels).toBeNull()
-    const r = await q.radar('1h', 'b', now)
+    const r = await q.sectors('1h', 'b', now)
     expect(r.sectors[13]!.count).toBe(60)
     const s = await q.series('messages', 3600, T0, now)
     expect(s.messages).toEqual([120, 120])

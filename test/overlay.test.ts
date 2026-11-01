@@ -3,9 +3,9 @@ import {
   OVERLAY_ID,
   OVERLAY_SOURCE,
   buildManifest,
-  radarFeatures,
+  sectorFeatures,
 } from '../src/overlay'
-import type { Radar } from '../src/query'
+import type { SectorStats } from '../src/query'
 
 describe('overlay manifest', () => {
   it('declares a version 1 data overlay with an inline version 8 style', () => {
@@ -40,7 +40,7 @@ describe('overlay manifest', () => {
     expect(m.background[0]!.url).toBe('/plugin-id/plotterext/refresh.html')
   })
 
-  it('fills and outlines cells, and outlines the radar', () => {
+  it('fills and outlines cells, and outlines the sectors', () => {
     const m = buildManifest('plugin-id', '1.2.3') as {
       overlays: {
         style: { layers: { id: string; type: string; filter: unknown[] }[] }
@@ -54,16 +54,16 @@ describe('overlay manifest', () => {
     expect(layers).toEqual([
       ['cells', 'fill', 'cell'],
       ['cell-outlines', 'line', 'cell'],
-      ['radar', 'line', 'radar'],
-      ['radar-max', 'line', 'radar-max'],
+      ['sectors', 'line', 'sector'],
+      ['sector-max', 'line', 'sector-max'],
     ])
   })
 })
 
-describe('radarFeatures', () => {
-  const radar: Radar = {
+describe('sectorFeatures', () => {
+  const stats: SectorStats = {
     window: '24h',
-    class: 'all',
+    class: 'a',
     source: 'live',
     sectors: Array.from({ length: 24 }, (_, s) => ({
       sector: s,
@@ -78,9 +78,9 @@ describe('radarFeatures', () => {
   }
 
   it('draws a tick from the wedge out to the farthest reception', () => {
-    const withMax: Radar = {
-      ...radar,
-      sectors: radar.sectors.map((s) =>
+    const withMax: SectorStats = {
+      ...stats,
+      sectors: stats.sectors.map((s) =>
         s.sector === 2
           ? { ...s, maxM: 300 * 1852, maxAt: '2030-01-01T12:00:00.000Z' }
           : s.sector === 5
@@ -89,11 +89,11 @@ describe('radarFeatures', () => {
       ),
     }
     const ticks = (
-      radarFeatures(withMax, { lat: 0, lon: 0 }) as {
+      sectorFeatures(withMax, { lat: 0, lon: 0 }) as {
         properties: Record<string, unknown>
         geometry: { type: string; coordinates: number[][] }
       }[]
-    ).filter((f) => f.properties.kind === 'radar-max')
+    ).filter((f) => f.properties.kind === 'sector-max')
     expect(ticks.map((t) => t.properties.sector)).toEqual([2, 5])
     expect(ticks[0]!.geometry.type).toBe('LineString')
     expect(ticks[0]!.properties).toMatchObject({
@@ -105,8 +105,20 @@ describe('radarFeatures', () => {
     expect(ticks[1]!.properties.maxHour).toBe('2030-01-01T11:00:00.000Z')
   })
 
+  it('tags each feature with its class and keeps the ids apart', () => {
+    const own = { lat: 0, lon: 0 }
+    const a = sectorFeatures(stats, own) as {
+      id: string
+      properties: { cls: string }
+    }[]
+    const b = sectorFeatures({ ...stats, class: 'b' }, own) as typeof a
+    expect(a[0]!.properties.cls).toBe('a')
+    expect(b[0]!.properties.cls).toBe('b')
+    expect(a[0]!.id).not.toBe(b[0]!.id)
+  })
+
   it('draws a closed wedge per sector with data', () => {
-    const f = radarFeatures(radar, { lat: 0, lon: 0 }) as {
+    const f = sectorFeatures(stats, { lat: 0, lon: 0 }) as {
       geometry: { coordinates: number[][][] }
     }[]
     expect(f).toHaveLength(1)
@@ -116,6 +128,6 @@ describe('radarFeatures', () => {
   })
 
   it('draws nothing without an own position', () => {
-    expect(radarFeatures(radar, undefined)).toEqual([])
+    expect(sectorFeatures(stats, undefined)).toEqual([])
   })
 })

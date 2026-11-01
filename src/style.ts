@@ -1,4 +1,4 @@
-// Coverage and radar colours, shared by the plotter overlay and the web
+// Coverage and sector colours, shared by the plotter overlay and the web
 // app map so both draw the footprint the same way. Magenta to purple stands
 // out from both chart water and land; a blue ramp disappears over the sea.
 
@@ -8,10 +8,19 @@ export const CELL_HIGH = '#7a0177'
 export const CELL_FILL_OPACITY = 0.45
 export const CELL_LINE_WIDTH = 1
 
-export const RADAR_COLOUR = '#d94801'
-export const RADAR_LINE_WIDTH = 1.5
+/**
+ * Sector wedge colours per class, teal for A and orange for B as on the web
+ * app's sectors page, darker so they hold up on chart water and land.
+ */
+export const SECTOR_COLOURS = { a: '#00838f', b: '#d94801' } as const
+export const SECTOR_LINE_WIDTH = 1.5
 /** The farthest reception per sector: a thin tick beyond the wedge. */
-export const RADAR_MAX_LINE_WIDTH = 1
+export const SECTOR_MAX_LINE_WIDTH = 1
+
+/** The sector colour for a class, falling back to class B's for others. */
+export function sectorColour(cls: unknown): string {
+  return cls === 'a' ? SECTOR_COLOURS.a : SECTOR_COLOURS.b
+}
 
 /** Overlay opacity the plotter applies on top of the layer paint. */
 export const OVERLAY_OPACITY = 0.8
