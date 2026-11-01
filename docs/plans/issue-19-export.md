@@ -106,8 +106,9 @@ for read-only users), 7 (UI), 8 (daily files, `coverageRetentionDays`), 9,
   which changes the SPEC 6.1 "no write routes" text; the exports stay GET
   and read-only either way.
 - The filename pattern is this plan's choice; the decisions do not fix it.
-- A coverage footprint centred on a harbour still hints at the berth, and
-  anonymise does not change cell exports. Raise with the maintainer
-  whether anonymised coverage should drop cells near the own positions.
+- Decided after review: coverage is always its own download, separate from
+  the long-range files, and anonymise does not change it. A footprint
+  centred on a harbour can hint at the berth, so the download button says
+  so in one line; whether to publish the file is the user's call.
 - SPEC 2.4 still says the default H3 resolution is 5, while SPEC 9 and
   `src/config.ts` say 6; fix 2.4 in the same change.
