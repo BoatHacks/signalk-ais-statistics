@@ -126,7 +126,9 @@ remains.
 
 All seven issues land before 1.0.0, with 0.x releases on the way. The
 maintainer's answers to each issue's open questions are in its
-"Decisions" comment; each plan lists what is still open.
+"Decisions" comment; each plan lists what is still open. The plans
+already use "sectors" for the bearing view the code still calls "radar",
+following the maintainer's rename.
 
 - [ ] Propagation alerts (#13, [plan](issue-13-propagation-alerts.md))
 - [ ] Antenna and receiver comparison (#14, [plan](issue-14-source-comparison.md))

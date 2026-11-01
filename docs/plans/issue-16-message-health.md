@@ -29,6 +29,10 @@ everything). ARCHITECTURE 2.1, 2.4, 2.5a, 2.6, 2.8, 2.9, 2.11 and 7.
   message is a duplicate when the same key was seen less than 2 s earlier
   (fixed, not a setting). Entries older than 2 s are dropped on each add,
   so the map stays small. Duplicates are still counted everywhere else.
+  The detector remembers which event delivered the first copy and counts
+  two kinds (maintainer, after review): same-event duplicates (one feed
+  repeating itself) and cross-event duplicates (the same transmission on
+  two events: one receiver on two events, or two receivers hearing it).
 - **Invalid positions.** A position report (types 1, 2, 3, 9, 18, 19) that
   reaches the aggregator without `lat`/`lon` had them out of range or at
   the "not available" values 91/181; both decoders already drop those
@@ -50,11 +54,16 @@ everything). ARCHITECTURE 2.1, 2.4, 2.5a, 2.6, 2.8, 2.9, 2.11 and 7.
   hovercraft ferries) use the high-speed limit; everything else, including
   vessels whose type is not yet known, uses the normal limit. Ship type
   comes from the aggregator's vessel registry (`agg.vessel(mmsi)`).
+- **Reported SOG.** Both decoders also map speed over ground (messages 1,
+  2, 3, 18, 19 and 9 and the matching PGNs) onto the message, with 102.3 kn
+  (and the canboat equivalent) treated as not available.
 - **Fastest vessels.** Per UTC day, the highest implied speed of each MMSI
   (same 500 m baseline), capped at the 20 fastest, kept by `LongRangeLog`
   in the same daily file (decision 16: no new kind of state). An entry:
   `time`, `mmsi`, `name?`, `cls`, `shipType?`, `speedMps`, `limitMps`,
-  `implausible` (speed above the limit), `gapS`, `fromLat`, `fromLon`,
+  `implausible` (speed above the limit), `sogMps?` (the reported SOG of
+  the later report, shown side by side with the implied speed so a large
+  gap points at a bad position or a bad SOG), `gapS`, `fromLat`, `fromLon`,
   `lat`, `lon`. Names are filled in by the existing `enrich`. Implausible
   entries stay in the list and are marked, so a bogus jump can be told
   from a fast ferry, like far entries in the farthest list.
@@ -65,11 +74,12 @@ everything). ARCHITECTURE 2.1, 2.4, 2.5a, 2.6, 2.8, 2.9, 2.11 and 7.
   version 2 file uses `entries` and ignores `fastest`, so a downgrade
   keeps the farthest list. About 4 KB more per day at the cap.
 - **Paths** (in `src/paths.ts` only), cumulative counters published at each
-  interval: `health.decodeErrors`, `health.incomplete`, `health.duplicates`,
+  interval: `health.decodeErrors`, `health.incomplete`,
+  `health.duplicates.sameEvent`, `health.duplicates.crossEvent`,
   `health.positionInvalid`, `health.implausibleJumps`,
   `health.noOwnPosition`. `decodeErrors` and `incomplete` are the sums of
   the ingest stats, which already exist and reset with the process like
-  every other counter. 6 more paths per interval. Shares over a window use
+  every other counter. 7 more paths per interval. Shares over a window use
   `last` and `max` differences like the other counters; the denominator is
   `messages.total` plus `decodeErrors` and `incomplete`.
 - **REST.** `/series` gains `metric=health` (each share per hour);
@@ -78,10 +88,14 @@ everything). ARCHITECTURE 2.1, 2.4, 2.5a, 2.6, 2.8, 2.9, 2.11 and 7.
   window, so no new route. The class A/B mix needs no paths: the web app
   derives it from the `positions` series.
 - **Web app.** Overview: one line with the good-message share over 24 h,
-  and a hint when duplicates exceed 20 percent of messages ("one receiver
-  may reach two configured events"), no notification (decision 14).
+  and a hint when duplicates exceed 20 percent of messages, no
+  notification (decision 14). Same-event duplicates always count toward
+  the hint ("a feed repeats its messages"). Cross-event duplicates count
+  toward it only while `sourceStatistics` (#14) is off ("one receiver may
+  reach two configured events"); with it on they are shown as receiver
+  overlap instead.
   Charts: a health chart of shares per hour and the class A/B mix as a
-  stacked share. Radar page: a "Fastest vessels" table next to the
+  stacked share. Sectors page: a "Fastest vessels" table next to the
   farthest receptions table, implausible rows marked.
 - **Config** (server config form, basic settings per #20 decision 25):
   `jumpSpeedLimitKnots` 60, `jumpSpeedLimitHighSpeedKnots` 120 (ship types
@@ -91,8 +105,8 @@ everything). ARCHITECTURE 2.1, 2.4, 2.5a, 2.6, 2.8, 2.9, 2.11 and 7.
 
 Rejected: a payload hash as the duplicate key (NMEA 0183 and NMEA 2000
 copies differ in form); dropping duplicates or jumps (SPEC 2.3); reported
-SOG for the fastest list (not decoded today, and the implied speed is
-what tells a bogus jump apart).
+SOG alone or implied speed alone for the fastest list (the maintainer
+chose both side by side).
 
 ## Test Strategy
 Unit tests, synthetic MMSIs (999xxxxxx for vessels, 111999xxx for SAR
@@ -114,7 +128,7 @@ web share and hint helpers.
 - [ ] Long-range file version 2 with `fastest`, loader for version 1
 - [ ] Query: `health` series and summary; `/longrange` `fastest`
 - [ ] Web: overview line and duplicate hint, health and A/B mix charts,
-      fastest table on the radar page, checked at phone width
+      fastest table on the sectors page, checked at phone width
 - [ ] Docs: SPEC 2.3, new 2.8 Message health, 2.7, 4.1, 4.2, 6.1, 6.2, 7,
       8, 9, 10.2 (speed filter replaced by the count-only counter), 12 (new
       decision; the configurable events entry now names the duplicate
@@ -131,14 +145,13 @@ ARCHITECTURE.md, README.md, CHANGELOG.md.
 
 ## Open Points
 - Dependencies: #14 adds per-source health on top of the source label
-  `health.add` takes; #20 documents the six paths in `docs/paths.md`
-  (without a stability promise) and decides whether the jump limits get
-  live controls in the web app. Neither blocks this issue.
+  `health.add` takes; #20 documents the seven paths in `docs/paths.md`
+  (without a stability promise). The jump limits stay in the config form
+  (no live control). Neither blocks this issue.
 - A high-speed craft or WIG craft is judged by the normal limit until its
   message 5 or 24 is heard, so a few jumps can be counted early in a
   session. Accepted as a count-only artefact; documented in SPEC 2.8.
 - Whether ggencoder and canboatjs both leave out 91/181 rather than
   passing other sentinel values is assumed from the range check; the
   tests with both fixtures confirm it.
-- Default limits (60, 120, 600 kn) are a proposal for the maintainer to
-  confirm before implementation.
+- Default limits (60, 120, 600 kn) were confirmed by the maintainer.

@@ -36,8 +36,12 @@ for read-only users), 7 (UI), 8 (daily files, `coverageRetentionDays`), 9,
   Points at `[lon, lat]` with the same fields as properties (`distanceM`,
   `bearingDeg`, `ownLat`, `ownLon`, ...); no line features.
 - **Anonymise** (decision 20, default off): drops the `mmsi` and `name`
-  columns and properties entirely and rounds `own_lat` and `own_lon` to one
-  decimal (about 11 km). Class, ship type and the reported position stay.
+  columns, the own position and the reported target position entirely
+  (maintainer, after review: a target position with distance and bearing
+  gives the own position back). Time, class, ship type, distance and
+  bearing stay. With no positions left there is nothing to map, so
+  `longrange.geojson?anonymise=true` answers 400 and the web app offers
+  anonymised export as CSV only.
 - **CSV format.** RFC 4180: comma separator, CRLF, header row, UTF-8. A field
   holding a comma, quote, CR or LF is quoted, quotes doubled. Vessel names are
   untrusted AIS input (ARCHITECTURE 6), so a text field starting with `=`,
@@ -60,8 +64,8 @@ for read-only users), 7 (UI), 8 (daily files, `coverageRetentionDays`), 9,
 
 ## Test Strategy
 - `test/export.test.ts`: escaping (comma, quote, CRLF, leading `=`, `-` in a
-  negative number left alone), column order, anonymise drops columns and
-  rounds, GeoJSON coordinate order, empty sets give a header only.
+  negative number left alone), column order, anonymise drops the identity and position columns,
+  anonymised GeoJSON gives 400, GeoJSON coordinate order, empty sets give a header only.
 - `test/api.test.ts` with `test/fixtures/router.ts`: headers and file names,
   `window=all` reads every retained file and nothing pruned, `1h` and bad
   `anonymise` values give 400, a stopped plugin gives 503, routes are
@@ -101,7 +105,9 @@ for read-only users), 7 (UI), 8 (daily files, `coverageRetentionDays`), 9,
   without a stability promise (decision 24), and adds the first write route,
   which changes the SPEC 6.1 "no write routes" text; the exports stay GET
   and read-only either way.
-- The rounding step (0.1 degree) and the filename pattern are this plan's
-  choice; the decisions do not fix them.
+- The filename pattern is this plan's choice; the decisions do not fix it.
+- A coverage footprint centred on a harbour still hints at the berth, and
+  anonymise does not change cell exports. Raise with the maintainer
+  whether anonymised coverage should drop cells near the own positions.
 - SPEC 2.4 still says the default H3 resolution is 5, while SPEC 9 and
   `src/config.ts` say 6; fix 2.4 in the same change.

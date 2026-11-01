@@ -37,7 +37,7 @@ and 7. Maintainer decisions 17 to 19 (and 4 for #13) in the issue comment.
 - **What is split** (decision 18): coverage cells only. No new paths,
   `src/paths.ts` is unchanged, `coverage.cells.today` and
   `coverage.area.today` stay combined, and range, histograms, sectors and
-  the radar are not split. Nothing is filtered: a report with mode
+  the sectors view are not split. Nothing is filtered: a report with mode
   `unknown` still lands in coverage, under `unknown`.
 - **Coverage file, version 2** (SPEC 8): `{ version: 2, date, resolution,
   distanceBins, modes: { stationary, underway, unknown } }`, each mode a
@@ -57,11 +57,11 @@ and 7. Maintainer decisions 17 to 19 (and 4 for #13) in the issue comment.
   read-only.
 - **Map** (SPEC 7): a mode selector (All, Stationary, Underway) next to the
   window selector, kept in the hash route (`#/map?window=7d&mode=underway`)
-  and not saved. The info line names the mode and says that the radar is
+  and not saved. The info line names the mode and says that the sectors view is
   not split. No marker per mooring spot (decision 19; a change of berth is
   covered by the #14 date compare).
 - **Overlay** (SPEC 6.3): unchanged, the combined 7 day footprint. No
-  second overlay unless the maintainer asks (Open Points).
+  second overlay (maintainer, after review).
 - **For #13**: `Running` holds the `VesselMode`; #13 reads `mode.current()`
   for its underway suppression setting (decision 4). #17 adds no alert code.
 
@@ -108,8 +108,8 @@ point and offsets in metres; no recorded data.
   while planning); values missing from the list above fall back to drift.
 - Whether a user-set `navigation.state` left at `moored` after leaving is
   trusted as decided; this plan trusts it, as decision 17 says.
-- Overlay: the issue offered a stationary footprint as a second overlay;
-  not decided, so the overlay stays combined. Ask before adding one.
+- Overlay: decided after review, one combined overlay; the mode split is
+  in the web app map only.
 - #13 depends on `mode.current()`; whichever lands first defines it.
 - #19: coverage exports carry the mode per cell (a `mode` column in CSV,
   field in JSON); the anonymise switch does not affect it.

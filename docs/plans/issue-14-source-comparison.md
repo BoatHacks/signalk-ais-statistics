@@ -18,11 +18,11 @@ SPEC 2.3 (distance bins), 4.1, 5 (sources, double counting), 6.1, 6.2, 7,
   7 days, per the lean history decision) and a source picker (`all`, or a
   source when per-source statistics are on). Per window it shows messages,
   positions by class, distance avg, median, p95, p99 (max marked
-  untrusted), the radar and the coverage area, side by side with the
-  difference. `/summary` and `/radar` accept `from` and `to` (ISO, whole
+  untrusted), the sectors view and the coverage area, side by side with the
+  difference. `/summary` and `/sectors` accept `from` and `to` (ISO, whole
   hours) as an alternative to `window`; `/coverage` accepts `from` and `to`
   as UTC days and reads only the daily files (`Coverage.footprintRange`).
-  Radar and coverage stay combined; per-source compare is the summary
+  Sectors view and coverage stay combined; per-source compare is the summary
   figures only. Unique vessels stay null beyond 24 h (SPEC 6.1). Coverage
   reaches back only `coverageRetentionDays` (14 by default, so 7 + 7 days
   fits only when the after window ends today); the view says so instead of
@@ -102,10 +102,10 @@ test/web/route.test.ts, SPEC.md, ARCHITECTURE.md, README.md, CHANGELOG.md.
   type and position within 2 s, decoder independent. Two different
   antennas hearing the same transmission produce exactly that, so a
   healthy two-receiver setup trips the 20 percent hint (decision 14).
-  Proposed: per source, count duplicates whose first copy came from the
-  same source apart from those from another source, and base the hint on
-  the cross-event share only when per-source statistics are off. Needs a
-  maintainer answer and agreement with the #16 plan.
+  Decided after review: #16 counts same-event and cross-event duplicates
+  apart; cross-event duplicates count toward the hint only while
+  `sourceStatistics` is off, and are shown as receiver overlap when it is
+  on. This issue only adds the per-source split of those counters.
 - **Dependencies.** #16 supplies the health counters this splits per
   source. #13 alerts stay on the combined figures. #17 mode-split coverage
   is not filtered in compare (decision 19). #19 export should include the

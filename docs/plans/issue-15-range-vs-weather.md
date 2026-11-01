@@ -26,12 +26,14 @@ layer), 2.9 (REST), 2.11 (web app), 7 (file structure).
   so it lives in the server config form only (decision 25). The defaults
   live in `src/config.ts`, not `src/paths.ts`, since the plugin does not
   publish them.
-- **Aggregate.** Weather is read with `last` at 3600 s, the value at the end
-  of each hour. That keeps the CLAUDE.md and SPEC 8 rule of `last` and `max`
-  only, and weather moves slowly enough that the end-of-hour value is a fair
-  hourly figure. `average` would be smoother; see Open Points. A `last`
-  series repeats the previous value over hours without a sample, so a
-  sensor that went quiet shows as a flat line, not a gap.
+- **Aggregate.** Weather is read with `average` at 3600 s, the hourly mean
+  (maintainer, after review). This is a documented exception to the
+  `last`/`max` rule, for the weather paths only: `Aggregate` in
+  `src/history.ts` gains `average`, and CLAUDE.md, SPEC 8 and ARCHITECTURE
+  2.7 say so in the same change. Only one provider (QuestDB) is known to
+  accept `average`, so a weather read that fails with `average` is retried
+  once with `last`, and the panel notes which one it shows. Counters keep
+  using `last` and `max` only.
 - **Query.** `Query.weather(from, to, now)` aligns `from` down to the hour,
   as `series` does, and calls `HistoryReader.series(weatherPaths, 'last',
   from, to, 3600)`. It returns `{ source: 'history', resolution: 3600,
@@ -106,15 +108,11 @@ test/query.test.ts, test/api.test.ts, test/web/stats.test.ts (new),
 test/web/units.test.ts, SPEC.md, ARCHITECTURE.md, README.md, CHANGELOG.md.
 
 ## Open Points
-- **`average` vs `last`.** This plan keeps to `last`. If the maintainer
-  prefers hourly averages, `Aggregate` in `src/history.ts`, SPEC 8 and
-  ARCHITECTURE 2.7 must allow `average` for weather reads only, with a
-  fallback to `last` for a provider that rejects it.
 - **Air minus water temperature.** The issue suggested it as an inversion
   proxy and the decisions do not settle it. Proposal: offer it as one more
   scatter series when both temperature paths have data. Needs a yes or no.
 - **Sparse hours.** An hour with few positions gives a noisy p99 (compare
-  `MIN_SECTOR_REPORTS` on the radar). This plan pairs every hour with a p99;
+  `MIN_SECTOR_REPORTS` on the sectors view). This plan pairs every hour with a p99;
   a minimum count is a display choice, never a filter in the aggregator.
 - **Limit of 8 paths** is a proposal to keep one request; confirm.
 - **Dependency on #20.** None hard: `weatherPaths` is a config form setting

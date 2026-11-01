@@ -17,7 +17,7 @@ layer), 2.9 (REST), 2.11 (Web app), 5, 7.
   days. Taken from `Query.series('distance', 3600, now - 7d, now)`, which
   already derives hourly p99 from the distance bin counters with `last` and
   `max` only; recomputed once an hour in the hourly job, not per check.
-  Only hours with at least 20 position reports count (the radar's
+  Only hours with at least 20 position reports count (the sectors view's
   `MIN_SECTOR_REPORTS` reasoning: sparse hours land on bin edges). Live-only
   mode uses the aggregator's hour buckets, so at most 24 hours. Alerts stay
   unarmed until 24 qualifying hours exist. No time-of-day baseline.
@@ -56,7 +56,7 @@ layer), 2.9 (REST), 2.11 (Web app), 5, 7.
   `unarmed`), `ratio`, `p99M`, `baselineM`, `baselineHours`, `vessels`,
   `sectors` and `since`. The web app adds the notification path to its one
   WebSocket subscription and shows a banner in the shell, under the offline
-  banner, linking to `#/radar` where the long-range table lists the entries
+  banner, linking to `#/sectors` where the long-range table lists the entries
   behind it.
 
 ## Test Strategy
@@ -100,9 +100,12 @@ non-statistics output), 7 (banner), 8 (nothing new persisted), 9 (options),
 (notifications), 7. README "What it does".
 
 Dependencies: #17 provides the mode (an injected `mode()` returning
-`stationary`, `underway` or `unknown`). #20: these are basic settings in the
-server config form only; the #20 save route must merge into the stored
-config so it never drops them. #14: combined range only; per-source alerts
+`stationary`, `underway` or `unknown`). #20: the factor, the vessel count
+and the sustained minutes are live settings (maintainer, after review): they
+join `LIVE_SETTINGS`, get web app controls next to the alert banner, and are
+saved through the #20 admin/readwrite-gated save button. The other alert
+options stay in the server config form, and the #20 save route must merge
+into the stored config so it never drops them. #14: combined range only; per-source alerts
 are not planned. #16: its counters do not feed the trigger; the distinct
 vessel rule already covers a single jumping vessel. #19: the ratio series
 is exportable like any path.
