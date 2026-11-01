@@ -48,6 +48,33 @@ describe('LongRangeLog', () => {
     expect(Math.min(...e.map((x) => x.distanceM))).toBeGreaterThan(10 * NM)
   })
 
+  it('replaces a vessel by its own farther report when the day is full', async () => {
+    const log = new LongRangeLog(await dir(), 14, T0)
+    for (let i = 0; i < MAX_PER_DAY; i++)
+      log.add(located(`9990${String(i).padStart(5, '0')}`, 10 + i), {})
+    // The nearest vessel is received farther: it moves up, nobody leaves.
+    log.add(located('999000000', 200, T0 + 1000), {})
+    // A nearer report of a kept vessel changes nothing.
+    log.add(located('999000001', 1, T0 + 2000), {})
+    const e = await log.entries(T0, T0 + HOUR_MS, 1000)
+    expect(e).toHaveLength(MAX_PER_DAY)
+    expect(e[0]).toMatchObject({ mmsi: '999000000' })
+    expect(e[0]!.distanceM).toBeCloseTo(200 * NM, -2)
+    expect(e.find((x) => x.mmsi === '999000001')!.distanceM).toBeCloseTo(
+      11 * NM,
+      -1,
+    )
+  })
+
+  it('does not let a nearer new vessel into a full day', async () => {
+    const log = new LongRangeLog(await dir(), 14, T0)
+    for (let i = 0; i < MAX_PER_DAY; i++)
+      log.add(located(`9990${String(i).padStart(5, '0')}`, 10 + i), {})
+    log.add(located('999100000', 5), {})
+    const e = await log.entries(T0, T0 + 1, 1000)
+    expect(e.some((x) => x.mmsi === '999100000')).toBe(false)
+  })
+
   it('fills in a name learnt later', async () => {
     const log = new LongRangeLog(await dir(), 14, T0)
     log.add(located('999000003', 12), {})

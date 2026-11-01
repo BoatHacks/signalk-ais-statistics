@@ -60,6 +60,32 @@ describe('Coverage', () => {
     expect(c.today(T0).cells).toBe(f.cells.length)
   })
 
+  it('disables the cap at 100 percent', async () => {
+    const c = new Coverage(await dir(), 5, 90, 100, T0)
+    for (let i = 0; i < 500; i++) addAt(c, (i * 7) % 360, 10)
+    addAt(c, 45, 2500)
+    const f = await c.footprint(1, T0)
+    expect(f.capNm).toBeNull()
+    expect(f.cappedCells).toBe(0)
+    expect(f.cells.some((x) => x.minDistanceNm > 2000)).toBe(true)
+  })
+
+  it('takes the cap of a window from the merged days', async () => {
+    const d = await dir()
+    const c = new Coverage(d, 5, 90, 99, T0 - DAY_MS)
+    // Yesterday: many far reports, so 60 nm is inside the 7 day cap.
+    for (let i = 0; i < 300; i++) addAt(c, (i * 7) % 360, 70, T0 - DAY_MS)
+    await c.flush()
+    // Today: short range only, plus one report at 60 nm.
+    for (let i = 0; i < 300; i++) addAt(c, (i * 7) % 360, 10, T0)
+    addAt(c, 200, 60, T0)
+    const today = await c.footprint(1, T0)
+    expect(today.capped.map((x) => x.minDistanceNm)).toEqual([60])
+    const week = await c.footprint(7, T0)
+    expect(week.capNm).toBeGreaterThan(60)
+    expect(week.cappedCells).toBe(0)
+  })
+
   it('writes one file per day and reads it back after a restart', async () => {
     const d = await dir()
     const c = new Coverage(d, 5, 90, 100, T0)
