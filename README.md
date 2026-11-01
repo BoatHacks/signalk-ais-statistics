@@ -14,8 +14,8 @@ server; the open points are in SPEC section 13.
 - Report how far your receiver reaches: average, median, p95, p99 and max
   distance, plus 24 bearing sectors per class. Percentiles keep the
   numbers meaningful when a bad position arrives.
-- Keep the far ones visible: a thin tick per sector reaches out to
-  its farthest reception, and a daily log lists the farthest receptions
+- Keep the far ones visible: the sector with the farthest reception is
+  outlined bolder and carries a dot at that distance, and a daily log lists the farthest receptions
   with time, vessel name and MMSI, and both positions, so a ducting or
   sporadic E event can be told from a wrong position.
 - Check message health: undecodable, incomplete and duplicate messages,

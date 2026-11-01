@@ -14,8 +14,10 @@ export const CELL_LINE_WIDTH = 1
  */
 export const SECTOR_COLOURS = { a: '#00838f', b: '#d94801' } as const
 export const SECTOR_LINE_WIDTH = 1.5
-/** The farthest reception per sector: a thin tick beyond the wedge. */
-export const SECTOR_MAX_LINE_WIDTH = 1
+/** The outline of the sector holding a class's farthest reception. */
+export const SECTOR_FARTHEST_LINE_WIDTH = 3
+/** Radius of the dot at a class's farthest reception, in pixels. */
+export const SECTOR_MAX_RADIUS = 3.5
 
 /** The sector colour for a class, falling back to class B's for others. */
 export function sectorColour(cls: unknown): string {

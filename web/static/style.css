@@ -341,33 +341,23 @@ svg.sectors .axis {
 .wedge:hover {
   fill-opacity: 0.9;
 }
-.tick {
-  stroke-width: 1;
-  pointer-events: none;
+.wedge.farthest {
+  stroke: var(--sector);
+  stroke-opacity: 1;
+  stroke-width: 2;
 }
-.tick-dot {
+.farthest-dot {
   pointer-events: none;
   stroke-width: 0;
 }
-.tick.clipped {
-  stroke-dasharray: 3 2;
-}
-.tick.farthest {
-  stroke-width: 2.5;
-}
-/* Beyond the rim: a hollow dot where the tick stops. */
-.tick-dot.clipped {
+/* Beyond the rim: a hollow dot on the rim. */
+.farthest-dot.clipped {
   fill: var(--bg-panel);
   stroke-width: 1.5;
 }
 .dot-hit {
   fill: transparent;
   pointer-events: fill;
-}
-.tick-hit {
-  stroke: transparent;
-  stroke-width: 12;
-  pointer-events: stroke;
 }
 .long-range {
   overflow-x: auto;

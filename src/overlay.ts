@@ -13,8 +13,9 @@ import {
   CELL_LOW,
   OVERLAY_OPACITY,
   SECTOR_COLOURS,
+  SECTOR_FARTHEST_LINE_WIDTH,
   SECTOR_LINE_WIDTH,
-  SECTOR_MAX_LINE_WIDTH,
+  SECTOR_MAX_RADIUS,
 } from './style'
 
 export const OVERLAY_ID = 'coverage'
@@ -83,17 +84,22 @@ export function overlayStyle(dataUrl: string): object {
         filter: ['==', ['get', 'kind'], 'sector'],
         paint: {
           'line-color': SECTOR_COLOUR,
-          'line-width': SECTOR_LINE_WIDTH,
+          'line-width': [
+            'case',
+            ['==', ['get', 'farthest'], true],
+            SECTOR_FARTHEST_LINE_WIDTH,
+            SECTOR_LINE_WIDTH,
+          ],
         },
       },
       {
         id: 'sector-max',
-        type: 'line',
+        type: 'circle',
         source: OVERLAY_SOURCE,
         filter: ['==', ['get', 'kind'], 'sector-max'],
         paint: {
-          'line-color': SECTOR_COLOUR,
-          'line-width': SECTOR_MAX_LINE_WIDTH,
+          'circle-color': SECTOR_COLOUR,
+          'circle-radius': SECTOR_MAX_RADIUS,
         },
       },
     ],
@@ -137,10 +143,10 @@ export function buildManifest(
 
 /**
  * One closed polygon per sector with a p99, from own position out to it,
- * and one line per sector with a farthest reception beyond the wedge, along
- * the sector's centre bearing from the wedge's edge out to that distance.
- * Each feature carries the class (`cls`) of the sectors it was built from,
- * so class A and B can be drawn in their own colours.
+ * and one point at the class's farthest reception, on its sector's centre
+ * bearing. That sector's polygon carries `farthest: true` and is outlined
+ * bolder. Each feature carries the class (`cls`) of the sectors it was
+ * built from, so class A and B can be drawn in their own colours.
  */
 export function sectorFeatures(
   stats: SectorStats,
@@ -149,32 +155,26 @@ export function sectorFeatures(
   if (!own) return []
   const cls = stats.class
   const out: object[] = []
+  const far = Math.max(0, ...stats.sectors.map((s) => s.maxM ?? 0))
+  // The first sector wins a tie, as on the web app's sectors page.
+  const top = far > 0 ? stats.sectors.find((s) => s.maxM === far) : undefined
+  if (top) {
+    const p = destination(own, (top.fromDeg + top.toDeg) / 2, far / M_PER_NM)
+    out.push({
+      type: 'Feature',
+      id: `sector-max-${cls}`,
+      properties: {
+        kind: 'sector-max',
+        cls,
+        sector: top.sector,
+        maxM: top.maxM,
+        maxAt: top.maxAt,
+        maxHour: top.maxHour,
+      },
+      geometry: { type: 'Point', coordinates: [round(p.lon), round(p.lat)] },
+    })
+  }
   for (const s of stats.sectors) {
-    const inner = s.p99M ?? 0
-    if (s.maxM !== null && s.maxM > inner) {
-      const mid = (s.fromDeg + s.toDeg) / 2
-      const a = destination(own, mid, inner / M_PER_NM)
-      const b = destination(own, mid, s.maxM / M_PER_NM)
-      out.push({
-        type: 'Feature',
-        id: `sector-max-${cls}-${s.sector}`,
-        properties: {
-          kind: 'sector-max',
-          cls,
-          sector: s.sector,
-          maxM: s.maxM,
-          maxAt: s.maxAt,
-          maxHour: s.maxHour,
-        },
-        geometry: {
-          type: 'LineString',
-          coordinates: [
-            [round(a.lon), round(a.lat)],
-            [round(b.lon), round(b.lat)],
-          ],
-        },
-      })
-    }
     if (s.p99M === null || s.p99M <= 0) continue
     const ring: number[][] = [[own.lon, own.lat]]
     for (let b = s.fromDeg; b <= s.toDeg; b += 2.5) {
@@ -190,6 +190,7 @@ export function sectorFeatures(
         cls,
         sector: s.sector,
         p99M: s.p99M,
+        ...(s === top ? { farthest: true } : {}),
       },
       geometry: { type: 'Polygon', coordinates: [ring] },
     })

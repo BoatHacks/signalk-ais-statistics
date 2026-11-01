@@ -52,6 +52,12 @@ uses [Semantic Versioning](https://semver.org/).
   Version 1 files still load, their cells counting as mode unknown (shown
   under All only). An older plugin version does not read version 2 files,
   so after a downgrade the coverage map starts empty for the retained days.
+- The farthest-reception ticks are gone from the sectors charts, the map
+  and the plotter overlay. Instead, the sector holding the farthest
+  reception of a chart (on the map and plotter, of a class) is outlined
+  bolder and has one small dot at that distance on its centre line.
+  Hovering a wedge on the sectors page shows its farthest reception and
+  time beside the p99. The p99 cap at the farthest reception stays.
 
 ## [0.5.0] - 2026-11-01
 
