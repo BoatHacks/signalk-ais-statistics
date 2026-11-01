@@ -5,7 +5,14 @@ import { FakeHistory } from './history'
 /** With a FakeHistory, published deltas are recorded the way a provider would. */
 export function fakeApp(dataDir: string, history?: FakeHistory) {
   const emitter = new EventEmitter()
-  const positionListeners = new Set<(v: unknown) => void>()
+  /** Self stream listeners per path. */
+  const selfListeners = new Map<string, Set<(v: unknown) => void>>()
+  const listenersOf = (path: string) => {
+    let set = selfListeners.get(path)
+    if (!set) selfListeners.set(path, (set = new Set()))
+    return set
+  }
+  const positionListeners = listenersOf('navigation.position')
   const deltas: {
     id: string
     delta: { updates: { values: { path: string; value: number }[] }[] }
@@ -29,10 +36,11 @@ export function fakeApp(dataDir: string, history?: FakeHistory) {
     emit: emitter.emit.bind(emitter),
     listenerCount: emitter.listenerCount.bind(emitter),
     streambundle: {
-      getSelfStream: () => ({
+      getSelfStream: (path: string) => ({
         onValue(f: (v: unknown) => void) {
-          positionListeners.add(f)
-          return () => positionListeners.delete(f)
+          const set = listenersOf(path)
+          set.add(f)
+          return () => set.delete(f)
         },
       }),
     },
@@ -73,6 +81,11 @@ export function fakeApp(dataDir: string, history?: FakeHistory) {
     position(lat: number, lon: number) {
       for (const f of positionListeners) f({ latitude: lat, longitude: lon })
     },
+    /** Sends a navigation.state value, as the server's self stream would. */
+    navState(value: unknown) {
+      for (const f of listenersOf('navigation.state')) f(value)
+    },
     positionListeners,
+    selfListeners,
   }
 }

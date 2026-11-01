@@ -88,6 +88,23 @@ describe('resolveConfig', () => {
     expect(c.publishOverlay).toBe(true)
   })
 
+  it('detects stationary within 200 m for 10 minutes by default, within bounds', () => {
+    expect(DEFAULT_CONFIG.modeDriftRadiusMeters).toBe(200)
+    expect(DEFAULT_CONFIG.modeDriftMinutes).toBe(10)
+    const low = resolveConfig({ modeDriftRadiusMeters: 1, modeDriftMinutes: 0 })
+    expect(low.modeDriftRadiusMeters).toBe(50)
+    expect(low.modeDriftMinutes).toBe(2)
+    const high = resolveConfig({
+      modeDriftRadiusMeters: 1e6,
+      modeDriftMinutes: 600,
+    })
+    expect(high.modeDriftRadiusMeters).toBe(2000)
+    expect(high.modeDriftMinutes).toBe(60)
+    expect(
+      resolveConfig({ modeDriftRadiusMeters: 350 }).modeDriftRadiusMeters,
+    ).toBe(350)
+  })
+
   it('publishes every 5 minutes and keeps coverage for 14 days by default', () => {
     expect(DEFAULT_CONFIG.publishIntervalMinutes).toBe(5)
     expect(DEFAULT_CONFIG.coverageRetentionDays).toBe(14)

@@ -4,7 +4,12 @@ import { join } from 'node:path'
 import { getHexagonAreaAvg, latLngToCell } from 'h3-js'
 import { describe, expect, it } from 'vitest'
 import { DAY_MS } from '../src/aggregate'
-import { Coverage, footprintGeoJson, utcDay } from '../src/coverage'
+import {
+  Coverage,
+  MAX_CELLS_PER_DAY,
+  footprintGeoJson,
+  utcDay,
+} from '../src/coverage'
 import { destination } from '../src/geo'
 import { OWN } from './fixtures/ais'
 
@@ -183,5 +188,171 @@ describe('Coverage', () => {
       expect(f.properties.intensity).toBeGreaterThan(0)
       expect(f.properties.intensity).toBeLessThanOrEqual(1)
     }
+  })
+})
+
+describe('Coverage per own vessel mode', () => {
+  const modeAt = (
+    c: Coverage,
+    mode: 'stationary' | 'underway' | 'unknown',
+    bearing: number,
+    nm: number,
+    time = T0,
+  ) => {
+    const p = destination(OWN, bearing, nm)
+    c.add(p.lat, p.lon, nm, time, mode)
+  }
+
+  it('keeps cells per mode and unions them for all', async () => {
+    const c = new Coverage(await dir(), 5, 90, 100, T0)
+    modeAt(c, 'stationary', 0, 5)
+    modeAt(c, 'stationary', 0, 5)
+    modeAt(c, 'underway', 0, 5)
+    modeAt(c, 'underway', 90, 20)
+    modeAt(c, 'unknown', 180, 20)
+    const all = await c.footprint(1, T0)
+    const st = await c.footprint(1, T0, 100, 'stationary')
+    const uw = await c.footprint(1, T0, 100, 'underway')
+    expect(all.mode).toBe('all')
+    expect(st.mode).toBe('stationary')
+    expect(all.cells).toHaveLength(3)
+    expect(st.cells).toHaveLength(1)
+    expect(uw.cells).toHaveLength(2)
+    // A cell seen in two modes is one cell of the combined footprint.
+    const shared = all.cells.find((x) => x.id === st.cells[0]!.id)!
+    expect(shared.reports).toBe(3)
+    expect(c.today(T0).cells).toBe(3)
+  })
+
+  it('caps every mode with the distances of all modes, so modes are subsets', async () => {
+    const c = new Coverage(await dir(), 5, 90, 99, T0)
+    for (let i = 0; i < 500; i++) modeAt(c, 'underway', (i * 7) % 360, 10)
+    // Far and sparse while stationary: beyond the combined cap.
+    modeAt(c, 'stationary', 45, 300)
+    modeAt(c, 'stationary', 0, 2)
+    const all = await c.footprint(1, T0)
+    const st = await c.footprint(1, T0, 99, 'stationary')
+    expect(st.capNm).toBe(all.capNm)
+    expect(st.cappedCells).toBe(1)
+    const ids = new Set(all.cells.map((x) => x.id))
+    for (const mode of ['stationary', 'underway'] as const)
+      for (const cell of (await c.footprint(1, T0, 99, mode)).cells)
+        expect(ids.has(cell.id)).toBe(true)
+  })
+
+  it('writes version 2 files and reads the modes back after a restart', async () => {
+    const d = await dir()
+    const c = new Coverage(d, 5, 90, 100, T0)
+    modeAt(c, 'stationary', 0, 5)
+    modeAt(c, 'underway', 90, 20)
+    await c.flush()
+    const file = JSON.parse(
+      await readFile(join(d, `coverage-${utcDay(T0)}.json`), 'utf8'),
+    )
+    expect(file.version).toBe(2)
+    expect(Object.keys(file.modes).sort()).toEqual([
+      'stationary',
+      'underway',
+      'unknown',
+    ])
+    expect(file.cells).toBeUndefined()
+
+    const again = new Coverage(d, 5, 90, 100, T0 + 1000)
+    await again.load(T0 + 1000)
+    modeAt(again, 'stationary', 180, 8, T0 + 1000)
+    const st = await again.footprint(1, T0 + 1000, 100, 'stationary')
+    expect(st.cells).toHaveLength(2)
+    expect(
+      (await again.footprint(1, T0 + 1000, 100, 'underway')).cells,
+    ).toHaveLength(1)
+  })
+
+  it('reads a version 1 file with its cells under unknown', async () => {
+    const d = await dir()
+    const id = latLngToCell(0.01, 0.01, 5)
+    await writeFile(
+      join(d, `coverage-${utcDay(T0 - DAY_MS)}.json`),
+      JSON.stringify({
+        version: 1,
+        date: utcDay(T0 - DAY_MS),
+        resolution: 5,
+        cells: { [id]: [1, 3] },
+        distanceBins: new Array(32).fill(0),
+      }),
+    )
+    const c = new Coverage(d, 5, 90, 100, T0)
+    expect((await c.footprint(7, T0)).cells).toEqual([
+      { id, minDistanceNm: 1, reports: 3 },
+    ])
+    expect((await c.footprint(7, T0, 100, 'stationary')).cells).toEqual([])
+    expect((await c.footprint(7, T0, 100, 'underway')).cells).toEqual([])
+  })
+
+  it('upgrades a version 1 file of today at the next flush', async () => {
+    const d = await dir()
+    const id = latLngToCell(0.01, 0.01, 5)
+    const name = join(d, `coverage-${utcDay(T0)}.json`)
+    await writeFile(
+      name,
+      JSON.stringify({
+        version: 1,
+        date: utcDay(T0),
+        resolution: 5,
+        cells: { [id]: [1, 3] },
+        distanceBins: new Array(32).fill(0),
+      }),
+    )
+    const c = new Coverage(d, 5, 90, 100, T0)
+    await c.load(T0)
+    await c.flush()
+    const file = JSON.parse(await readFile(name, 'utf8'))
+    expect(file.version).toBe(2)
+    expect(file.modes.unknown).toEqual({ [id]: [1, 3] })
+  })
+
+  it('skips mode entries that are not cell maps, and unknown versions', async () => {
+    const d = await dir()
+    const id = latLngToCell(0.01, 0.01, 5)
+    const write = (days: number, body: object) =>
+      writeFile(
+        join(d, `coverage-${utcDay(T0 - days * DAY_MS)}.json`),
+        JSON.stringify({
+          date: utcDay(T0 - days * DAY_MS),
+          resolution: 5,
+          distanceBins: new Array(32).fill(0),
+          ...body,
+        }),
+      )
+    await write(1, {
+      version: 2,
+      modes: { stationary: [1, 2], underway: { [id]: [2, 4] }, unknown: 'x' },
+    })
+    await write(2, { version: 2, modes: 'nope' })
+    await write(3, { version: 3, modes: { underway: { [id]: [9, 9] } } })
+    const c = new Coverage(d, 5, 90, 100, T0)
+    expect((await c.footprint(7, T0)).cells).toEqual([
+      { id, minDistanceNm: 2, reports: 4 },
+    ])
+  })
+
+  it('counts the cell limit over mode and cell pairs', async () => {
+    const c = new Coverage(await dir(), 8, 90, 100, T0)
+    // A grid of distinct cells, each about 1 km apart.
+    const at = (i: number) => ({
+      lat: (i % 150) * 0.01,
+      lon: Math.floor(i / 150) * 0.01,
+    })
+    for (let i = 0; i < MAX_CELLS_PER_DAY / 2; i++) {
+      const p = at(i)
+      c.add(p.lat, p.lon, 1, T0, 'stationary')
+      c.add(p.lat, p.lon, 1, T0, 'underway')
+    }
+    expect(c.droppedCells).toBe(0)
+    const p = at(MAX_CELLS_PER_DAY)
+    c.add(p.lat, p.lon, 1, T0, 'unknown')
+    expect(c.droppedCells).toBe(1)
+    // Known cells still count.
+    c.add(at(0).lat, at(0).lon, 1, T0, 'stationary')
+    expect(c.droppedCells).toBe(1)
   })
 })
