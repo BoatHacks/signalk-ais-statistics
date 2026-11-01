@@ -21,11 +21,14 @@ import type { LongRangeEntry } from './longrange'
 import { addInto, emptyBins, summarize } from './histogram'
 import {
   DISTANCE_BIN_COUNT,
+  HEALTH_KINDS,
   SECTOR_CLASSES,
   SECTOR_COUNT,
   SECTOR_WIDTH_DEG,
   distanceBinPaths,
+  healthPaths,
   paths,
+  type HealthKind,
   type SectorClass,
   type TypeGroup,
 } from './paths'
@@ -41,7 +44,13 @@ export function isWindow(w: unknown): w is WindowName {
   return typeof w === 'string' && Object.hasOwn(WINDOWS, w)
 }
 
-export const METRICS = ['messages', 'positions', 'distance', 'vessels'] as const
+export const METRICS = [
+  'messages',
+  'positions',
+  'distance',
+  'vessels',
+  'health',
+] as const
 export type Metric = (typeof METRICS)[number]
 export const MAX_SERIES_POINTS = 2000
 /**
@@ -82,8 +91,26 @@ export interface Summary {
   /** Unique vessels; null for windows over 24 hours, which are not additive. */
   vessels: { total: number; byGroup: Record<TypeGroup, number> } | null
   distance: DistanceFigures
+  health: HealthFigures
   /** Set when history failed and the figures fell back to live data. */
   historyError?: string
+}
+
+/** Message health over a window (SPEC 2.8). */
+export interface HealthFigures {
+  /** Everything received: decoded messages, decode errors and incomplete. */
+  received: number
+  counts: Record<HealthKind, number>
+}
+
+function healthFigures(
+  messages: number,
+  counts: Record<HealthKind, number>,
+): HealthFigures {
+  return {
+    received: messages + counts.decodeErrors + counts.incomplete,
+    counts,
+  }
 }
 
 export interface SectorStat {
@@ -142,13 +169,23 @@ function distanceFigures(bins: number[], maxNm?: number): DistanceFigures {
   }
 }
 
+const HEALTH_PATHS = HEALTH_KINDS.map((k) => healthPaths[k])
+
 const COUNTER_PATHS = [
   paths.messagesTotal,
   paths.positionsClassA,
   paths.positionsClassB,
   paths.positionsOther,
   ...distanceBinPaths,
+  ...HEALTH_PATHS,
 ]
+const HEALTH_AT = 4 + DISTANCE_BIN_COUNT
+
+const healthRecord = (values: number[]): Record<HealthKind, number> =>
+  Object.fromEntries(HEALTH_KINDS.map((k, i) => [k, values[i] ?? 0])) as Record<
+    HealthKind,
+    number
+  >
 
 function sum(xs: number[]): number {
   let n = 0
@@ -291,6 +328,7 @@ export class Query {
           other: b.positions.other,
         },
         distance: distanceFigures(b.distanceBins, b.maxNm),
+        health: healthFigures(b.messages, { ...b.health }),
       }
     }
     if (!this.useHistory(w.ms, now)) return live()
@@ -313,8 +351,12 @@ export class Query {
           other: totals[3] ?? 0,
         },
         distance: distanceFigures(
-          totals.slice(4),
+          totals.slice(4, HEALTH_AT),
           toNm(maxOf(max.values[0] ?? [])),
+        ),
+        health: healthFigures(
+          totals[0] ?? 0,
+          healthRecord(totals.slice(HEALTH_AT)),
         ),
       }
     }, live)
@@ -506,11 +548,24 @@ export class Query {
         ? [paths.messagesTotal]
         : metric === 'positions'
           ? [paths.positionsClassA, paths.positionsClassB, paths.positionsOther]
-          : distanceBinPaths
+          : metric === 'health'
+            ? [paths.messagesTotal, ...HEALTH_PATHS]
+            : distanceBinPaths
     const s = await counterIncrements(h, counterPaths, from, to, res)
     const inc = s.increments
     const times = s.times.slice(1).map((t) => new Date(t).toISOString())
     if (metric === 'messages') return { ...base, times, messages: inc[0] ?? [] }
+    if (metric === 'health')
+      return {
+        ...base,
+        times,
+        ...healthColumns(
+          times.map((_, i) => ({
+            messages: inc[0]?.[i] ?? 0,
+            health: healthRecord(inc.slice(1).map((col) => col[i] ?? 0)),
+          })),
+        ),
+      }
     if (metric === 'positions')
       return {
         ...base,
@@ -582,6 +637,8 @@ export class Query {
         }
       case 'vessels':
         return { ...base, vessels: buckets.map((b) => b.vessels) }
+      case 'health':
+        return { ...base, ...healthColumns(buckets) }
       case 'distance':
         return {
           ...base,
@@ -589,6 +646,22 @@ export class Query {
           maxM: buckets.map((b) => metres(b.maxNm)),
         }
     }
+  }
+}
+
+/**
+ * Health columns of a series: `received` (the share denominator) and one
+ * count column per health kind.
+ */
+function healthColumns(
+  rows: { messages: number; health: Record<HealthKind, number> }[],
+): { received: number[] } & Record<HealthKind, number[]> {
+  const f = rows.map((r) => healthFigures(r.messages, r.health))
+  return {
+    received: f.map((x) => x.received),
+    ...(Object.fromEntries(
+      HEALTH_KINDS.map((k) => [k, f.map((x) => x.counts[k])]),
+    ) as Record<HealthKind, number[]>),
   }
 }
 

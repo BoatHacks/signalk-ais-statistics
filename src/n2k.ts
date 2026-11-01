@@ -4,7 +4,13 @@
 // fields arrive as canboat names, which a local copy of the canboat lookup
 // tables (the same ones n2k-signalk uses) turns back into AIS codes.
 import { LOOKUPS, type LookupName } from './n2k-lookups'
-import { cleanName, type AisMessage, type IngestStats } from './ingest'
+import {
+  MPS_PER_KNOT,
+  cleanName,
+  sogFromKnots,
+  type AisMessage,
+  type IngestStats,
+} from './ingest'
 
 /** PGNs that each carry one received AIS message. */
 const AIS_PGNS = new Set([
@@ -91,6 +97,14 @@ export class N2kIngest {
       msg.lat = lat
       msg.lon = lon
     }
+    if (number === 129809) msg.part = 'A'
+    else if (number === 129810) msg.part = 'B'
+    // canboatjs gives m/s; the same "not available" rule applies in knots.
+    const sog =
+      typeof f.sog === 'number'
+        ? sogFromKnots(type, f.sog / MPS_PER_KNOT)
+        : undefined
+    if (sog !== undefined) msg.sogMps = sog
     const shipType = lookup('SHIP_TYPE', f.typeOfShip)
     if (shipType !== undefined && (type === 5 || type === 24))
       msg.shipType = shipType

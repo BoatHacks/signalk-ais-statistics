@@ -20,9 +20,11 @@ import {
 import type { AisMessage } from './ingest'
 import type { LatLon } from './ownposition'
 import {
+  HEALTH_KINDS,
   SECTOR_CLASSES,
   SECTOR_COUNT,
   TYPE_GROUPS,
+  type HealthKind,
   type TypeGroup,
 } from './paths'
 
@@ -39,6 +41,8 @@ export interface Counts {
   distanceBins: number[]
   /** Indexed [class][sector], class order as SECTOR_CLASSES. */
   sectorCounts: number[][]
+  /** Message health counters (SPEC 2.8). */
+  health: Record<HealthKind, number>
 }
 
 export interface Bucket extends Counts {
@@ -79,7 +83,15 @@ function emptyCounts(): Counts {
     sectorCounts: SECTOR_CLASSES.map(() =>
       new Array<number>(SECTOR_COUNT).fill(0),
     ),
+    health: emptyHealth(),
   }
+}
+
+export function emptyHealth(): Record<HealthKind, number> {
+  return Object.fromEntries(HEALTH_KINDS.map((k) => [k, 0])) as Record<
+    HealthKind,
+    number
+  >
 }
 
 function emptyGroups(): Record<TypeGroup, number> {
@@ -114,6 +126,7 @@ export function mergeInto(a: Bucket, b: Bucket): void {
   a.positions.B += b.positions.B
   a.positions.other += b.positions.other
   addInto(a.distanceBins, b.distanceBins)
+  for (const k of HEALTH_KINDS) a.health[k] += b.health[k]
   for (let c = 0; c < SECTOR_CLASSES.length; c++) {
     addInto(a.sectorCounts[c]!, b.sectorCounts[c]!)
     for (let s = 0; s < SECTOR_COUNT; s++) {
@@ -180,7 +193,14 @@ export class Aggregator {
     if (!isPositionReport(msg.type)) return undefined
 
     this.bump((b) => b.positions[cls]++)
-    if (msg.lat === undefined || msg.lon === undefined || !own) return undefined
+    if (msg.lat === undefined || msg.lon === undefined) {
+      this.bump((b) => b.health.positionInvalid++)
+      return undefined
+    }
+    if (!own) {
+      this.bump((b) => b.health.noOwnPosition++)
+      return undefined
+    }
 
     const target = { lat: msg.lat, lon: msg.lon }
     const d = distanceNm(own, target)
@@ -213,6 +233,16 @@ export class Aggregator {
       bearingDeg: bearing,
       cls,
     }
+  }
+
+  /**
+   * Counts `n` health events of one kind at `time`: those the aggregator
+   * cannot see in the message itself, such as duplicates and decode errors.
+   */
+  countHealth(kind: HealthKind, time: number, n = 1): void {
+    if (!(n > 0)) return
+    this.roll(time)
+    this.bump((b) => (b.health[kind] += n))
   }
 
   /** Closes buckets that ended before `time`. Call at least once a minute. */

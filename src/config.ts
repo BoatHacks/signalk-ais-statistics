@@ -11,6 +11,9 @@ export interface Config {
   publishIntervalMinutes: number
   publishOverlay: boolean
   sentenceEvents: string[]
+  jumpSpeedLimitKnots: number
+  jumpSpeedLimitHighSpeedKnots: number
+  jumpSpeedLimitAircraftKnots: number
 }
 
 export const DEFAULT_CONFIG: Config = {
@@ -22,6 +25,9 @@ export const DEFAULT_CONFIG: Config = {
   publishIntervalMinutes: 5,
   publishOverlay: true,
   sentenceEvents: ['nmea0183', 'N2KAnalyzerOut'],
+  jumpSpeedLimitKnots: 60,
+  jumpSpeedLimitHighSpeedKnots: 120,
+  jumpSpeedLimitAircraftKnots: 600,
 }
 
 /** Divisors of an hour, so every interval ends on the hour too. */
@@ -104,6 +110,29 @@ export const configSchema = {
       uniqueItems: true,
       default: DEFAULT_CONFIG.sentenceEvents,
     },
+    jumpSpeedLimitKnots: {
+      type: 'number',
+      title: 'Implausible jump speed (knots)',
+      description:
+        'A position that implies a faster speed from the previous one counts as an implausible jump in the message health figures. Nothing is dropped.',
+      default: DEFAULT_CONFIG.jumpSpeedLimitKnots,
+      minimum: 10,
+    },
+    jumpSpeedLimitHighSpeedKnots: {
+      type: 'number',
+      title: 'Implausible jump speed, high-speed and WIG craft (knots)',
+      description:
+        'The same for ship types 40 to 49 (high-speed craft, such as hovercraft ferries) and 20 to 29 (wing in ground craft).',
+      default: DEFAULT_CONFIG.jumpSpeedLimitHighSpeedKnots,
+      minimum: 10,
+    },
+    jumpSpeedLimitAircraftKnots: {
+      type: 'number',
+      title: 'Implausible jump speed, SAR aircraft (knots)',
+      description: 'The same for SAR aircraft (message 9).',
+      default: DEFAULT_CONFIG.jumpSpeedLimitAircraftKnots,
+      minimum: 10,
+    },
   },
 }
 
@@ -158,6 +187,17 @@ export function resolveConfig(options: unknown): Config {
           ),
         ]
       : [...d.sentenceEvents],
+    jumpSpeedLimitKnots: num(o.jumpSpeedLimitKnots, d.jumpSpeedLimitKnots, 10),
+    jumpSpeedLimitHighSpeedKnots: num(
+      o.jumpSpeedLimitHighSpeedKnots,
+      d.jumpSpeedLimitHighSpeedKnots,
+      10,
+    ),
+    jumpSpeedLimitAircraftKnots: num(
+      o.jumpSpeedLimitAircraftKnots,
+      d.jumpSpeedLimitAircraftKnots,
+      10,
+    ),
   }
 }
 

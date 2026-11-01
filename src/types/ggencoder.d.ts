@@ -11,6 +11,7 @@ declare module 'ggencoder' {
     cargo?: number
     shipname?: string
     part?: number
+    sog?: number
   }
   export const AisDecode: new (
     sentence: string,

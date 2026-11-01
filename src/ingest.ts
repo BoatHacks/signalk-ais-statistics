@@ -3,6 +3,9 @@
 // errors are counted and swallowed so that untrusted input never throws
 // into the server.
 import { AisDecode } from 'ggencoder'
+import { isPositionReport } from './classify'
+
+export const MPS_PER_KNOT = 1852 / 3600
 
 export interface AisMessage {
   type: number
@@ -14,6 +17,23 @@ export interface AisMessage {
   shipType?: number
   /** Vessel name, from message 5, 19 and 24 part A. */
   name?: string
+  /** Reported speed over ground in m/s, from position reports. */
+  sogMps?: number
+  /** Part of a message 24: A carries the name, B the ship type. */
+  part?: 'A' | 'B'
+}
+
+/**
+ * Reported speed over ground in m/s from a value in knots, or undefined
+ * when it is the "not available" value: 102.3 kn (1023 in steps of 0.1),
+ * or 1023 kn for message 9, whose steps are whole knots.
+ */
+export function sogFromKnots(type: number, knots: unknown): number | undefined {
+  if (!isPositionReport(type)) return undefined
+  if (typeof knots !== 'number' || !Number.isFinite(knots) || knots < 0)
+    return undefined
+  if (knots > (type === 9 ? 1022.5 : 102.25)) return undefined
+  return knots * MPS_PER_KNOT
 }
 
 /**
@@ -140,6 +160,10 @@ export class Ingest {
       msg.lat = d.lat
       msg.lon = d.lon
     }
+    if (d.aistype === 24 && (d.part === 0 || d.part === 1))
+      msg.part = d.part === 0 ? 'A' : 'B'
+    const sog = sogFromKnots(d.aistype, d.sog)
+    if (sog !== undefined) msg.sogMps = sog
     if (typeof d.cargo === 'number' && (d.aistype === 5 || d.aistype === 24))
       msg.shipType = d.cargo
     const name = cleanName(d.shipname)
