@@ -94,6 +94,36 @@ describe('plugin', () => {
     expect(f.errors).toEqual([])
   })
 
+  it('saves live settings into the stored config and applies them', async () => {
+    const f = fakeApp(await mkdtemp(join(tmpdir(), 'ais-plugin-')))
+    const options = {
+      publishIntervalMinutes: 10,
+      coverageDistancePercentile: 99,
+      sentenceEvents: ['nmea0183'],
+      someFutureOption: 'kept',
+    }
+    f.stored.configuration = options
+    const plugin = createPlugin(f.app as never)
+    const r = fakeRouter()
+    plugin.registerWithRouter!(r.router as never)
+    await plugin.start(options, () => undefined)
+    const res = await r.post('/settings', { coverageDistancePercentile: 95 })
+    expect(res).toEqual({
+      status: 200,
+      body: { settings: { coverageDistancePercentile: 95 } },
+    })
+    // Merged, not replaced: the server stores the whole object it is given.
+    expect(f.saves).toEqual([{ ...options, coverageDistancePercentile: 95 }])
+    const status = (await r.call('/status')).body as {
+      config: Record<string, unknown>
+    }
+    expect(status.config).toMatchObject({
+      coverageDistancePercentile: 95,
+      publishIntervalMinutes: 10,
+    })
+    await plugin.stop()
+  })
+
   it('counts AIS from NMEA 2000 by default', async () => {
     const f = fakeApp(await mkdtemp(join(tmpdir(), 'ais-plugin-')))
     const plugin = createPlugin(f.app as never)

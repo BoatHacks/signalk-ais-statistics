@@ -14,7 +14,7 @@ import { fakeRouter } from './fixtures/router'
 
 const T0 = Date.UTC(2030, 0, 1, 12)
 
-async function setup(withAccess = true) {
+async function setup(withAccess = true, running = true) {
   const agg = new Aggregator(T0)
   const coverage = new Coverage(
     await mkdtemp(join(tmpdir(), 'ais-api-')),
@@ -40,14 +40,22 @@ async function setup(withAccess = true) {
   const far = destination(OWN, 200, 900)
   coverage.add(far.lat, far.lon, 900, T0)
   const f = fakeRouter(withAccess)
+  const saved: object[] = []
   registerRoutes(f.router, {
-    query: () => new Query(agg, () => nullHistoryReader),
+    query: () =>
+      running ? new Query(agg, () => nullHistoryReader) : undefined,
     coverage: () => coverage,
     longRange: () => longRange,
     status: () => ({ history: false }),
+    saveSettings: async (values) => {
+      saved.push(values)
+      const live = { coverageDistancePercentile: 99, ...values }
+      coverage.setPercentile(live.coverageDistancePercentile)
+      return live
+    },
     now: () => T0 + 1000,
   })
-  return f
+  return { ...f, saved }
 }
 
 describe('REST API answer cache', () => {
@@ -115,7 +123,7 @@ describe('REST API answer cache', () => {
 })
 
 describe('REST API', () => {
-  it('registers every route read-only', async () => {
+  it('registers the read routes read-only and the save route readwrite', async () => {
     const { routes } = await setup()
     expect([...routes.keys()].sort()).toEqual([
       '/coverage',
@@ -125,8 +133,12 @@ describe('REST API', () => {
       '/series',
       '/status',
       '/summary',
+      'POST /settings',
     ])
-    for (const r of routes.values()) expect(r.access).toBe('readonly')
+    for (const [key, r] of routes)
+      expect(r.access, key).toBe(
+        key === 'POST /settings' ? 'readwrite' : 'readonly',
+      )
   })
 
   it('includes the cells beyond the cap when asked', async () => {
@@ -157,7 +169,101 @@ describe('REST API', () => {
 
   it('falls back to admin-only routes on servers without access()', async () => {
     const { routes } = await setup(false)
+    expect(routes.has('POST /settings')).toBe(true)
     for (const r of routes.values()) expect(r.access).toBe('admin')
+  })
+
+  it('tries a coverage cap without saving it', async () => {
+    const { call, saved } = await setup()
+    type Cov = {
+      cappedCells: number
+      capM: number | null
+      capPercentile: number
+    }
+    const base = (await call('/coverage')).body as Cov
+    expect(base.cappedCells).toBe(1)
+    expect(base.capPercentile).toBe(99)
+    const open = (await call('/coverage', { cap: '100' })).body as Cov
+    expect(open.cappedCells).toBe(0)
+    expect(open.capM).toBeNull()
+    expect(open.capPercentile).toBe(100)
+    // The configured cap is unchanged, cached or not.
+    expect(((await call('/coverage')).body as Cov).cappedCells).toBe(1)
+    expect(saved).toEqual([])
+    for (const cap of ['49', '101', 'x', '', '1e400'])
+      expect((await call('/coverage', { cap })).status, cap).toBe(400)
+  })
+})
+
+describe('POST /settings', () => {
+  it('saves live settings and clears the cached answers', async () => {
+    const { call, post, saved } = await setup()
+    type Cov = { cappedCells: number }
+    expect(((await call('/coverage')).body as Cov).cappedCells).toBe(1)
+    const r = await post('/settings', { coverageDistancePercentile: 100 })
+    expect(r).toEqual({
+      status: 200,
+      body: { settings: { coverageDistancePercentile: 100 } },
+    })
+    expect(saved).toEqual([{ coverageDistancePercentile: 100 }])
+    expect(((await call('/coverage')).body as Cov).cappedCells).toBe(0)
+  })
+
+  it('rejects other keys, wrong types and values out of bounds', async () => {
+    const { post, saved } = await setup()
+    for (const body of [
+      { publishIntervalMinutes: 1 },
+      { coverageDistancePercentile: 95, h3Resolution: 8 },
+      { coverageDistancePercentile: '95' },
+      { coverageDistancePercentile: 49 },
+      { coverageDistancePercentile: 101 },
+      {},
+      [],
+      null,
+      'coverageDistancePercentile=95',
+    ]) {
+      const r = await post('/settings', body)
+      expect(r.status, JSON.stringify(body)).toBe(400)
+      expect((r.body as { error: string }).error).toBeTruthy()
+    }
+    expect(saved).toEqual([])
+  })
+
+  it('accepts only JSON, so a plain HTML form cannot post', async () => {
+    const { post, saved } = await setup()
+    for (const type of [
+      'application/x-www-form-urlencoded',
+      'multipart/form-data; boundary=x',
+      'text/plain',
+      '',
+    ])
+      expect(
+        (
+          await post(
+            '/settings',
+            { coverageDistancePercentile: 95 },
+            { 'content-type': type },
+          )
+        ).status,
+        type,
+      ).toBe(415)
+    expect(
+      (
+        await post(
+          '/settings',
+          { coverageDistancePercentile: 95 },
+          { 'content-type': 'application/json; charset=utf-8' },
+        )
+      ).status,
+    ).toBe(200)
+    expect(saved).toHaveLength(1)
+  })
+
+  it('answers 503 while the plugin is stopped', async () => {
+    const { post, saved } = await setup(true, false)
+    const r = await post('/settings', { coverageDistancePercentile: 95 })
+    expect(r.status).toBe(503)
+    expect(saved).toEqual([])
   })
 
   it('serves a summary with units in field names', async () => {

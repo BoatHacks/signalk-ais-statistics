@@ -20,6 +20,7 @@ const { nullHistoryReader } = require(path.join(root, 'dist/history'))
 const { registerRoutes } = require(path.join(root, 'dist/api'))
 const { destination } = require(path.join(root, 'dist/geo'))
 const { sectorFeatures } = require(path.join(root, 'dist/overlay'))
+const { DEFAULT_CONFIG } = require(path.join(root, 'dist/config'))
 
 const API = '/plugins/signalk-ais-statistics'
 const APP = '/signalk-ais-statistics'
@@ -96,8 +97,12 @@ function serve({ agg, cov, log }) {
     () => {},
     (from, to) => log.entries(from, to, 400),
   )
+  const scoped = {
+    get: (p, h) => routes.set(p, h),
+    post: (p, h) => routes.set(`POST ${p}`, h),
+  }
   registerRoutes(
-    { access: () => ({ get: (p, h) => routes.set(p, h) }) },
+    { ...scoped, access: () => scoped },
     {
       query: () => query,
       coverage: () => cov,
@@ -113,7 +118,17 @@ function serve({ agg, cov, log }) {
         ownPositionFresh: true,
         historyAvailable: false,
         lastMessageAt: new Date().toISOString(),
+        config: {
+          ...DEFAULT_CONFIG,
+          coverageDistancePercentile: cov.capPercentile(),
+        },
       }),
+      // Applies a save to this run only; nothing is written.
+      saveSettings: async (values) => {
+        if (values.coverageDistancePercentile !== undefined)
+          cov.setPercentile(values.coverageDistancePercentile)
+        return { coverageDistancePercentile: cov.capPercentile() }
+      },
     },
   )
   const types = {
@@ -130,15 +145,37 @@ function serve({ agg, cov, log }) {
   const server = http.createServer((req, res) => {
     const u = new URL(req.url, 'http://localhost')
     if (u.pathname.startsWith(API)) {
-      const h = routes.get(u.pathname.slice(API.length))
+      const key = u.pathname.slice(API.length)
+      const h = routes.get(req.method === 'POST' ? `POST ${key}` : key)
       if (!h) return res.writeHead(404).end()
       const r = {
         setHeader: (k, v) => res.setHeader(k, v),
         status: (s) => ((res.statusCode = s), r),
         json: (b) => json(res, b),
       }
-      return h({ query: Object.fromEntries(u.searchParams) }, r)
+      let text = ''
+      req.on('data', (c) => (text += c))
+      req.on('end', () => {
+        let body
+        try {
+          body = text ? JSON.parse(text) : undefined
+        } catch {
+          body = text
+        }
+        h(
+          {
+            query: Object.fromEntries(u.searchParams),
+            headers: req.headers,
+            body,
+          },
+          r,
+        )
+      })
+      return
     }
+    // A server with security off, where everyone may save settings.
+    if (u.pathname === '/skServer/loginStatus')
+      return json(res, { status: 'notLoggedIn', authenticationRequired: false })
     // Display units as a server with nautical mile preferences reports them.
     if (u.pathname.endsWith('/distance/p99/meta'))
       return json(res, {

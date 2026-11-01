@@ -104,7 +104,7 @@ export class Coverage {
     private readonly dir: string,
     private readonly resolution: number,
     private readonly retentionDays: number,
-    private readonly percentile: number,
+    private percentile: number,
     now: number,
   ) {
     this.day = emptyDay(utcDay(now), resolution)
@@ -112,6 +112,16 @@ export class Coverage {
 
   private file(date: string): string {
     return join(this.dir, `coverage-${date}.json`)
+  }
+
+  /** Changes the distance cap percentile, for example after a saved setting. */
+  setPercentile(percentile: number): void {
+    this.percentile = percentile
+  }
+
+  /** The configured distance cap percentile. */
+  capPercentile(): number {
+    return this.percentile
   }
 
   /** Loads today's file so a restart continues the day. */
@@ -158,8 +168,16 @@ export class Coverage {
     return { cells: f.cells.length, areaKm2: f.areaKm2 }
   }
 
-  /** Union of the last `days` UTC days, today included. */
-  async footprint(days: number, now: number): Promise<Footprint> {
+  /**
+   * Union of the last `days` UTC days, today included. `percentile`
+   * overrides the configured cap for this answer only, so the web app can
+   * try a value before saving it.
+   */
+  async footprint(
+    days: number,
+    now: number,
+    percentile = this.percentile,
+  ): Promise<Footprint> {
     const today = utcDay(now)
     const dates: string[] = []
     for (let i = days - 1; i >= 0; i--) dates.push(utcDay(now - i * DAY_MS))
@@ -171,7 +189,7 @@ export class Coverage {
         if (f) files.push(f)
       }
     }
-    return { ...this.build(files), days: dates }
+    return { ...this.build(files, percentile), days: dates }
   }
 
   /** Writes the current day if it changed. */
@@ -239,13 +257,16 @@ export class Coverage {
     }
   }
 
-  private build(files: DayFile[]): Omit<Footprint, 'days'> {
+  private build(
+    files: DayFile[],
+    percentile = this.percentile,
+  ): Omit<Footprint, 'days'> {
     const merged = emptyDay('', this.resolution)
     for (const f of files) this.mergeDay(merged, f)
     const cap =
-      this.percentile >= 100
+      percentile >= 100
         ? undefined
-        : percentileNm(merged.distanceBins, this.percentile / 100)
+        : percentileNm(merged.distanceBins, percentile / 100)
     const cells: Footprint['cells'] = []
     const capped: Footprint['capped'] = []
     for (const [id, [minDistanceNm, reports]] of Object.entries(merged.cells)) {

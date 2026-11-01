@@ -229,19 +229,32 @@ treats any plugin route as admin-only unless the plugin registers
 permissions for it. On server 2.35.1 the plugin router has
 `router.access('readonly')`, which does that registration; the plugin
 registers every route through it, guarded by `router.access ?` so older
-servers fall back to admin-only instead of failing. All routes are read-only
-and no write routes exist. Read-only users can therefore open the web app,
-including when it is embedded in another page such as an infodisplay panel.
+servers fall back to admin-only instead of failing. Read-only users can
+therefore open the web app, including when it is embedded in another page
+such as an infodisplay panel.
+
+There is one write route, `POST /settings`, which saves live settings (9.1).
+It is registered through `router.access('readwrite')`, so the server lets
+`admin` and `readwrite` users through (everyone while security is off); on
+servers without `router.access` it is admin-only. It accepts only
+`Content-Type: application/json` (415 otherwise, so a plain HTML form on
+another site cannot post to it) and only the keys of the live settings,
+each a number within the schema bounds (400 for anything else, nothing is
+clamped). It merges them into the stored plugin configuration, saves it with
+`app.savePluginOptions`, applies them to the running plugin without a
+restart, clears the cached answers and returns `{ settings }`, the
+effective live settings.
 
 | Route | Returns |
 |---|---|
 | `GET /summary?window=24h` | headline figures: messages, positions, vessels by group, distance avg, p95, p99 and max |
 | `GET /series?metric=&resolution=&from=&to=` | time series for the charts, read from history; `metric` is `messages`, `positions`, `distance` or `vessels`, `resolution` in seconds (at least 60, at most 2000 points) |
 | `GET /sectors?window=24h&class=a\|b\|all` | 24 sectors with count and p99 distance (the highest hourly p99 in the window, see 2.6), and the farthest reception `maxM` with its time: `maxAt` when known exactly, otherwise `maxHour`, the start of the hour it fell in |
-| `GET /coverage?window=7d&all=false` | cell ids, GeoJSON for the map, covered area in m²; windows `24h` (today) and `7d`; `all=true` adds the cells beyond the distance cap, marked `capped` |
+| `GET /coverage?window=7d&all=false&cap=` | cell ids, GeoJSON for the map, covered area in m²; windows `24h` (today) and `7d`; `all=true` adds the cells beyond the distance cap, marked `capped`; `cap` (50 to 100) tries another distance cap percentile for this answer only, and `capPercentile` gives the percentile applied |
 | `GET /longrange?window=24h` | the 25 farthest entries of the long-range log (2.7) in the window, farthest first; windows `24h` and `7d` |
 | `GET /overlay/coverage.geojson` | the plotter overlay's GeoJSON: the 7 day footprint and the 24 hour sector wedges of class A and B |
 | `GET /status` | live state: tracked targets, own position age, history reachable or not |
+| `POST /settings` | saves live settings (body `{ "coverageDistancePercentile": 95 }`), readwrite users only; see above |
 
 Windows accept `1h`, `24h` and `7d`. Responses are JSON in SI units
 named in the field (`p99M` in metres, `areaM2` in square metres); the web
@@ -380,6 +393,10 @@ A SignalK web app, listed in the admin UI, with:
   and the user has not chosen otherwise. When the server has no charts, the
   server charts button is greyed out with a short note under it and the map
   uses OSM/OpenSeaMap, since the chart basemap would stay blank.
+  Under the map, a distance cap slider (50th percentile to off) redraws the
+  cells at once and offers save and reset (live settings, 9.1).
+- Settings: a collapsed panel at the foot of every page lists the settings
+  in effect, read only, and says where to change them.
 
 It must work on a phone, since the boat server is often viewed remotely
 over a metered link, so the app's own assets are bundled locally (no CDN)
@@ -453,6 +470,25 @@ directly. Consequences:
 | `publishIntervalMinutes` | 5 | how often the statistics paths are published; a divisor of 60; sector paths go out hourly regardless |
 | `publishOverlay` | true | register the plotter extension overlay |
 | `sentenceEvents` | `nmea0183`, `N2KAnalyzerOut` | server events to read AIS from: raw sentences or canboat PGNs; any event names |
+
+### 9.1 Live settings
+
+Settings worth changing while watching their effect have controls in the
+web app (chosen by the maintainer). A change applies to the view at once,
+through a query parameter of a read route, and is stored only when the user
+presses save, which `POST /settings` (6.1) handles. The save button shows
+only when security is off or `/skServer/loginStatus` reports the user as
+`readwrite` or `admin`. Every other option stays in the server's plugin
+config form only.
+
+The live settings are listed once, in `LIVE_SETTINGS` in `src/config.ts`:
+
+| Option | Web app control |
+|---|---|
+| `coverageDistancePercentile` | slider on the map, 50 to 100; tried with `GET /coverage?cap=` |
+
+The alert factor, vessel count and duration of #13 join this list when they
+land. The plotter overlay always uses the saved value.
 
 ## 10. MVP Scope
 

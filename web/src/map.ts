@@ -1,6 +1,7 @@
 // Coverage map with a window selector, the basemap switch and layer
 // toggles for the coverage cells and the class A and B sectors. Cells and
-// sectors use the plotter overlay's colours.
+// sectors use the plotter overlay's colours. A slider tries another coverage
+// distance cap at once; users with write access can save it (SPEC 9.1).
 import * as L from 'leaflet'
 import { get, type CoverageResponse } from './api'
 import {
@@ -13,6 +14,14 @@ import {
   type ChartLayer,
 } from './basemap'
 import { el } from './format'
+import {
+  SETTINGS_SAVED,
+  canSave,
+  capLabel,
+  loginStatus,
+  saveError,
+  saveSettings,
+} from './settings'
 import { layerVisible, saveLayerVisible, type Layer } from './layers'
 import {
   CELL_FILL_OPACITY,
@@ -71,7 +80,30 @@ export function createMap(): MapView {
   )
   const mapEl = el('div', { class: 'map' })
   const card = el('div', { class: 'map-card sk-card' }, mapEl, controls)
-  element.append(card, info)
+
+  // Distance cap: the slider changes this view only, save stores it.
+  const capInput = el('input', {
+    type: 'range',
+    id: 'cap-percentile',
+    min: '50',
+    max: '100',
+    step: '1',
+    value: '99',
+  })
+  const capValue = el('output', { for: 'cap-percentile' })
+  const saveBtn = el('button', { type: 'button', hidden: '' }, 'Save')
+  const resetBtn = el('button', { type: 'button', hidden: '' }, 'Reset')
+  const capNote = el('p', { class: 'muted small', role: 'status' })
+  const capRow = el(
+    'div',
+    { class: 'cap-control' },
+    el('label', { for: 'cap-percentile' }, 'Distance cap'),
+    capInput,
+    capValue,
+    saveBtn,
+    resetBtn,
+  )
+  element.append(card, capRow, capNote, info)
 
   let map: L.Map | undefined
   let base: L.Layer[] = []
@@ -92,6 +124,14 @@ export function createMap(): MapView {
     sectorsB?.bringToFront()
   }
   let lastInfo: (() => void) | undefined
+  let lastArgs: Parameters<MapView['show']> | undefined
+  let generation = 0
+  /** The saved cap percentile, as the last answer without a trial gave it. */
+  let savedCap: number | undefined
+  /** A cap being tried, not saved. */
+  let trialCap: number | undefined
+  let mayWrite = false
+  let saveMessage = ''
   let current: Basemap | undefined
   let charts: ChartLayer[] = []
   let fitted = false
@@ -189,6 +229,67 @@ export function createMap(): MapView {
   }
   applyVisibility()
 
+  function renderCap() {
+    const shown = trialCap ?? savedCap
+    if (shown !== undefined) {
+      capInput.value = String(shown)
+      capValue.textContent = capLabel(shown)
+    }
+    const pending = trialCap !== undefined && trialCap !== savedCap
+    saveBtn.hidden = !(pending && mayWrite)
+    resetBtn.hidden = !pending
+    capNote.textContent = saveMessage
+      ? saveMessage
+      : !pending || savedCap === undefined
+        ? 'Coverage leaves out sparse cells beyond this percentile of the distances, so bogus positions do not inflate it.'
+        : mayWrite
+          ? `Trying the ${capLabel(trialCap!)}, not saved; the plotter overlay keeps the ${capLabel(savedCap)} until you save.`
+          : `Trying the ${capLabel(trialCap!)} in this view only. Saving needs a readwrite or admin login.`
+  }
+
+  let capTimer: ReturnType<typeof setTimeout> | undefined
+  capInput.addEventListener('input', () => {
+    trialCap = Number(capInput.value)
+    saveMessage = ''
+    renderCap()
+    // Redraw once the slider rests, not on every step.
+    clearTimeout(capTimer)
+    capTimer = setTimeout(() => {
+      if (lastArgs) void view.show(...lastArgs).catch(() => undefined)
+    }, 300)
+  })
+  resetBtn.addEventListener('click', () => {
+    trialCap = undefined
+    saveMessage = ''
+    renderCap()
+    if (lastArgs) void view.show(...lastArgs).catch(() => undefined)
+  })
+  saveBtn.addEventListener('click', () => {
+    if (trialCap === undefined) return
+    saveBtn.disabled = true
+    saveSettings({ coverageDistancePercentile: trialCap })
+      .then((s) => {
+        savedCap = s.coverageDistancePercentile
+        trialCap = undefined
+        saveMessage = `Saved: the coverage cap is the ${capLabel(savedCap)}.`
+        window.dispatchEvent(new Event(SETTINGS_SAVED))
+        if (lastArgs) void view.show(...lastArgs).catch(() => undefined)
+      })
+      .catch((err: unknown) => {
+        saveMessage = saveError(err)
+        if (/login/.test(saveMessage)) mayWrite = false
+      })
+      .finally(() => {
+        saveBtn.disabled = false
+        renderCap()
+      })
+  })
+  renderCap()
+  void loginStatus().then((s) => {
+    mayWrite = canSave(s)
+    renderCap()
+  })
+
   async function ensureMap() {
     if (map) return
     map = L.map(mapEl, { worldCopyJump: true }).setView([0, 0], 2)
@@ -236,20 +337,31 @@ export function createMap(): MapView {
     fill: false,
   })
 
-  return {
+  const view: MapView = {
     element,
     restyle() {
       // Cell and sector colours follow the plotter overlay, not the theme.
     },
     async show(window, units, offsetMin) {
+      lastArgs = [window, units, offsetMin]
+      const g = ++generation
       await ensureMap()
       map!.invalidateSize()
+      const trial = trialCap
       const [c, overlay] = await Promise.all([
-        get<CoverageResponse>('/coverage', { window, all: 'true' }),
+        get<CoverageResponse>('/coverage', {
+          window,
+          all: 'true',
+          ...(trial === undefined ? {} : { cap: String(trial) }),
+        }),
         get<GeoJSON.FeatureCollection>('/overlay/coverage.geojson').catch(
           () => undefined,
         ),
       ])
+      // A later call (a slider move, the minute refresh) has taken over.
+      if (g !== generation) return
+      if (trial === undefined) savedCap = c.capPercentile
+      renderCap()
       cells?.remove()
       capped?.remove()
       sectorsA?.remove()
@@ -341,4 +453,5 @@ export function createMap(): MapView {
       lastInfo()
     },
   }
+  return view
 }

@@ -140,7 +140,11 @@ goes to the server log).
 Express router registered through the plugin API. Thin: parse and validate
 parameters, call the query layer, serialize (SPEC 6.1). Data routes reuse
 an answer for a minute per set of parameters and share in-flight
-computations; `/status` is never cached.
+computations; `/status` is never cached. The one write route, `POST
+/settings`, validates live settings with `parseLiveSettings` from
+`config.ts` and hands them to the plugin, which merges them into the stored
+configuration, saves it and applies them (for example
+`Coverage.setPercentile`); the route then clears every answer cache.
 
 ### 2.10 Overlay provider
 Registers a read-only `plotterExtensions` resource provider through
@@ -166,7 +170,11 @@ metered state when present, and a manual choice is remembered in
 `localStorage`. Toggles show or hide the coverage cells, the cells beyond
 the distance cap (fetched with `all=true`, drawn dashed, off by default)
 and the class A and B sectors (`layers.ts`, also remembered in
-`localStorage`). The sectors view draws the sector maxima as ticks with a wide invisible hover line,
+`localStorage`). The distance cap slider under the map refetches
+`/coverage` with `cap` and, through `settings.ts`, saves with `POST
+/settings`; the save button shows when `/skServer/loginStatus`, read once
+per page load because the server rate limits it, reports security off or a
+readwrite or admin user. The sectors view draws the sector maxima as ticks with a wide invisible hover line,
 leaves a quarter more room on the scale for them, and lists `/longrange`
 in a table. The map's sector wedges
 come from the overlay GeoJSON route, and the cell and sector colours are
@@ -229,10 +237,14 @@ Published path names are the persistence schema, so they are defined once in
 - Spoofed positions are the identified practical risk. Distance figures are
   made robust with percentiles (SPEC 2.3) and coverage with a percentile cap
   (SPEC 2.4).
-- REST routes are all read-only and are registered for read-only users
-  through `router.access('readonly')` (SPEC 6.1). On servers without
-  `router.access` they fall back to admin-only. The plugin adds no auth of its own, and exposes no write
-  routes.
+- The read routes are registered for read-only users through
+  `router.access('readonly')` (SPEC 6.1). The one write route, `POST
+  /settings`, is registered through `router.access('readwrite')` and
+  changes only the live settings (SPEC 9.1): it rejects other keys, values
+  outside the schema bounds and any body that is not
+  `application/json`, so a cross-site HTML form cannot post to it. On
+  servers without `router.access` every route falls back to admin-only.
+  The plugin adds no auth of its own.
 - History reads are History API requests built from a fixed set of queries
   with validated parameters; no user-supplied paths or SQL.
 - Nothing is sent off the boat; the plugin makes no outbound network calls.

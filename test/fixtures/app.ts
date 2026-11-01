@@ -17,6 +17,12 @@ export function fakeApp(dataDir: string, history?: FakeHistory) {
   const statuses: string[] = []
   const metadata = new Map<string, { units?: string }>()
   const errors: string[] = []
+  /** What the server stores for the plugin, as readPluginOptions returns it. */
+  const stored: { enabled: boolean; configuration: object } = {
+    enabled: true,
+    configuration: {},
+  }
+  const saves: object[] = []
   const app = {
     on: emitter.on.bind(emitter),
     removeListener: emitter.removeListener.bind(emitter),
@@ -42,6 +48,16 @@ export function fakeApp(dataDir: string, history?: FakeHistory) {
       return true
     },
     error: (s: string) => errors.push(s),
+    readPluginOptions: () => stored,
+    // Like the server: replaces the whole configuration, no restart.
+    savePluginOptions: (
+      configuration: object,
+      cb: (err: Error | null) => void,
+    ) => {
+      saves.push(configuration)
+      stored.configuration = configuration
+      queueMicrotask(() => cb(null))
+    },
     debug: () => undefined,
     ...(history ? { getHistoryApi: async () => history } : {}),
   }
@@ -52,6 +68,8 @@ export function fakeApp(dataDir: string, history?: FakeHistory) {
     statuses,
     metadata,
     errors,
+    stored,
+    saves,
     position(lat: number, lon: number) {
       for (const f of positionListeners) f({ latitude: lat, longitude: lon })
     },

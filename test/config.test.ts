@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_CONFIG, configSchema, resolveConfig } from '../src/config'
+import {
+  DEFAULT_CONFIG,
+  LIVE_SETTINGS,
+  configSchema,
+  liveBounds,
+  parseLiveSettings,
+  resolveConfig,
+} from '../src/config'
 
 describe('resolveConfig', () => {
   it('defaults to H3 resolution 6, cells about 7 km across', () => {
@@ -66,6 +73,19 @@ describe('resolveConfig', () => {
         configSchema.properties as Record<string, { default: unknown }>
       )[key]
       expect(prop?.default).toEqual(value)
+    }
+  })
+
+  it('bounds every live setting the same way as resolveConfig', () => {
+    for (const key of LIVE_SETTINGS) {
+      const { min, max } = liveBounds(key)
+      expect(Number.isFinite(min) && Number.isFinite(max), key).toBe(true)
+      expect(resolveConfig({ [key]: min - 1 })[key]).toBe(min)
+      expect(resolveConfig({ [key]: max + 1 })[key]).toBe(max)
+      expect(parseLiveSettings({ [key]: min })).toEqual({ [key]: min })
+      expect(parseLiveSettings({ [key]: max })).toEqual({ [key]: max })
+      expect(() => parseLiveSettings({ [key]: min - 0.1 })).toThrow()
+      expect(() => parseLiveSettings({ [key]: max + 0.1 })).toThrow()
     }
   })
 })

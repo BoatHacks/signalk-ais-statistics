@@ -4,7 +4,13 @@
 import type { Path, Plugin, ServerAPI } from '@signalk/server-api'
 import { Aggregator, HOUR_MS, MINUTE_MS } from './aggregate'
 import { registerRoutes, type RouterLike } from './api'
-import { configSchema, resolveConfig, type Config } from './config'
+import {
+  configSchema,
+  pickLive,
+  resolveConfig,
+  type Config,
+  type LiveSettings,
+} from './config'
 import { Coverage } from './coverage'
 import {
   connectHistory,
@@ -153,6 +159,30 @@ export function createPlugin(app: ServerAPI): Plugin {
       coverageCellsDropped: s.coverage.droppedCells,
       config: s.config,
     }
+  }
+
+  /**
+   * Merges live settings into the stored plugin config and applies them to
+   * the running plugin. The server replaces the whole configuration object
+   * on save and does not restart the plugin, so merge first and apply here.
+   */
+  async function saveSettings(
+    values: Partial<LiveSettings>,
+  ): Promise<LiveSettings> {
+    const s = state
+    if (!s) throw new Error('the plugin is not running')
+    const stored = (app.readPluginOptions() as { configuration?: object })
+      .configuration
+    const configuration = { ...(stored ?? {}), ...values }
+    await new Promise<void>((resolve, reject) =>
+      app.savePluginOptions(configuration, (err) =>
+        err ? reject(err) : resolve(),
+      ),
+    )
+    const live = pickLive(resolveConfig(configuration))
+    s.config = { ...s.config, ...live }
+    s.coverage.setPercentile(live.coverageDistancePercentile)
+    return live
   }
 
   const plugin: Plugin = {
@@ -319,6 +349,7 @@ export function createPlugin(app: ServerAPI): Plugin {
         coverage: () => state?.coverage,
         longRange: () => state?.longRange,
         status,
+        saveSettings,
         overlayExtras: async () => {
           const s = state
           if (!s) return []

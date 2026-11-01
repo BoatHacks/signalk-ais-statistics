@@ -120,6 +120,51 @@ describe('Query with history', () => {
     }
   })
 
+  it('counts an hour with 20 reports in a sector, but not one with 19', async () => {
+    for (const reader of ['history', 'live'] as const)
+      for (const [far, counted] of [
+        [19, false],
+        [20, true],
+      ] as const) {
+        const history = new FakeHistory()
+        const agg = new Aggregator(T0)
+        run(agg, history, T0, 120)
+        // A third hour with only far reports in the same sector.
+        for (let m = 0; m < 60; m++) {
+          const t = T0 + (120 + m) * MINUTE_MS
+          if (m < far) agg.add(report(999000003, 50, 40), OWN, t + 1000)
+          history.record(buildValues(agg, t + 59_000), t + 59_000)
+        }
+        const q = new Query(agg, () =>
+          reader === 'history'
+            ? new HistoryApiReader(history)
+            : nullHistoryReader,
+        )
+        const r = await q.sectors('24h', 'a', T0 + 3 * HOUR_MS + MINUTE_MS)
+        const p99 = r.sectors[3]!.p99M!
+        expect(r.sectors[3]!.count).toBe(120 + far)
+        if (counted) expect(p99, `${reader}, ${far}`).toBeGreaterThan(30 * NM)
+        else expect(p99, `${reader}, ${far}`).toBeLessThan(15 * NM)
+      }
+  })
+
+  it('derives the same distance figures from history as from live data', async () => {
+    const history = new FakeHistory()
+    const agg = new Aggregator(T0)
+    run(agg, history, T0, 180)
+    const now = T0 + 180 * MINUTE_MS
+    const h = await new Query(agg, () => new HistoryApiReader(history)).summary(
+      '24h',
+      now,
+    )
+    const l = await new Query(agg, () => nullHistoryReader).summary('24h', now)
+    expect(h.source).toBe('history')
+    expect(l.source).toBe('live')
+    expect(h.distance.count).toBe(l.distance.count)
+    for (const k of ['avgM', 'medianM', 'p95M', 'p99M'] as const)
+      expect(h.distance[k], k).toBeCloseTo(l.distance[k]!, 0)
+  })
+
   it('reports the farthest reception per sector with its time', async () => {
     const far = T0 + 30 * MINUTE_MS + 5000
     const build = () => {
@@ -201,6 +246,27 @@ describe('Query with history', () => {
     const d = await q.series('distance', 3600, T0, T0 + 3 * HOUR_MS)
     expect((d.count as number[])[1]).toBe(120)
     expect((d.maxM as number[])[1]).toBeCloseTo(20 * NM, -1)
+  })
+
+  it('agrees between history and live series of positions and vessels', async () => {
+    const history = new FakeHistory()
+    const agg = new Aggregator(T0)
+    run(agg, history, T0, 180)
+    const end = T0 + 3 * HOUR_MS
+    const h = new Query(agg, () => new HistoryApiReader(history))
+    const l = new Query(agg, () => nullHistoryReader)
+    for (const q of [h, l]) {
+      const s = await q.series('positions', 3600, T0, end)
+      expect(s.classA).toEqual([60, 60, 60])
+      expect(s.classB).toEqual([60, 60, 60])
+      expect(s.other).toEqual([0, 0, 0])
+    }
+    const hv = await h.series('vessels', 3600, T0, end)
+    expect(hv.source).toBe('history')
+    expect((hv.vessels as (number | null)[]).slice(1)).toEqual([2, 2])
+    const lv = await l.series('vessels', 3600, T0, end)
+    expect(lv.source).toBe('live')
+    expect(lv.vessels).toEqual([2, 2, 2])
   })
 })
 

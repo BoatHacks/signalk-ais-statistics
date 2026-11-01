@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   OVERFLOW_NM,
+  addInto,
   averageNm,
   binLowerNm,
   binOf,
@@ -8,9 +9,12 @@ import {
   emptyBins,
   percentileNm,
   sectorBinOf,
+  sectorPercentileNm,
   summarize,
+  total,
 } from '../src/histogram'
 import { DISTANCE_BIN_COUNT } from '../src/paths'
+import { distances, seeded } from './fixtures/random'
 
 function histogramOf(values: number[]): number[] {
   const bins = emptyBins()
@@ -89,3 +93,102 @@ describe('percentiles', () => {
     expect(avg).toBeLessThan(binUpperNm(binOf(10)))
   })
 })
+
+describe('bin edges', () => {
+  it('puts a distance exactly on an edge into the bin above it', () => {
+    for (let b = 1; b < DISTANCE_BIN_COUNT; b++) {
+      const edge = binLowerNm(b)
+      expect(binOf(edge), `edge of bin ${b}`).toBe(b)
+      expect(binOf(edge * (1 - 1e-12)), `just below bin ${b}`).toBe(b - 1)
+    }
+  })
+
+  it('starts the overflow bin at 512 nm', () => {
+    expect(binOf(511.999)).toBe(DISTANCE_BIN_COUNT - 2)
+    expect(binOf(512)).toBe(DISTANCE_BIN_COUNT - 1)
+    expect(binOf(Infinity)).toBe(DISTANCE_BIN_COUNT - 1)
+  })
+})
+
+describe('histogram properties', () => {
+  const QS = [0, 0.01, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99, 0.999, 1]
+
+  it('never lowers a percentile when q rises', () => {
+    for (let seed = 1; seed <= 50; seed++) {
+      const rand = seeded(seed)
+      const bins = histogramOf(distances(rand, 1 + Math.floor(rand() * 500)))
+      for (const pct of [percentileNm, sectorPercentileNm]) {
+        const input = pct === percentileNm ? bins : pairs(bins)
+        let prev = -Infinity
+        for (const q of QS) {
+          const v = pct(input, q)!
+          expect(v, `seed ${seed}, q ${q}`).toBeGreaterThanOrEqual(prev)
+          prev = v
+        }
+      }
+    }
+  })
+
+  it('merges split histograms into the same result as one pass', () => {
+    for (let seed = 1; seed <= 50; seed++) {
+      const rand = seeded(seed)
+      const values = distances(rand, 300)
+      const merged = emptyBins()
+      // Split into a random number of uneven parts, like hourly buckets.
+      let start = 0
+      while (start < values.length) {
+        const end = start + 1 + Math.floor(rand() * 80)
+        addInto(merged, histogramOf(values.slice(start, end)))
+        start = end
+      }
+      const single = histogramOf(values)
+      expect(merged).toEqual(single)
+      for (const q of QS)
+        expect(percentileNm(merged, q)).toBe(percentileNm(single, q))
+    }
+  })
+
+  it('keeps every percentile inside the bins that hold data', () => {
+    for (let seed = 1; seed <= 50; seed++) {
+      const values = distances(seeded(seed), 200)
+      const bins = histogramOf(values)
+      const lo = binLowerNm(binOf(Math.min(...values)))
+      const hi = binLowerNm(binOf(Math.max(...values)) + 1)
+      for (const q of QS) {
+        const v = percentileNm(bins, q)!
+        expect(v).toBeGreaterThanOrEqual(lo)
+        expect(v).toBeLessThanOrEqual(hi)
+      }
+    }
+  })
+
+  it('counts every value once, overflow included', () => {
+    const values = distances(seeded(7), 1000)
+    expect(total(histogramOf(values))).toBe(1000)
+    expect(summarize(histogramOf(values)).count).toBe(1000)
+  })
+
+  it('agrees with the exact percentile to the bin width', () => {
+    // Bins are 2^(1/3) wide, so an interpolated percentile is within about
+    // 26 percent of the exact one, away from bin 0 and the overflow bin.
+    for (let seed = 1; seed <= 20; seed++) {
+      const rand = seeded(seed)
+      const values = Array.from({ length: 2000 }, () => 1 + rand() * 200).sort(
+        (a, b) => a - b,
+      )
+      const bins = histogramOf(values)
+      for (const q of [0.5, 0.95, 0.99]) {
+        const exact = values[Math.ceil(q * values.length) - 1]!
+        const p = percentileNm(bins, q)!
+        expect(Math.abs(p - exact) / exact).toBeLessThan(0.26)
+      }
+    }
+  })
+})
+
+/** Pairs distance bins into sector bins, as the aggregator does. */
+function pairs(bins: number[]): number[] {
+  return Array.from({ length: bins.length / 2 }, (_, k) => {
+    return bins[2 * k]! + bins[2 * k + 1]!
+  })
+}

@@ -8,6 +8,7 @@ import {
   parseRows,
 } from '../src/history'
 import { FakeHistory } from './fixtures/history'
+import { seeded } from './fixtures/random'
 
 describe('increments', () => {
   it('differences a counter, treating leading nulls as zero', () => {
@@ -42,6 +43,46 @@ describe('increments', () => {
   it('ignores max where it adds nothing', () => {
     expect(increments([0, 5, 9], [null, 5, 9])).toEqual([5, 4])
     expect(increments([100, 120, 7], [100, 120, null])).toEqual([20, 7])
+  })
+
+  it('counts several restarts in one window', () => {
+    // Up to 50, restart, up to 30, restart inside a bucket (max 45, ends at
+    // 4), then on to 10.
+    expect(increments([0, 50, 12, 30, 4, 10], [0, 50, 12, 30, 45, 10])).toEqual(
+      [50, 12, 18, 15 + 4, 6],
+    )
+  })
+
+  it('counts a restart inside the first bucket from the first value', () => {
+    // The window starts after the restart: nothing before it is known, so
+    // the first bucket is the baseline whatever its max was.
+    expect(increments([3, 8], [90, 8])).toEqual([5])
+  })
+
+  it('never yields a negative increment', () => {
+    const rand = seeded(11)
+    for (let run = 0; run < 200; run++) {
+      const last: (number | null)[] = []
+      const max: (number | null)[] = []
+      let v = 0
+      for (let i = 0; i < 30; i++) {
+        const r = rand()
+        if (r < 0.1) {
+          last.push(null)
+          max.push(null)
+          continue
+        }
+        let peak = v
+        if (r < 0.2) {
+          peak = v + Math.floor(rand() * 20)
+          v = 0
+        }
+        v += Math.floor(rand() * 20)
+        last.push(v)
+        max.push(Math.max(peak, v))
+      }
+      for (const x of increments(last, max)) expect(x).toBeGreaterThanOrEqual(0)
+    }
   })
 
   it('is empty for one bucket', () => {
