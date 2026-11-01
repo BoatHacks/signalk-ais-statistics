@@ -235,7 +235,8 @@ History API provider can store and return them. Every counter is published
 at each publish interval (`publishIntervalMinutes`, default 5), whether or
 not it changed, except the per-sector counters and p99 distances, which are
 published once an hour and on stop: the radar keeps the highest hourly p99
-per sector, so finer updates add nothing. A gauge with no data (for example
+per sector, so finer updates add nothing. History therefore holds the
+radar's closed hours, and the open hour comes from the live state. A gauge with no data (for example
 no position with a known own position in the last hour) is left out of the
 delta rather than published as zero or null; the web app's distance series
 come from the bin counters, not from these gauges.
@@ -268,10 +269,13 @@ series instead.
 A counter resets to zero when the plugin restarts. Readers detect a value
 lower than its predecessor and treat the new value as counted from zero. A
 restart inside a bucket would lose the count before it, so readers also
-query `max` for each counter: when a bucket's `last` dropped, its increment
-is the rise from the previous bucket up to that `max`, plus the new `last`.
+query `max` for each counter: when a bucket's `last` dropped, or its `max`
+is above its `last` (a restart that climbed back to the previous value or
+higher), its increment is the rise from the previous bucket up to that
+`max`, plus the new `last`.
 On the provider checked, a restart shows as a plain drop with no `null` or
-gap, and buckets start at the query's `from`. A `last` query returns `null`
+gap, and buckets start at the query's `from`, so series requests start on
+a whole multiple of their resolution. A `last` query returns `null`
 for buckets before the first recorded sample, which readers treat as zero,
 and the one provider checked repeats the previous value for buckets with
 no new sample. History queries must always pass a `resolution` (without one

@@ -107,7 +107,11 @@ answer windowed queries. All REST handlers go through it. A window total is
 the sum of a counter's per-bucket increments (60, 300 or 3600 second
 buckets by window, never finer than the publish interval), with reset detection: a value lower than its
 predecessor starts a new segment counted from zero, and the bucket's `max`
-adds what was counted before a restart inside that bucket. A null before
+adds what was counted before a restart inside that bucket (a `max` above
+the bucket's `last` also marks one). Series start on a whole multiple of
+their resolution, so hourly bars begin on the hour. The radar reads the
+closed hours from history and adds the open hour from the live bucket,
+because the sector paths are published hourly. A null before
 the first sample counts as zero and a later null as unchanged. Window percentiles come
 from the summed increments of the distance bin counters. The one-hour window
 and chart spans of up to an hour use the live minute buckets once the
