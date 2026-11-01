@@ -2,7 +2,7 @@
 // in, deltas out at each publish interval, coverage files flushed hourly, REST routes and
 // the plotter overlay served while running.
 import type { Path, Plugin, ServerAPI } from '@signalk/server-api'
-import { Aggregator, HOUR_MS, MINUTE_MS } from './aggregate'
+import { Aggregator, DAY_MS, HOUR_MS, MINUTE_MS } from './aggregate'
 import { registerRoutes, type RouterLike } from './api'
 import {
   configSchema,
@@ -28,8 +28,20 @@ import {
   sectorFeatures,
   registerOverlayProvider,
 } from './overlay'
-import { buildValues, defaultMetadata, publish } from './publish'
-import { SECTOR_CLASSES } from './paths'
+import {
+  buildValues,
+  defaultMetadata,
+  publish,
+  publishNotification,
+  type PathValue,
+} from './publish'
+import { SECTOR_CLASSES, paths } from './paths'
+import {
+  PropagationDetector,
+  alertMessage,
+  baselineFrom,
+  notificationValue,
+} from './propagation'
 import { Query } from './query'
 import { Sources } from './sources'
 
@@ -70,6 +82,14 @@ interface Running {
   sourceQueries: Map<string, Query>
   /** Hour index of the last delta that carried the sector paths. */
   sectorHour?: number
+  /** Propagation alerts, when `propagationAlerts` is on (SPEC 2.10). */
+  propagation?: PropagationDetector
+  /** Whether the last published notification was an active alert. */
+  propagationNotified: boolean
+  /** When the normal range was last read, and whether from history. */
+  baselineAt?: number
+  baselineFromHistory?: boolean
+  baselinePending: boolean
   stops: (() => void)[]
 }
 
@@ -117,6 +137,7 @@ export function createPlugin(app: ServerAPI): Plugin {
         sectors,
       })
       if (s.sources) values.push(...s.sources.values())
+      values.push(...ratioValue(s))
       publish(app, PLUGIN_ID, values, now)
       if (sectors) s.sectorHour = hourIndex
     } catch (err) {
@@ -128,6 +149,82 @@ export function createPlugin(app: ServerAPI): Plugin {
         ? 'Running, no AIS data received yet'
         : `Running, ${s.agg.trackedTargets(now, s.config.targetExpirySeconds * 1000)} targets tracked, history ${s.history.available ? 'available' : 'unavailable (live-only)'}`,
     )
+  }
+
+  /** The ratio gauge, left out while there is no normal range. */
+  function ratioValue(s: Running): PathValue[] {
+    const r = s.propagation?.ratio()
+    return r === null || r === undefined || !Number.isFinite(r)
+      ? []
+      : [{ path: paths.propagationRatio, value: r }]
+  }
+
+  function notify(s: Running, active: boolean, message: string): void {
+    publishNotification(
+      app,
+      PLUGIN_ID,
+      notificationValue(
+        active,
+        s.config.propagationNotificationState,
+        s.config.propagationNotificationMethods,
+        message,
+      ),
+      Date.now(),
+    )
+    s.propagationNotified = active
+  }
+
+  /**
+   * Reads the normal range again once an hour, and when history comes or
+   * goes. One read at a time; a failed history read is answered from the
+   * live hours by the query layer.
+   */
+  function refreshBaseline(s: Running, now: number): void {
+    const d = s.propagation
+    if (!d || s.baselinePending) return
+    const fromHistory = s.history.available
+    if (
+      s.baselineAt !== undefined &&
+      now - s.baselineAt < HOUR_MS &&
+      s.baselineFromHistory === fromHistory
+    )
+      return
+    s.baselinePending = true
+    s.baselineAt = now
+    s.baselineFromHistory = fromHistory
+    s.query
+      .series('distance', 3600, now - 7 * DAY_MS, now)
+      .then((r) => {
+        if (state === s) d.setBaseline(baselineFrom(r, now))
+      })
+      .catch((err: unknown) => log('reading the normal range failed', err))
+      .finally(() => (s.baselinePending = false))
+  }
+
+  /** The minute check of the propagation alert (SPEC 2.10). */
+  function propagationCheck(s: Running): void {
+    const d = s.propagation
+    if (!d) return
+    const now = Date.now()
+    try {
+      d.check(now, s.agg.minuteBuckets(now))
+      const status = d.status(
+        s.mode.current(Date.now()),
+        s.config.propagationSuppressUnderway,
+      )
+      const active = status.state === 'alert'
+      if (active !== s.propagationNotified)
+        notify(
+          s,
+          active,
+          active
+            ? alertMessage(status)
+            : 'AIS reception range is back to normal',
+        )
+    } catch (err) {
+      log('checking for propagation failed', err)
+    }
+    refreshBaseline(s, now)
   }
 
   function hour(s: Running): void {
@@ -206,6 +303,11 @@ export function createPlugin(app: ServerAPI): Plugin {
     const live = pickLive(resolveConfig(configuration))
     s.config = { ...s.config, ...live }
     s.coverage.setPercentile(live.coverageDistancePercentile)
+    s.propagation?.setRule({
+      factor: live.propagationFactor,
+      minVessels: live.propagationMinVessels,
+      sustainMinutes: live.propagationSustainMinutes,
+    })
     return live
   }
 
@@ -253,6 +355,16 @@ export function createPlugin(app: ServerAPI): Plugin {
         query: undefined as unknown as Query,
         history: nullHistoryReader,
         sourceQueries: new Map(),
+        propagation: config.propagationAlerts
+          ? new PropagationDetector({
+              factor: config.propagationFactor,
+              minVessels: config.propagationMinVessels,
+              sustainMinutes: config.propagationSustainMinutes,
+              windowMinutes: config.propagationWindowMinutes,
+            })
+          : undefined,
+        propagationNotified: false,
+        baselinePending: false,
         stops: [],
       }
       s.query = new Query(
@@ -343,6 +455,7 @@ export function createPlugin(app: ServerAPI): Plugin {
               s.mode.current(time),
             )
             s.longRange.add(located, s.agg.vessel(located.mmsi))
+            s.propagation?.see(located)
           }
           const speed = verdict.speed
           if (speed) {
@@ -392,6 +505,10 @@ export function createPlugin(app: ServerAPI): Plugin {
       s.stops.push(() => clearTimeout(first))
       const hourly = setInterval(() => hour(s), HOUR_MS)
       s.stops.push(() => clearInterval(hourly))
+      if (s.propagation) {
+        const minutely = setInterval(() => propagationCheck(s), MINUTE_MS)
+        s.stops.push(() => clearInterval(minutely))
+      }
       let retry: ReturnType<typeof setTimeout> | undefined
       const scheduleRetry = () => {
         const fast = Date.now() - now < HISTORY_RETRY_FAST_FOR_MS
@@ -438,7 +555,10 @@ export function createPlugin(app: ServerAPI): Plugin {
       try {
         const values = buildValues(s.agg, Date.now())
         if (s.sources) values.push(...s.sources.values())
+        values.push(...ratioValue(s))
         publish(app, PLUGIN_ID, values, Date.now())
+        // No alert outlives the plugin.
+        if (s.propagation) notify(s, false, 'AIS propagation alerts stopped')
       } catch {
         // the server may already be shutting down
       }
@@ -467,6 +587,18 @@ export function createPlugin(app: ServerAPI): Plugin {
         retentionDays: () => state?.config.coverageRetentionDays,
         status,
         saveSettings,
+        propagation: () => {
+          const s = state
+          if (!s) return undefined
+          if (!s.propagation) return { enabled: false }
+          return {
+            enabled: true,
+            ...s.propagation.status(
+              s.mode.current(Date.now()),
+              s.config.propagationSuppressUnderway,
+            ),
+          }
+        },
         overlayExtras: async () => {
           const s = state
           if (!s) return []
