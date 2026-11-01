@@ -21,7 +21,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "smoke": "node scripts/smoke.cjs"
+    "smoke": "node scripts/smoke.cjs",
+    "test:coverage": "vitest run --coverage --coverage.include=src/**"
   },
   "keywords": [
     "signalk-node-server-plugin",
@@ -74,6 +75,7 @@
     "@types/geojson": "^7946.0.16",
     "@types/leaflet": "^1.9.22",
     "@types/node": "^22.20.5",
+    "@vitest/coverage-v8": "^5.0.5",
     "esbuild": "^0.28.2",
     "eslint": "^10.13.0",
     "leaflet": "^1.9.4",
