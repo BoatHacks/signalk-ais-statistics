@@ -765,6 +765,13 @@ directly. Consequences:
 
 ## 9. Configuration
 
+The server's config form shows the options in groups, in the order of
+`CONFIG_ORDER` in `src/config.ts`, passed as the plugin's `uiSchema`: AIS
+input, publishing, coverage, vessel mode, message health, weather,
+propagation alerts. The README's configuration table follows the
+same order, which a test checks. The defaults were reviewed for 1.0.0 on
+2026-11-01 and kept.
+
 | Option | Default | Notes |
 |---|---|---|
 | `targetExpirySeconds` | 3600 | live tracking expiry |
