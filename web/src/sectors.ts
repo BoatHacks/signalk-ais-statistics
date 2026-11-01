@@ -1,11 +1,10 @@
 // Bearing sectors: one wedge per 15 degree sector, radius the sector's p99
-// distance, north up, and a thin tick along each sector's centre line from
-// the centre out to its farthest reception, ending in a dot. The chart's farthest reception has a
-// broader tick. Built once; updates move the wedges and ticks and relabel
-// the rings.
+// distance, north up. The sector holding the chart's farthest reception has
+// a bolder outline and a dot on its centre line at that distance. Built
+// once; updates move the wedges and the dot and relabel the rings.
 import type { SectorStats } from './api'
 import { el, svg } from './format'
-import { sectorLayout } from './ticks'
+import { sectorLayout } from './sector-layout'
 import { maxTime } from './time'
 import type { Unit } from './units'
 
@@ -19,17 +18,16 @@ function point(bearing: number, r: number): [number, number] {
   return [C + r * Math.cos(a), C + r * Math.sin(a)]
 }
 
-export { sectorScale } from './ticks'
+export { sectorScale } from './sector-layout'
 
 export class SectorChart {
   readonly element: HTMLElement
   private readonly root: SVGSVGElement
   private readonly ringLabels: SVGTextElement[] = []
   private readonly wedges: SVGPathElement[] = []
-  private readonly ticks: SVGLineElement[] = []
-  private readonly tickHits: SVGLineElement[] = []
-  private readonly dots: SVGCircleElement[] = []
-  private readonly dotHits: SVGCircleElement[] = []
+  private readonly dot: SVGCircleElement
+  private readonly dotHit: SVGCircleElement
+  private farthest: number | undefined
   private readonly tip: HTMLElement
   private readonly empty: HTMLElement
   private data:
@@ -43,6 +41,7 @@ export class SectorChart {
       class: 'sectors',
       role: 'img',
     })
+    this.root.style.setProperty('--sector', color)
     for (const f of RINGS) {
       this.root.append(svg('circle', { cx: C, cy: C, r: R * f, class: 'grid' }))
       // Ring labels sit between the north-east sectors to stay readable.
@@ -74,28 +73,19 @@ export class SectorChart {
       this.wedges.push(w)
       this.root.append(w)
     }
-    for (let s = 0; s < 24; s++) {
-      const t = svg('line', { stroke: color, class: 'tick' })
-      // A wide invisible line over the thin tick makes it easy to hover.
-      const hit = svg('line', { class: 'tick-hit' })
-      const dot = svg('circle', {
-        r: 2.5,
-        fill: color,
-        stroke: color,
-        class: 'tick-dot',
-      })
-      // The dot is all there is when the reception is at the wedge's edge.
-      const dotHit = svg('circle', { r: 7, class: 'dot-hit' })
-      for (const h of [hit, dotHit]) {
-        h.addEventListener('pointerenter', () => this.showMax(s))
-        h.addEventListener('pointerleave', () => (this.tip.hidden = true))
-      }
-      this.ticks.push(t)
-      this.tickHits.push(hit)
-      this.dots.push(dot)
-      this.dotHits.push(dotHit)
-      this.root.append(t, dot, hit, dotHit)
-    }
+    this.dot = svg('circle', {
+      r: 3,
+      fill: color,
+      stroke: color,
+      class: 'farthest-dot',
+    })
+    // A wider invisible circle over the small dot makes it easy to hover.
+    this.dotHit = svg('circle', { r: 8, class: 'dot-hit' })
+    this.dotHit.addEventListener('pointerenter', () => {
+      if (this.farthest !== undefined) this.showMax(this.farthest)
+    })
+    this.dotHit.addEventListener('pointerleave', () => (this.tip.hidden = true))
+    this.root.append(this.dot, this.dotHit)
     this.empty = el(
       'p',
       { class: 'muted empty' },
@@ -112,48 +102,32 @@ export class SectorChart {
     scaleM?: number,
   ): void {
     this.data = { stats, unit, offsetMin }
-    const { max, ticks } = sectorLayout(stats, R, scaleM)
+    const { max, farthest } = sectorLayout(stats, R, scaleM)
     this.empty.hidden = max > 0
     this.root.style.visibility = max > 0 ? 'visible' : 'hidden'
     if (max === 0) return
     const scale = R / max
-    this.ticks.forEach((t, i) => {
-      const s = stats.sectors[i]
-      const tick = ticks[i]
-      const parts = [t, this.tickHits[i]!, this.dots[i]!, this.dotHits[i]!]
-      if (!s || !tick) {
-        for (const e of parts) e.setAttribute('visibility', 'hidden')
-        return
+    this.farthest = farthest?.sector
+    const s = farthest ? stats.sectors[farthest.sector] : undefined
+    for (const c of [this.dot, this.dotHit])
+      c.setAttribute('visibility', farthest && s ? 'visible' : 'hidden')
+    if (farthest && s) {
+      const [x, y] = point((s.fromDeg + s.toDeg) / 2, farthest.r)
+      for (const c of [this.dot, this.dotHit]) {
+        c.setAttribute('cx', String(x))
+        c.setAttribute('cy', String(y))
       }
-      for (const e of parts) e.setAttribute('visibility', 'visible')
-      const mid = (s.fromDeg + s.toDeg) / 2
-      const [x2, y2] = point(mid, tick.outer)
-      // The tick starts at the centre; its hover area starts at the wedge's
-      // edge, so the wedge keeps its own hover.
-      const line = (l: SVGLineElement, r: number) => {
-        const [x1, y1] = point(mid, r)
-        l.setAttribute('x1', String(x1))
-        l.setAttribute('y1', String(y1))
-        l.setAttribute('x2', String(x2))
-        l.setAttribute('y2', String(y2))
-      }
-      line(t, 0)
-      line(this.tickHits[i]!, tick.wedge)
-      for (const c of [this.dots[i]!, this.dotHits[i]!]) {
-        c.setAttribute('cx', String(x2))
-        c.setAttribute('cy', String(y2))
-      }
-      t.classList.toggle('clipped', tick.clipped)
-      t.classList.toggle('farthest', tick.farthest)
-      this.dots[i]!.classList.toggle('clipped', tick.clipped)
-      this.dots[i]!.classList.toggle('farthest', tick.farthest)
-      this.dots[i]!.setAttribute('r', tick.farthest ? '3.5' : '2.5')
-    })
+      this.dot.classList.toggle('clipped', farthest.clipped)
+    }
     RINGS.forEach((f, i) => {
       this.ringLabels[i]!.textContent = unit.format(max * f)
     })
     this.wedges.forEach((w, i) => {
       const s = stats.sectors[i]
+      w.classList.toggle('farthest', i === this.farthest)
+      // Drawn last among the wedges, so its neighbours do not cover the
+      // bolder outline.
+      if (i === this.farthest) this.root.insertBefore(w, this.dot)
       if (!s || s.p99M === null) {
         w.setAttribute('d', '')
         return
@@ -168,7 +142,11 @@ export class SectorChart {
   private show(i: number): void {
     const s = this.data?.stats.sectors[i]
     if (!s || !this.data) return
-    this.tip.textContent = `${s.fromDeg}° to ${s.toDeg}°: p99 ${this.data.unit.format(s.p99M)}, ${s.count.toLocaleString()} positions`
+    const far =
+      s.maxM === null
+        ? ''
+        : `, farthest ${this.data.unit.format(s.maxM)} (${maxTime(s, this.data.offsetMin)})`
+    this.tip.textContent = `${s.fromDeg}° to ${s.toDeg}°: p99 ${this.data.unit.format(s.p99M)}${far}, ${s.count.toLocaleString()} positions`
     this.tip.hidden = false
   }
 

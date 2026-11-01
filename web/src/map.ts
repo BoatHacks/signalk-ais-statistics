@@ -30,8 +30,9 @@ import {
   CELL_FILL_OPACITY,
   CELL_LINE_WIDTH,
   OVERLAY_OPACITY,
+  SECTOR_FARTHEST_LINE_WIDTH,
   SECTOR_LINE_WIDTH,
-  SECTOR_MAX_LINE_WIDTH,
+  SECTOR_MAX_RADIUS,
   cellColour,
   sectorColour,
 } from '../../src/style'
@@ -409,15 +410,27 @@ export function createMap(): MapView {
     dashArray: '4 3',
   })
 
-  const sectorStyle = (f?: GeoJSON.Feature): L.PathOptions => ({
-    color: sectorColour(f?.properties?.cls),
-    weight:
-      f?.properties?.kind === 'sector-max'
-        ? SECTOR_MAX_LINE_WIDTH
-        : SECTOR_LINE_WIDTH,
-    opacity: OVERLAY_OPACITY,
-    fill: false,
-  })
+  // Leaflet applies the style to the farthest dot too, so it covers both.
+  const sectorStyle = (f?: GeoJSON.Feature): L.PathOptions =>
+    f?.properties?.kind === 'sector-max'
+      ? {
+          color: sectorColour(f.properties.cls),
+          weight: 0,
+          fill: true,
+          fillOpacity: OVERLAY_OPACITY,
+        }
+      : {
+          color: sectorColour(f?.properties?.cls),
+          weight: f?.properties?.farthest
+            ? SECTOR_FARTHEST_LINE_WIDTH
+            : SECTOR_LINE_WIDTH,
+          opacity: OVERLAY_OPACITY,
+          fill: false,
+        }
+
+  // The farthest reception of a class: a small filled dot.
+  const farthestDot = (_f: GeoJSON.Feature, at: L.LatLng): L.Layer =>
+    L.circleMarker(at, { radius: SECTOR_MAX_RADIUS })
 
   const view: MapView = {
     element,
@@ -501,14 +514,18 @@ export function createMap(): MapView {
                   f.properties?.kind === 'sector-max'),
             ),
           } as GeoJSON.FeatureCollection,
-          { style: sectorStyle, onEachFeature: sectorTip },
+          {
+            style: sectorStyle,
+            onEachFeature: sectorTip,
+            pointToLayer: farthestDot,
+          },
         )
       sectorsA = sectorLayer('a')
       sectorsB = sectorLayer('b')
       applyVisibility()
       // The first view frames the cells and the sector wedges of both
       // classes together; the wedges reach past the cells where the p99
-      // range exceeds them. The farthest-reception ticks can reach far
+      // range exceeds them. The farthest-reception dots can lie far
       // beyond, so they do not count.
       const framed = L.geoJSON({
         type: 'FeatureCollection',
