@@ -6,8 +6,12 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-01
+
 ### Added
 
+- A tab, window or map button whose click starts a load fades out and in
+  (0.5 s per cycle) until the data or basemap tiles have loaded.
 - Message health (#16): seven counters under
   `sensors.ais.statistics.health.*` for decode errors, incomplete
   multipart messages, duplicates on the same event and across events
@@ -42,6 +46,10 @@ uses [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Every sector with a reception shows its farthest-reception tick, drawn
+  from the centre to a dot at that distance, also when the farthest
+  reception is at the wedge's edge. The tick of the chart's farthest
+  reception is broader.
 - The daily long-range files are version 2, with the fastest list beside
   the farthest receptions. Version 1 files still load.
 
@@ -228,7 +236,8 @@ First release.
 - A dark tactical web app theme following day and night mode, with
   distances in the server's display units and the plugin's app icon.
 
-[Unreleased]: https://github.com/BoatHacks/signalk-ais-statistics/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/BoatHacks/signalk-ais-statistics/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/BoatHacks/signalk-ais-statistics/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/BoatHacks/signalk-ais-statistics/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/BoatHacks/signalk-ais-statistics/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/BoatHacks/signalk-ais-statistics/compare/v0.3.0...v0.3.1
