@@ -12,6 +12,18 @@ export interface AisMessage {
   lon?: number
   /** AIS ship type code, from message 5 and message 24 part B. */
   shipType?: number
+  /** Vessel name, from message 5, 19 and 24 part A. */
+  name?: string
+}
+
+/**
+ * A vessel name as transmitted, without the `@` padding of six-bit text
+ * and surrounding spaces; undefined when nothing is left.
+ */
+export function cleanName(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') return undefined
+  const s = raw.replace(/@+/g, ' ').replace(/\s+/g, ' ').trim()
+  return s === '' ? undefined : s.slice(0, 40)
 }
 
 export interface IngestStats {
@@ -130,6 +142,9 @@ export class Ingest {
     }
     if (typeof d.cargo === 'number' && (d.aistype === 5 || d.aistype === 24))
       msg.shipType = d.cargo
+    const name = cleanName(d.shipname)
+    if (name && (d.aistype === 5 || d.aistype === 19 || d.aistype === 24))
+      msg.name = name
     return msg
   }
 

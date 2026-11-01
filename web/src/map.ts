@@ -20,8 +20,10 @@ import {
   OVERLAY_OPACITY,
   RADAR_COLOUR,
   RADAR_LINE_WIDTH,
+  RADAR_MAX_LINE_WIDTH,
   cellColour,
 } from '../../src/style'
+import { maxTime } from './time'
 import { SECTOR_WIDTH_DEG } from '../../src/paths'
 import type { Unit } from './units'
 
@@ -30,6 +32,7 @@ export interface MapView {
   show(
     window: '24h' | '7d',
     units: { distance: Unit; area: Unit },
+    offsetMin?: number,
   ): Promise<void>
   /** Re-reads the theme colours, after a day or night change. */
   restyle(): void
@@ -73,11 +76,14 @@ export function createMap(): MapView {
   let map: L.Map | undefined
   let base: L.Layer[] = []
   let cells: L.GeoJSON | undefined
+  let capped: L.GeoJSON | undefined
   let radar: L.GeoJSON | undefined
   const visible: Record<Layer, boolean> = {
     cells: layerVisible('cells'),
+    capped: layerVisible('capped'),
     radar: layerVisible('radar'),
   }
+  let lastInfo: (() => void) | undefined
   let current: Basemap | undefined
   let charts: ChartLayer[] = []
   let fitted = false
@@ -110,6 +116,7 @@ export function createMap(): MapView {
     }
     for (const l of base) l.addTo(map)
     cells?.bringToFront()
+    capped?.bringToFront()
     radar?.bringToFront()
     for (const btn of switcher.querySelectorAll('button'))
       btn.setAttribute('aria-pressed', String(btn.dataset.basemap === b))
@@ -132,6 +139,7 @@ export function createMap(): MapView {
   function applyVisibility() {
     for (const [name, layer] of [
       ['cells', cells],
+      ['capped', capped],
       ['radar', radar],
     ] as const) {
       if (!map || !layer) continue
@@ -144,13 +152,17 @@ export function createMap(): MapView {
         'aria-pressed',
         String(visible[btn.dataset.layer as Layer]),
       )
+    lastInfo?.()
   }
 
   for (const [name, label] of [
     ['cells', 'Cells'],
+    ['capped', 'All cells'],
     ['radar', 'Radar 24h'],
   ] as const) {
     const btn = el('button', { type: 'button', 'data-layer': name }, label)
+    if (name === 'capped')
+      btn.title = 'Also show cells beyond the distance percentile cap'
     btn.addEventListener('click', () => {
       visible[name] = !visible[name]
       saveLayerVisible(name, visible[name])
@@ -190,67 +202,118 @@ export function createMap(): MapView {
     }
   }
 
-  const radarStyle: L.PathOptions = {
+  // Cells beyond the cap: outline only, dashed, so they read as outliers.
+  const cappedStyle = (f?: GeoJSON.Feature): L.PathOptions => ({
+    ...cellStyle(f),
+    fill: false,
+    dashArray: '4 3',
+  })
+
+  const radarStyle = (f?: GeoJSON.Feature): L.PathOptions => ({
     color: RADAR_COLOUR,
-    weight: RADAR_LINE_WIDTH,
+    weight:
+      f?.properties?.kind === 'radar-max'
+        ? RADAR_MAX_LINE_WIDTH
+        : RADAR_LINE_WIDTH,
     opacity: OVERLAY_OPACITY,
     fill: false,
-  }
+  })
 
   return {
     element,
     restyle() {
       // Cell and radar colours follow the plotter overlay, not the theme.
     },
-    async show(window, units) {
+    async show(window, units, offsetMin) {
       await ensureMap()
       map!.invalidateSize()
       const [c, overlay] = await Promise.all([
-        get<CoverageResponse>('/coverage', { window }),
+        get<CoverageResponse>('/coverage', { window, all: 'true' }),
         get<GeoJSON.FeatureCollection>('/overlay/coverage.geojson').catch(
           () => undefined,
         ),
       ])
       cells?.remove()
+      capped?.remove()
       radar?.remove()
-      cells = L.geoJSON(c.geojson, {
+      const cellTip = (f: GeoJSON.Feature, layer: L.Layer) =>
+        layer.bindTooltip(
+          `${f.properties?.reports} reports, nearest ${units.distance.format(f.properties?.minDistanceM)}` +
+            (f.properties?.capped ? ', beyond the distance cap' : ''),
+        )
+      const pick = (beyond: boolean): GeoJSON.FeatureCollection => ({
+        type: 'FeatureCollection',
+        features: c.geojson.features.filter(
+          (f) => Boolean(f.properties?.capped) === beyond,
+        ),
+      })
+      cells = L.geoJSON(pick(false), {
         style: cellStyle,
-        onEachFeature: (f, layer) =>
-          layer.bindTooltip(
-            `${f.properties?.reports} reports, nearest ${units.distance.format(f.properties?.minDistanceM)}`,
-          ),
+        onEachFeature: cellTip,
+      })
+      capped = L.geoJSON(pick(true), {
+        style: cappedStyle,
+        onEachFeature: cellTip,
       })
       const wedges: GeoJSON.FeatureCollection = {
         type: 'FeatureCollection',
         features: (overlay?.features ?? []).filter(
-          (f) => f.properties?.kind === 'radar',
+          (f) =>
+            f.properties?.kind === 'radar' ||
+            f.properties?.kind === 'radar-max',
         ),
       }
       radar = L.geoJSON(wedges, {
         style: radarStyle,
-        onEachFeature: (f, layer) =>
-          layer.bindTooltip(
-            `${bearings(Number(f.properties?.sector))}: p99 ${units.distance.format(f.properties?.p99M)} over 24h`,
-          ),
+        onEachFeature: (f, layer) => {
+          const p = f.properties ?? {}
+          const where = bearings(Number(p.sector))
+          if (p.kind === 'radar-max')
+            layer.bindTooltip(
+              `${where}: farthest ${units.distance.format(p.maxM)} in 24h, ${maxTime(
+                {
+                  maxAt: typeof p.maxAt === 'string' ? p.maxAt : null,
+                  maxHour: typeof p.maxHour === 'string' ? p.maxHour : null,
+                },
+                offsetMin,
+              )}`,
+            )
+          else
+            layer.bindTooltip(
+              `${where}: p99 ${units.distance.format(p.p99M)} over 24h`,
+            )
+        },
       })
       applyVisibility()
       // The first view frames the cells and the radar wedges together; the
-      // wedges reach past the cells where the p99 range exceeds them.
-      if (!fitted && (c.cells > 0 || wedges.features.length > 0)) {
+      // wedges reach past the cells where the p99 range exceeds them. The
+      // farthest-reception ticks can reach far beyond, so they do not count.
+      const framed = L.geoJSON({
+        type: 'FeatureCollection',
+        features: wedges.features.filter((f) => f.properties?.kind === 'radar'),
+      } as GeoJSON.FeatureCollection)
+      if (!fitted && (c.cells > 0 || framed.getLayers().length > 0)) {
         const bounds = L.latLngBounds([])
-        for (const layer of [cells, radar])
+        for (const layer of [cells, framed])
           if (layer.getLayers().length > 0) bounds.extend(layer.getBounds())
         map!.fitBounds(bounds, { padding: [16, 16] })
         fitted = true
       }
-      info.textContent =
-        c.cells === 0
-          ? 'No coverage recorded in this window yet.'
-          : `${c.cells.toLocaleString()} cells, about ${units.area.format(c.areaM2)} covered.` +
-            (c.capM === null
-              ? ''
-              : ` ${c.cappedCells} cells beyond ${units.distance.format(c.capM)} (the distance percentile cap) are not shown.`) +
-            ` Basemap: ${current === 'osm' ? 'OpenStreetMap and OpenSeaMap' : 'server charts'}.`
+      lastInfo = () => {
+        const beyond =
+          c.capM === null || c.cappedCells === 0
+            ? ''
+            : visible.capped
+              ? ` Including ${c.cappedCells} cells beyond ${units.distance.format(c.capM)} (the distance percentile cap), dashed.`
+              : ` ${c.cappedCells} cells beyond ${units.distance.format(c.capM)} (the distance percentile cap) are not shown; All cells shows them.`
+        info.textContent =
+          c.cells + c.cappedCells === 0
+            ? 'No coverage recorded in this window yet.'
+            : `${c.cells.toLocaleString()} cells, about ${units.area.format(c.areaM2)} covered.` +
+              beyond +
+              ` Basemap: ${current === 'osm' ? 'OpenStreetMap and OpenSeaMap' : 'server charts'}.`
+      }
+      lastInfo()
     },
   }
 }

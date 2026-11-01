@@ -46,6 +46,10 @@ export interface Bucket extends Counts {
   maxNm?: number
   /** Coarse histograms, indexed [class][sector][bin]. */
   sectorBins: number[][][]
+  /** Farthest distance per [class][sector] in nm, 0 when none. */
+  sectorMaxNm: number[][]
+  /** Reception time of that farthest distance, 0 when none. */
+  sectorMaxAt: number[][]
   vessels: number
   vesselsByGroup: Record<TypeGroup, number>
 }
@@ -56,6 +60,15 @@ export interface Located {
   lon: number
   distanceNm: number
   time: number
+  /** Own position at reception. */
+  own: LatLon
+  bearingDeg: number
+  cls: 'A' | 'B' | 'other'
+}
+
+export interface VesselInfo {
+  name?: string
+  shipType?: number
 }
 
 function emptyCounts(): Counts {
@@ -83,6 +96,12 @@ export function emptyBucket(start: number): Bucket {
     sectorBins: SECTOR_CLASSES.map(() =>
       Array.from({ length: SECTOR_COUNT }, () => emptyBins(SECTOR_BIN_COUNT)),
     ),
+    sectorMaxNm: SECTOR_CLASSES.map(() =>
+      new Array<number>(SECTOR_COUNT).fill(0),
+    ),
+    sectorMaxAt: SECTOR_CLASSES.map(() =>
+      new Array<number>(SECTOR_COUNT).fill(0),
+    ),
     vessels: 0,
     vesselsByGroup: emptyGroups(),
   }
@@ -97,8 +116,13 @@ export function mergeInto(a: Bucket, b: Bucket): void {
   addInto(a.distanceBins, b.distanceBins)
   for (let c = 0; c < SECTOR_CLASSES.length; c++) {
     addInto(a.sectorCounts[c]!, b.sectorCounts[c]!)
-    for (let s = 0; s < SECTOR_COUNT; s++)
+    for (let s = 0; s < SECTOR_COUNT; s++) {
       addInto(a.sectorBins[c]![s]!, b.sectorBins[c]![s]!)
+      if (b.sectorMaxNm[c]![s]! > a.sectorMaxNm[c]![s]!) {
+        a.sectorMaxNm[c]![s] = b.sectorMaxNm[c]![s]!
+        a.sectorMaxAt[c]![s] = b.sectorMaxAt[c]![s]!
+      }
+    }
   }
   if (b.maxNm !== undefined && (a.maxNm === undefined || b.maxNm > a.maxNm))
     a.maxNm = b.maxNm
@@ -116,6 +140,7 @@ const floorTo = (t: number, step: number) => Math.floor(t / step) * step
 interface VesselEntry {
   lastSeen: number
   shipType?: number
+  name?: string
 }
 
 export class Aggregator {
@@ -165,15 +190,29 @@ export class Aggregator {
     for (const b of [this.openMinute, this.openHour])
       if (b.maxNm === undefined || d > b.maxNm) b.maxNm = d
 
+    const bearing = bearingDeg(own, target)
     const ci = cls === 'A' ? 0 : cls === 'B' ? 1 : -1
     if (ci >= 0) {
-      const sector = sectorOf(bearingDeg(own, target))
+      const sector = sectorOf(bearing)
       this.bump((b) => b.sectorCounts[ci]![sector]!++)
       const sb = sectorBinOf(d)
-      for (const b of [this.openMinute, this.openHour])
+      for (const b of [this.openMinute, this.openHour]) {
         b.sectorBins[ci]![sector]![sb]!++
+        if (d > b.sectorMaxNm[ci]![sector]!) {
+          b.sectorMaxNm[ci]![sector] = d
+          b.sectorMaxAt[ci]![sector] = time
+        }
+      }
     }
-    return { mmsi: msg.mmsi, ...target, distanceNm: d, time }
+    return {
+      mmsi: msg.mmsi,
+      ...target,
+      distanceNm: d,
+      time,
+      own: { lat: own.lat, lon: own.lon },
+      bearingDeg: bearing,
+      cls,
+    }
   }
 
   /** Closes buckets that ended before `time`. Call at least once a minute. */
@@ -245,6 +284,12 @@ export class Aggregator {
     return n
   }
 
+  /** Name and ship type of a vessel heard in the last 24 hours. */
+  vessel(mmsi: string): VesselInfo {
+    const v = this.vessels.get(mmsi)
+    return { name: v?.name, shipType: v?.shipType }
+  }
+
   lastMessageTime(): number | undefined {
     return this.lastMessageAt
   }
@@ -266,6 +311,7 @@ export class Aggregator {
     this.vessels.set(msg.mmsi, {
       lastSeen: time,
       shipType: msg.shipType ?? prev?.shipType,
+      name: msg.name ?? prev?.name,
     })
     this.hourVessels.add(msg.mmsi)
   }

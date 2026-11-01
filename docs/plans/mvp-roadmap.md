@@ -114,3 +114,10 @@ remains.
       remove section 13
 - [ ] Privacy pass over the repository and its history before it is made
       public
+
+## 10. After the MVP
+
+- [x] Long-range receptions: sector maxima as radar ticks, a daily log of
+      the farthest receptions with names and both positions, and an "All
+      cells" map toggle for the cells beyond the distance cap
+      ([item-10](item-10-long-range-receptions.md), 0.4.0)

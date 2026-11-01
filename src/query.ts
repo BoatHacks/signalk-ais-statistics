@@ -15,7 +15,9 @@ import {
   type Aggregator,
   type Bucket,
 } from './aggregate'
+import { sectorOf } from './geo'
 import { increments, type HistoryReader } from './history'
+import type { LongRangeEntry } from './longrange'
 import { addInto, emptyBins, summarize } from './histogram'
 import {
   DISTANCE_BIN_COUNT,
@@ -90,6 +92,12 @@ export interface RadarSector {
   toDeg: number
   count: number
   p99M: number | null
+  /** Farthest reception in the window, untrusted. */
+  maxM: number | null
+  /** When it was received, when known to the second. */
+  maxAt: string | null
+  /** Otherwise the start of the hour it was received in. */
+  maxHour: string | null
 }
 
 export interface Radar {
@@ -186,19 +194,39 @@ async function counterIncrements(
   }
 }
 
-/** Adds one hour bucket's sector counts, and its p99s where not sparse. */
-function addHour(
-  b: Bucket,
-  classIndexes: number[],
-  counts: number[],
-  raise: (s: number, v: number | undefined) => void,
-): void {
+interface Accumulator {
+  counts: number[]
+  /** Nautical miles. */
+  p99: (number | undefined)[]
+  max: number[]
+  maxAt: (number | undefined)[]
+  maxHour: (number | undefined)[]
+  raise: (s: number, v: number | undefined | null) => void
+  raiseMax: (
+    s: number,
+    nm: number,
+    at: number | undefined,
+    hour: number | undefined,
+  ) => void
+}
+
+/**
+ * Adds one hour bucket's sector counts and maxima, and its p99s where not
+ * sparse.
+ */
+function addHour(b: Bucket, classIndexes: number[], a: Accumulator): void {
   const bp = sectorP99(b)
   for (const c of classIndexes)
     for (let s = 0; s < SECTOR_COUNT; s++) {
       const n = b.sectorCounts[c]![s]!
-      counts[s]! += n
-      if (n >= MIN_SECTOR_REPORTS) raise(s, bp[c]![s])
+      a.counts[s]! += n
+      if (n >= MIN_SECTOR_REPORTS) a.raise(s, bp[c]![s])
+      a.raiseMax(
+        s,
+        b.sectorMaxNm[c]![s]!,
+        b.sectorMaxAt[c]![s]! || undefined,
+        undefined,
+      )
     }
 }
 
@@ -209,6 +237,11 @@ export class Query {
     /** The publish interval: history has nothing finer to offer. */
     private readonly minResolution = 60,
     private readonly onHistoryError: (err: unknown) => void = () => {},
+    /** Long-range log entries in a time range, for exact maximum times. */
+    private readonly longRange?: (
+      from: number,
+      to: number,
+    ) => Promise<LongRangeEntry[]>,
   ) {}
 
   private useHistory(windowMs: number, now: number): boolean {
@@ -225,13 +258,13 @@ export class Query {
   /** Runs a history read, falling back to the live figures if it fails. */
   private async withFallback<T extends object>(
     fromHistory: () => Promise<T>,
-    live: () => T,
+    live: () => T | Promise<T>,
   ): Promise<T> {
     try {
       return await fromHistory()
     } catch (err) {
       this.onHistoryError(err)
-      return { ...live(), historyError: HISTORY_FAILED }
+      return { ...(await live()), historyError: HISTORY_FAILED }
     }
   }
 
@@ -294,40 +327,65 @@ export class Query {
   ): Promise<Radar> {
     const w = WINDOWS[window]
     const classes = cls === 'all' ? [...SECTOR_CLASSES] : [cls]
-    const result = (
-      source: Source,
-      counts: number[],
-      p99: (number | undefined)[],
-    ): Radar => ({
-      window,
-      class: cls,
-      source,
-      sectors: counts.map((count, s) => ({
+    const iso = (t: number | undefined) =>
+      t === undefined ? null : new Date(t).toISOString()
+    const result = async (source: Source, a: Accumulator): Promise<Radar> => {
+      const sectors: RadarSector[] = a.counts.map((count, s) => ({
         sector: s,
         fromDeg: s * SECTOR_WIDTH_DEG,
         toDeg: (s + 1) * SECTOR_WIDTH_DEG,
         count,
-        p99M: metres(p99[s]),
-      })),
-    })
-    const accumulator = () => {
-      const counts = new Array<number>(SECTOR_COUNT).fill(0)
-      const p99: (number | undefined)[] = new Array(SECTOR_COUNT).fill(
-        undefined,
-      )
-      const raise = (s: number, v: number | undefined | null) => {
-        if (
-          v !== undefined &&
-          v !== null &&
-          (p99[s] === undefined || v > p99[s]!)
-        )
-          p99[s] = v
+        p99M: metres(a.p99[s]),
+        maxM: a.max[s]! > 0 ? Math.round(a.max[s]! * M_PER_NM) : null,
+        maxAt: iso(a.maxAt[s]),
+        maxHour: a.maxAt[s] === undefined ? iso(a.maxHour[s]) : null,
+      }))
+      // A maximum known only to the hour gets its time from the log.
+      if (this.longRange && sectors.some((s) => s.maxHour !== null)) {
+        const log = await this.longRange(now - w.ms, now + 1).catch(() => [])
+        for (const s of sectors) {
+          if (s.maxHour === null || s.maxM === null) continue
+          const hit = log.find(
+            (e) =>
+              Math.abs(e.distanceM - s.maxM!) <= 1 &&
+              sectorOf(e.bearingDeg) === s.sector &&
+              classes.some((c) => c.toUpperCase() === e.cls),
+          )
+          if (hit) {
+            s.maxAt = hit.time
+            s.maxHour = null
+          }
+        }
       }
-      return { counts, p99, raise }
+      return { window, class: cls, source, sectors }
+    }
+    const accumulator = (): Accumulator => {
+      const a: Accumulator = {
+        counts: new Array<number>(SECTOR_COUNT).fill(0),
+        p99: new Array(SECTOR_COUNT).fill(undefined),
+        max: new Array<number>(SECTOR_COUNT).fill(0),
+        maxAt: new Array(SECTOR_COUNT).fill(undefined),
+        maxHour: new Array(SECTOR_COUNT).fill(undefined),
+        raise: (s, v) => {
+          if (
+            v !== undefined &&
+            v !== null &&
+            (a.p99[s] === undefined || v > a.p99[s]!)
+          )
+            a.p99[s] = v
+        },
+        raiseMax: (s, nm, at, hour) => {
+          if (!(nm > a.max[s]!)) return
+          a.max[s] = nm
+          a.maxAt[s] = at
+          a.maxHour[s] = hour
+        },
+      }
+      return a
     }
 
-    const live = (): Radar => {
-      const { counts, p99, raise } = accumulator()
+    const live = (): Promise<Radar> => {
+      const a = accumulator()
       const ci = classes.map((c) => SECTOR_CLASSES.indexOf(c))
       const buckets =
         w.ms <= HOUR_MS
@@ -335,20 +393,23 @@ export class Query {
           : this.agg
               .hourBuckets(now)
               .filter((b) => b.start + HOUR_MS > now - w.ms)
-      for (const b of buckets) addHour(b, ci, counts, raise)
-      return result('live', counts, p99)
+      for (const b of buckets) addHour(b, ci, a)
+      return result('live', a)
     }
     if (!this.useHistory(w.ms, now)) return live()
 
     return this.withFallback(async () => {
-      const { counts, p99, raise } = accumulator()
+      const a = accumulator()
+      const { counts, raise } = a
       const h = this.history()
       const countPaths: string[] = []
       const p99Paths: string[] = []
+      const maxPaths: string[] = []
       for (const c of classes)
         for (let s = 0; s < SECTOR_COUNT; s++) {
           countPaths.push(paths.sectorCount(s, c))
           p99Paths.push(paths.sectorP99(s, c))
+          maxPaths.push(paths.sectorMax(s, c))
         }
       // The sector paths are published once an hour, at its end, so history
       // holds the closed hours and the open hour comes from the live bucket.
@@ -356,10 +417,19 @@ export class Query {
       const from = Math.min(hourStart - HOUR_MS, hourStart - w.ms + HOUR_MS)
       const res = Math.max(HOUR_MS / 1000, this.resolution(w.resolution))
       // Hourly counts and p99s, so sparse hours can be left out of the p99.
-      const [cs, ps] = await Promise.all([
+      const [cs, ps, ms] = await Promise.all([
         counterIncrements(h, countPaths, from, hourStart, res),
         h.series(p99Paths, 'max', from, hourStart, res),
+        h.series(maxPaths, 'max', from, hourStart, res),
       ])
+      ms.values.forEach((col, i) =>
+        col.forEach((v, k) => {
+          // A value published at the end of an hour covers that hour.
+          const t = ms.times[k]!
+          if (v !== null)
+            a.raiseMax(i % SECTOR_COUNT, v / M_PER_NM, undefined, t)
+        }),
+      )
       const p99At = new Map(ps.times.map((t, i) => [t, i]))
       const hours = cs.times.slice(1)
       cs.increments.forEach((col, i) => {
@@ -376,10 +446,9 @@ export class Query {
         addHour(
           open,
           classes.map((k) => SECTOR_CLASSES.indexOf(k)),
-          counts,
-          raise,
+          a,
         )
-      return result('history', counts, p99)
+      return result('history', a)
     }, live)
   }
 

@@ -17,6 +17,7 @@ import {
   type Query,
   type WindowName,
 } from './query'
+import type { LongRangeLog } from './longrange'
 import { OVERLAY_DAYS } from './overlay'
 import { SECTOR_CLASSES, type SectorClass } from './paths'
 
@@ -28,6 +29,7 @@ export interface ApiDeps {
   /** Undefined while the plugin is stopped. */
   query: () => Query | undefined
   coverage: () => Coverage | undefined
+  longRange?: () => LongRangeLog | undefined
   status: () => Status
   /** Radar polygons and other extra features for the plotter overlay. */
   overlayExtras?: () => Promise<object[]>
@@ -37,6 +39,8 @@ export interface ApiDeps {
 }
 
 export const CACHE_MS = 60_000
+/** Entries the long-range route returns, farthest first. */
+export const LONG_RANGE_LIMIT = 25
 
 interface Getter {
   get(path: string, ...handlers: RequestHandler[]): unknown
@@ -201,6 +205,9 @@ export function registerRoutes(router: RouterLike, deps: ApiDeps): void {
       const window = windowParam(req, '24h')
       const days = COVERAGE_DAYS[window]
       if (!days) throw new BadRequest('coverage windows are 24h and 7d')
+      const all = param(req, 'all')
+      if (all !== undefined && all !== 'true' && all !== 'false')
+        throw new BadRequest('all must be true or false')
       const f = await coverage().footprint(days, now())
       return {
         window,
@@ -211,7 +218,25 @@ export function registerRoutes(router: RouterLike, deps: ApiDeps): void {
         capM: f.capNm === null ? null : Math.round(f.capNm * M_PER_NM),
         areaM2: Math.round(f.areaKm2 * 1e6),
         cellIds: f.cells.map((c) => c.id),
-        geojson: footprintGeoJson(f),
+        geojson: footprintGeoJson(f, all === 'true'),
+      }
+    }, cachedRoute()),
+  )
+
+  r.get(
+    '/longrange',
+    handle(async (req) => {
+      const window = windowParam(req, '24h')
+      if (window === '1h') throw new BadRequest('windows are 24h and 7d')
+      const log = deps.longRange?.()
+      if (!log) throw new NotRunning()
+      const to = now()
+      const from = to - WINDOWS[window].ms
+      return {
+        window,
+        from: new Date(from).toISOString(),
+        to: new Date(to).toISOString(),
+        entries: await log.entries(from, to + 1, LONG_RANGE_LIMIT),
       }
     }, cachedRoute()),
   )

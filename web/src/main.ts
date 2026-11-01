@@ -5,6 +5,7 @@
 import {
   HttpError,
   get,
+  type LongRange,
   type Radar,
   type Series,
   type Status,
@@ -25,7 +26,7 @@ import {
 } from './route'
 import { connectLive, displayUnits, type LiveState } from './signalk'
 import { formatDateTime } from './time'
-import { makeUnit, type Unit } from './units'
+import { formatPosition, makeUnit, type Unit } from './units'
 
 const COLORS = {
   a: 'var(--color-teal)',
@@ -330,6 +331,8 @@ class RadarView extends HTMLElement implements ViewElement {
   private a?: RadarChart
   private b?: RadarChart
   private source?: HTMLElement
+  private longRange?: HTMLTableSectionElement
+  private longRangeEmpty?: HTMLElement
 
   connectedCallback(): void {
     if (this.a) return
@@ -340,7 +343,7 @@ class RadarView extends HTMLElement implements ViewElement {
       el(
         'p',
         { class: 'muted small' },
-        'Radius per 15° sector: the highest hourly p99 distance in the window.',
+        'Radius per 15° sector: the highest hourly p99 distance in the window, from hours with at least 20 reports in the sector. The thin tick reaches out to the farthest reception.',
       ),
       el(
         'div',
@@ -360,16 +363,73 @@ class RadarView extends HTMLElement implements ViewElement {
       ),
       this.source,
     )
+    this.longRange = el('tbody')
+    this.longRangeEmpty = el(
+      'p',
+      { class: 'muted small' },
+      'No positions with a known own position in this window yet.',
+    )
+    const head = el('tr')
+    for (const [label, num] of [
+      ['Time', false],
+      ['Distance', true],
+      ['Bearing', true],
+      ['Class', false],
+      ['Vessel', false],
+      ['Its position', false],
+      ['Own position', false],
+    ] as const)
+      head.append(el('th', num ? { class: 'num' } : {}, label))
+    this.append(
+      el(
+        'div',
+        { class: 'sk-card' },
+        el('h2', {}, 'Farthest receptions'),
+        el(
+          'p',
+          { class: 'muted small' },
+          'The farthest position of each vessel per day. Far outliers can be real propagation (ducting, sporadic E) or a wrong position sent by the vessel.',
+        ),
+        el(
+          'div',
+          { class: 'long-range' },
+          el('table', {}, el('thead', {}, head), this.longRange),
+        ),
+        this.longRangeEmpty,
+      ),
+    )
   }
 
   async load(ctx: Context): Promise<void> {
-    const [a, b] = await Promise.all([
+    const [a, b, lr] = await Promise.all([
       get<Radar>('/radar', { window: ctx.window, class: 'a' }),
       get<Radar>('/radar', { window: ctx.window, class: 'b' }),
+      get<LongRange>('/longrange', {
+        window: ctx.window === '1h' ? '24h' : ctx.window,
+      }).catch(() => ({ entries: [] }) as LongRange),
     ])
-    this.a!.update(a, ctx.units.distance)
-    this.b!.update(b, ctx.units.distance)
+    this.a!.update(a, ctx.units.distance, ctx.offsetMin)
+    this.b!.update(b, ctx.units.distance, ctx.offsetMin)
     this.source!.textContent = sourceText(a.source, a.historyError)
+    const u = ctx.units.distance
+    this.longRange!.replaceChildren(
+      ...lr.entries.map((e) => {
+        const cell = (text: string, num = false) =>
+          el('td', num ? { class: 'num' } : {}, text)
+        return el(
+          'tr',
+          {},
+          cell(formatDateTime(Date.parse(e.time), ctx.offsetMin)),
+          cell(u.format(e.distanceM), true),
+          cell(`${Math.round(e.bearingDeg)}°`, true),
+          cell(e.cls),
+          cell(e.name ? `${e.name} (${e.mmsi})` : e.mmsi),
+          cell(formatPosition(e.lat, e.lon)),
+          cell(formatPosition(e.ownLat, e.ownLon)),
+        )
+      }),
+    )
+    this.longRangeEmpty!.hidden = lr.entries.length > 0
   }
 }
 
@@ -381,7 +441,11 @@ class MapViewElement extends HTMLElement implements ViewElement {
   }
 
   async load(ctx: Context): Promise<void> {
-    await mapView.show(ctx.window === '1h' ? '24h' : ctx.window, ctx.units)
+    await mapView.show(
+      ctx.window === '1h' ? '24h' : ctx.window,
+      ctx.units,
+      ctx.offsetMin,
+    )
   }
 }
 

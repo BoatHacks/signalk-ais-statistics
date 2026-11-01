@@ -35,7 +35,30 @@ export interface Radar {
     toDeg: number
     count: number
     p99M: number | null
+    /** Farthest reception, untrusted. */
+    maxM: number | null
+    maxAt: string | null
+    /** Start of the hour of the farthest reception, when the exact time is unknown. */
+    maxHour: string | null
   }[]
+}
+
+export interface LongRangeEntry {
+  time: string
+  mmsi: string
+  name?: string
+  cls: 'A' | 'B' | 'other'
+  shipType?: number
+  distanceM: number
+  bearingDeg: number
+  lat: number
+  lon: number
+  ownLat: number
+  ownLon: number
+}
+
+export interface LongRange {
+  entries: LongRangeEntry[]
 }
 
 export interface Series {

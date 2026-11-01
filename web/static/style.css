@@ -312,6 +312,36 @@ svg.radar .axis {
 .wedge:hover {
   fill-opacity: 0.9;
 }
+.tick {
+  stroke-width: 1;
+}
+.tick.clipped {
+  stroke-dasharray: 3 2;
+}
+.tick-hit {
+  stroke: transparent;
+  stroke-width: 12;
+  pointer-events: stroke;
+}
+.long-range {
+  overflow-x: auto;
+}
+.long-range table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.long-range th,
+.long-range td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+.long-range td.num,
+.long-range th.num {
+  text-align: right;
+}
 .legend {
   display: flex;
   flex-wrap: wrap;

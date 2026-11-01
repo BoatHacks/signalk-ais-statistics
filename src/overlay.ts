@@ -14,6 +14,7 @@ import {
   OVERLAY_OPACITY,
   RADAR_COLOUR,
   RADAR_LINE_WIDTH,
+  RADAR_MAX_LINE_WIDTH,
 } from './style'
 
 export const OVERLAY_ID = 'coverage'
@@ -73,6 +74,16 @@ export function overlayStyle(dataUrl: string): object {
         filter: ['==', ['get', 'kind'], 'radar'],
         paint: { 'line-color': RADAR_COLOUR, 'line-width': RADAR_LINE_WIDTH },
       },
+      {
+        id: 'radar-max',
+        type: 'line',
+        source: OVERLAY_SOURCE,
+        filter: ['==', ['get', 'kind'], 'radar-max'],
+        paint: {
+          'line-color': RADAR_COLOUR,
+          'line-width': RADAR_MAX_LINE_WIDTH,
+        },
+      },
     ],
   }
 }
@@ -112,11 +123,39 @@ export function buildManifest(
   }
 }
 
-/** One closed polygon per sector with data, from own position out to its p99. */
+/**
+ * One closed polygon per sector with a p99, from own position out to it,
+ * and one line per sector with a farthest reception beyond the wedge, along
+ * the sector's centre bearing from the wedge's edge out to that distance.
+ */
 export function radarFeatures(radar: Radar, own: LatLon | undefined): object[] {
   if (!own) return []
   const out: object[] = []
   for (const s of radar.sectors) {
+    const inner = s.p99M ?? 0
+    if (s.maxM !== null && s.maxM > inner) {
+      const mid = (s.fromDeg + s.toDeg) / 2
+      const a = destination(own, mid, inner / M_PER_NM)
+      const b = destination(own, mid, s.maxM / M_PER_NM)
+      out.push({
+        type: 'Feature',
+        id: `radar-max-${s.sector}`,
+        properties: {
+          kind: 'radar-max',
+          sector: s.sector,
+          maxM: s.maxM,
+          maxAt: s.maxAt,
+          maxHour: s.maxHour,
+        },
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [round(a.lon), round(a.lat)],
+            [round(b.lon), round(b.lat)],
+          ],
+        },
+      })
+    }
     if (s.p99M === null || s.p99M <= 0) continue
     const ring: number[][] = [[own.lon, own.lat]]
     for (let b = s.fromDeg; b <= s.toDeg; b += 2.5) {

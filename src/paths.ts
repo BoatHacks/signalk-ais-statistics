@@ -54,6 +54,8 @@ export const paths = {
   distanceMax: p('distance.max'),
   sectorP99: (sector: number, cls: SectorClass) =>
     p(`sectors.${sectorLabel(sector)}.${cls}.p99`),
+  sectorMax: (sector: number, cls: SectorClass) =>
+    p(`sectors.${sectorLabel(sector)}.${cls}.max`),
   vesselsLast1h: p('vessels.last1h'),
   vesselsLast24h: p('vessels.last24h'),
   vesselsByGroupLast1h: (group: TypeGroup) =>

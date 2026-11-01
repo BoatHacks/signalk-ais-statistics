@@ -33,3 +33,16 @@ export function formatDateTime(
 ): string {
   return `${formatDate(ms, offsetMin)} ${formatTime(ms, offsetMin)}`
 }
+
+/** When the farthest reception happened: exact, or its hour. */
+export function maxTime(
+  s: { maxAt: string | null; maxHour: string | null },
+  offsetMin: number | undefined,
+): string {
+  if (s.maxAt) return formatDateTime(Date.parse(s.maxAt), offsetMin)
+  if (s.maxHour) {
+    const t = Date.parse(s.maxHour)
+    return `between ${formatDateTime(t, offsetMin)} and ${formatTime(t + 3_600_000, offsetMin)}`
+  }
+  return 'time unknown'
+}

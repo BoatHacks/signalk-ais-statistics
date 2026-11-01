@@ -65,6 +65,10 @@ export function defaultMetadata(): PathMeta[] {
           paths.sectorP99(s, cls),
           `99th percentile class ${cls.toUpperCase()} reception distance in this sector, last hour`,
         ),
+        distance(
+          paths.sectorMax(s, cls),
+          `Farthest class ${cls.toUpperCase()} reception in this sector, last hour (untrusted)`,
+        ),
       )
   })
   out.push({
@@ -120,8 +124,11 @@ export function buildValues(
   if (sectors) {
     const p99 = sectorP99(hour)
     SECTOR_CLASSES.forEach((cls, c) => {
-      for (let s = 0; s < SECTOR_COUNT; s++)
+      for (let s = 0; s < SECTOR_COUNT; s++) {
         put(paths.sectorP99(s, cls), m(p99[c]![s]))
+        const max = hour.sectorMaxNm[c]![s]!
+        if (max > 0) put(paths.sectorMax(s, cls), m(max))
+      }
     })
   }
 
