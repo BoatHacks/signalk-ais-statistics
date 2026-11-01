@@ -77,9 +77,11 @@ per source from history and live, including a counter reset;
 helpers and the web route in `test/web/route.test.ts`.
 
 ## Implementation Steps
-- [ ] Ask the maintainer the open points below, then start with part 1
-- [ ] Part 1: `from`/`to` in query and routes, `footprintRange`, compare view
-- [ ] Part 1 docs: SPEC 6.1, 7; ARCHITECTURE 2.8, 2.9, 2.11; README; CHANGELOG
+- [x] Ask the maintainer the open points below, then start with part 1
+      (2026-11-01: part 1 ships as its own PR first; sectors and coverage
+      stay combined, per-source compare is the summary figures only)
+- [x] Part 1: `from`/`to` in query and routes, `footprintRange`, compare view
+- [x] Part 1 docs: SPEC 6.1, 7; ARCHITECTURE 2.5, 2.8, 2.9, 2.11; README; CHANGELOG
 - [ ] Part 2: config option, `sourceLabel` and source paths, `SourceStats`, wiring
 - [ ] Part 2: publish, query, `/summary?source=`, `/sources`, `/status`, picker
 - [ ] Part 2: per-source health with #16

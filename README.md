@@ -36,6 +36,10 @@ server; the open points are in SPEC section 13.
   temperatures or humidity from your own sensors, with a scatter and its
   correlation, to see what conditions bring the long-range days. Needs a
   history provider that records those paths.
+- Compare two date windows side by side, such as the week before and
+  the week after an antenna, cable or receiver change: messages,
+  positions, distance figures, coverage and the bearing sectors, with the
+  change between them.
 - Download the coverage cells (H3 ids, CSV) and the farthest receptions
   (CSV or GeoJSON points) for a spreadsheet or QGIS, for today, 7 days or
   every retained day. An anonymise switch drops MMSIs, names and all
