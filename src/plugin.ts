@@ -30,6 +30,7 @@ import {
 import { buildValues, defaultMetadata, publish } from './publish'
 import { SECTOR_CLASSES } from './paths'
 import { Query } from './query'
+import { Sources } from './sources'
 
 export const PLUGIN_ID = 'signalk-ais-statistics'
 /**
@@ -60,6 +61,10 @@ interface Running {
   longRange: LongRangeLog
   query: Query
   history: HistoryReader
+  /** Per-source statistics, when `sourceStatistics` is on. */
+  sources?: Sources
+  /** A query per source label, reading that source's counters. */
+  sourceQueries: Map<string, Query>
   /** Hour index of the last delta that carried the sector paths. */
   sectorHour?: number
   stops: (() => void)[]
@@ -108,6 +113,7 @@ export function createPlugin(app: ServerAPI): Plugin {
       const values = buildValues(s.agg, now, s.coverage.today(now), {
         sectors,
       })
+      if (s.sources) values.push(...s.sources.values())
       publish(app, PLUGIN_ID, values, now)
       if (sectors) s.sectorHour = hourIndex
     } catch (err) {
@@ -159,8 +165,19 @@ export function createPlugin(app: ServerAPI): Plugin {
       decodeErrors: total((st) => st.decodeErrors),
       incompleteDropped: total((st) => st.incompleteDropped),
       coverageCellsDropped: s.coverage.droppedCells,
+      sources: sourceStatus(s),
       config: s.config,
     }
+  }
+
+  /** Per source: label, event and its health counts since the start. */
+  function sourceStatus(s: Running) {
+    return (s.sources?.list ?? []).map((src) => ({
+      label: src.label,
+      event: src.event,
+      messages: src.agg.totals.messages,
+      health: { ...src.agg.totals.health },
+    }))
   }
 
   /**
@@ -225,6 +242,7 @@ export function createPlugin(app: ServerAPI): Plugin {
         ),
         query: undefined as unknown as Query,
         history: nullHistoryReader,
+        sourceQueries: new Map(),
         stops: [],
       }
       s.query = new Query(
@@ -235,6 +253,28 @@ export function createPlugin(app: ServerAPI): Plugin {
         (from, to) => s.longRange.entries(from, to, MAX_PER_DAY * 8),
         () => s.config.weatherPaths,
       )
+      if (config.sourceStatistics) {
+        const sources = new Sources(config.sentenceEvents, now)
+        s.sources = sources
+        for (const event of sources.collisions)
+          log(
+            `server event ${event} is published as source ${sources.event(event)!.label}: its name maps to the same label as an earlier event`,
+          )
+        for (const src of sources.list)
+          s.sourceQueries.set(
+            src.label,
+            new Query(
+              src.agg,
+              () => s.history,
+              config.publishIntervalMinutes * 60,
+              (err) =>
+                log('reading history failed, answered from live data', err),
+              undefined,
+              () => [],
+              { counters: src.counters },
+            ),
+          )
+      }
       state = s
 
       s.coverage
@@ -260,16 +300,17 @@ export function createPlugin(app: ServerAPI): Plugin {
           const incomplete = ingest.stats.incompleteDropped
           const msg =
             typeof input === 'string' ? sentences.push(input) : pgns.push(input)
-          s.agg.countHealth(
-            'decodeErrors',
-            time,
-            ingest.stats.decodeErrors - errors,
-          )
-          s.agg.countHealth(
-            'incomplete',
-            time,
-            ingest.stats.incompleteDropped - incomplete,
-          )
+          // The main figures and, when on, the event's own source.
+          const src = s.sources?.event(event)?.agg
+          const aggs = src ? [s.agg, src] : [s.agg]
+          const count = (
+            kind: Parameters<Aggregator['countHealth']>[0],
+            n = 1,
+          ) => {
+            for (const a of aggs) a.countHealth(kind, time, n)
+          }
+          count('decodeErrors', ingest.stats.decodeErrors - errors)
+          count('incomplete', ingest.stats.incompleteDropped - incomplete)
           if (!msg) return
           const verdict = s.health.check(
             msg,
@@ -277,11 +318,12 @@ export function createPlugin(app: ServerAPI): Plugin {
             msg.shipType ?? s.agg.vessel(msg.mmsi).shipType,
             time,
           )
-          if (verdict.duplicate === 'sameEvent')
-            s.agg.countHealth('duplicates', time)
+          if (verdict.duplicate === 'sameEvent') count('duplicates')
           else if (verdict.duplicate === 'crossEvent')
-            s.agg.countHealth('duplicatesCrossEvent', time)
-          const located = s.agg.add(msg, s.own.at(time), time)
+            count('duplicatesCrossEvent')
+          const own = s.own.at(time)
+          src?.add(msg, own, time)
+          const located = s.agg.add(msg, own, time)
           if (located) {
             s.coverage.add(
               located.lat,
@@ -293,7 +335,7 @@ export function createPlugin(app: ServerAPI): Plugin {
           }
           const speed = verdict.speed
           if (speed) {
-            if (speed.implausible) s.agg.countHealth('implausibleJumps', time)
+            if (speed.implausible) count('implausibleJumps')
             s.longRange.addSpeed(speed, s.agg.vessel(speed.mmsi))
           }
         } catch (err) {
@@ -375,7 +417,9 @@ export function createPlugin(app: ServerAPI): Plugin {
       }
       // Flush the open state (SPEC 8): coverage file and a last delta.
       try {
-        publish(app, PLUGIN_ID, buildValues(s.agg, Date.now()), Date.now())
+        const values = buildValues(s.agg, Date.now())
+        if (s.sources) values.push(...s.sources.values())
+        publish(app, PLUGIN_ID, values, Date.now())
       } catch {
         // the server may already be shutting down
       }
@@ -391,6 +435,14 @@ export function createPlugin(app: ServerAPI): Plugin {
     registerWithRouter(router) {
       registerRoutes(router as unknown as RouterLike, {
         query: () => state?.query,
+        sourceQuery: (label) => state?.sourceQueries.get(label),
+        sources: () =>
+          state
+            ? (state.sources?.list ?? []).map((src) => ({
+                label: src.label,
+                event: src.event,
+              }))
+            : undefined,
         coverage: () => state?.coverage,
         longRange: () => state?.longRange,
         retentionDays: () => state?.config.coverageRetentionDays,

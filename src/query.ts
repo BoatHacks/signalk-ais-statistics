@@ -25,6 +25,7 @@ import {
   SECTOR_CLASSES,
   SECTOR_COUNT,
   SECTOR_WIDTH_DEG,
+  counterPaths,
   distanceBinPaths,
   healthPaths,
   paths,
@@ -249,14 +250,21 @@ function distanceFigures(bins: number[], maxNm?: number): DistanceFigures {
 
 const HEALTH_PATHS = HEALTH_KINDS.map((k) => healthPaths[k])
 
-const COUNTER_PATHS = [
-  paths.messagesTotal,
-  paths.positionsClassA,
-  paths.positionsClassB,
-  paths.positionsOther,
-  ...distanceBinPaths,
-  ...HEALTH_PATHS,
-]
+/**
+ * The counters a summary reads, in the order of `counterPaths`, and the
+ * gauge with the window maximum. A source has counters only, so its
+ * maximum is known from live data alone (SPEC 5).
+ */
+export interface CounterSet {
+  counters: string[]
+  distanceMax?: string
+}
+
+export const MAIN_COUNTERS: CounterSet = {
+  counters: counterPaths(),
+  distanceMax: paths.distanceMax,
+}
+
 const HEALTH_AT = 4 + DISTANCE_BIN_COUNT
 
 const healthRecord = (values: number[]): Record<HealthKind, number> =>
@@ -359,6 +367,8 @@ export class Query {
     ) => Promise<LongRangeEntry[]>,
     /** The configured weather paths (SPEC 9). */
     private readonly weatherPaths: () => string[] = () => [],
+    /** The counters a summary reads: the main ones, or a source's. */
+    private readonly counters: CounterSet = MAIN_COUNTERS,
   ) {}
 
   /**
@@ -451,9 +461,12 @@ export class Query {
     return this.withFallback(async (): Promise<Summary> => {
       const h = this.history()
       const res = this.resolution(sp.resolution)
+      const maxPath = this.counters.distanceMax
       const [counters, max] = await Promise.all([
-        counterIncrements(h, COUNTER_PATHS, from, to, res),
-        h.series([paths.distanceMax], 'max', from, to, ms / 1000),
+        counterIncrements(h, this.counters.counters, from, to, res),
+        maxPath
+          ? h.series([maxPath], 'max', from, to, ms / 1000)
+          : { times: [], values: [] },
       ])
       const totals = counters.increments.map(sum)
       return {
