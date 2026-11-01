@@ -150,3 +150,57 @@ describe('resolveConfig', () => {
     }
   })
 })
+
+describe('propagation alert options', () => {
+  it('are off by default with the maintainer defaults', () => {
+    const c = resolveConfig({})
+    expect(c).toMatchObject({
+      propagationAlerts: false,
+      propagationFactor: 2,
+      propagationMinVessels: 3,
+      propagationSustainMinutes: 15,
+      propagationWindowMinutes: 15,
+      propagationNotificationState: 'warn',
+      propagationNotificationMethods: ['visual'],
+      propagationSuppressUnderway: true,
+    })
+  })
+
+  it('clamps numbers and rejects unknown states and methods', () => {
+    const c = resolveConfig({
+      propagationFactor: 0.5,
+      propagationMinVessels: 2.6,
+      propagationSustainMinutes: 500,
+      propagationWindowMinutes: 1,
+      propagationNotificationState: 'loud',
+      propagationNotificationMethods: ['sound', 'smoke', 'sound'],
+    })
+    expect(c).toMatchObject({
+      propagationFactor: 1.2,
+      propagationMinVessels: 3,
+      propagationSustainMinutes: 60,
+      propagationWindowMinutes: 5,
+      propagationNotificationState: 'warn',
+      propagationNotificationMethods: ['sound'],
+    })
+    expect(
+      resolveConfig({ propagationNotificationMethods: [] })
+        .propagationNotificationMethods,
+    ).toEqual([])
+    expect(
+      resolveConfig({ propagationNotificationState: 'emergency' })
+        .propagationNotificationState,
+    ).toBe('emergency')
+  })
+
+  it('makes factor, vessels and duration live settings', () => {
+    expect(LIVE_SETTINGS).toEqual(
+      expect.arrayContaining([
+        'propagationFactor',
+        'propagationMinVessels',
+        'propagationSustainMinutes',
+      ]),
+    )
+    expect(LIVE_SETTINGS).not.toContain('propagationWindowMinutes')
+  })
+})

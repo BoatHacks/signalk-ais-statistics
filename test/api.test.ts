@@ -11,6 +11,7 @@ import { destination } from '../src/geo'
 import { nullHistoryReader } from '../src/history'
 import { LongRangeLog } from '../src/longrange'
 import { Query } from '../src/query'
+import { DEFAULT_CONFIG, pickLive } from '../src/config'
 import { OWN } from './fixtures/ais'
 import { fakeRouter } from './fixtures/router'
 
@@ -55,9 +56,10 @@ async function setup(withAccess = true, running = true) {
     coverage: () => coverage,
     longRange: () => longRange,
     status: () => ({ history: false }),
+    propagation: () => (running ? { enabled: false } : undefined),
     saveSettings: async (values) => {
       saved.push(values)
-      const live = { coverageDistancePercentile: 99, ...values }
+      const live = { ...pickLive(DEFAULT_CONFIG), ...values }
       coverage.setPercentile(live.coverageDistancePercentile)
       return live
     },
@@ -140,6 +142,7 @@ describe('REST API', () => {
       '/export/longrange.geojson',
       '/longrange',
       '/overlay/coverage.geojson',
+      '/propagation',
       '/sectors',
       '/series',
       '/sources',
