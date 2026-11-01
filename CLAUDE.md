@@ -48,7 +48,9 @@ The roadmap is [docs/plans/mvp-roadmap.md](docs/plans/mvp-roadmap.md).
   - Published values are numeric only. Counts are cumulative counters because
     the History API has no `sum` or `count` aggregate (SPEC 4.1, 8).
   - The plugin reads history only through the History API and uses only the
-    aggregates every provider is expected to have (`last`, `max`).
+    aggregates every provider is expected to have (`last`, `max`). The one
+    exception is `average` for the configured weather paths, with a
+    fallback to `last` (SPEC 8).
   - Cell sets and the long-range log live in small daily files in the
     plugin data directory; they are the only state the plugin owns (SPEC 8).
   - Published path names are defined once, in `src/paths.ts`.

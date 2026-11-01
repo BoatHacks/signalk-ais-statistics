@@ -32,6 +32,10 @@ server; the open points are in SPEC section 13.
   history retention for these paths is plenty.
 - Show graphs, the bearing sectors and a coverage map in a SignalK web app that works on
   a phone and offline.
+- Compare range with the weather: hourly p99 range against air pressure,
+  temperatures or humidity from your own sensors, with a scatter and its
+  correlation, to see what conditions bring the long-range days. Needs a
+  history provider that records those paths.
 - Download the coverage cells (H3 ids, CSV) and the farthest receptions
   (CSV or GeoJSON points) for a spreadsheet or QGIS, for today, 7 days or
   every retained day. An anonymise switch drops MMSIs, names and all

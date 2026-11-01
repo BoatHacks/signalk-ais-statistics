@@ -97,13 +97,13 @@ server with a provider that records the weather paths (ask the maintainer
 which server), at phone width and offline.
 
 ## Implementation Steps
-- [ ] Tests for config, query, route and the web helpers (separate commit)
-- [ ] `average` in `Aggregate` (`src/history.ts`), weather reads only
-- [ ] `weatherPaths` in `src/config.ts` (schema, defaults, resolve)
-- [ ] `Query.weather` in `src/query.ts`, `/weather` in `src/api.ts`
-- [ ] Web: `Weather` type in `web/src/api.ts`, right axis in `charts.ts`,
+- [x] Tests for config, query, route and the web helpers (separate commit)
+- [x] `average` in `Aggregate` (`src/history.ts`), weather reads only
+- [x] `weatherPaths` in `src/config.ts` (schema, defaults, resolve)
+- [x] `Query.weather` in `src/query.ts`, `/weather` in `src/api.ts`
+- [x] Web: `Weather` type in `web/src/api.ts`, right axis in `charts.ts`,
       `scatter.ts`, `stats.ts`, units extension, panel in `main.ts`, styles
-- [ ] Docs in the same change: SPEC 6.1 (route), 7 (Weather panel), 8 (the
+- [x] Docs in the same change: SPEC 6.1 (route), 7 (Weather panel), 8 (the
       provider's path filters must also record the weather paths; weather is
       read with `average`, falling back to `last`), 9 (`weatherPaths` row),
       12 (a "range vs weather, chosen by the maintainer" entry);

@@ -130,7 +130,8 @@ The only component that reads history. A small interface
 (`series(paths, aggregate, from, to, resolution)`) with an implementation on
 the in-process History API (`app.getHistoryApi()`, which returns the
 server's default provider) and a null implementation for live-only mode. It
-always passes a resolution, uses only `last` and `max`, splits requests into
+always passes a resolution, uses `last` and `max` (and `average` for the
+configured weather paths only, SPEC 8), splits requests into
 40 paths, sends them one at a time across all callers, and never talks to
 a database directly (SPEC 8). The plugin looks
 for a provider again every 10 minutes while in live-only mode.
@@ -156,13 +157,18 @@ and chart spans of up to an hour use the live minute buckets once the
 plugin has run for an hour, since they are exact. Without history, all
 answers come from the aggregator, and if a history read fails the answer
 falls back to them with a short `historyError` note (the provider's error
-goes to the server log).
+goes to the server log). `Query.weather` reads the configured weather paths
+hourly from the full hour with `average`; if the provider rejects it, the
+read is retried with `last`, which the query keeps for the rest of the run.
+Weather has no live fallback: a failed read answers `historyError` and no
+series.
 
 ### 2.9 REST API
 Express router registered through the plugin API. Thin: parse and validate
 parameters, call the query layer, serialize (SPEC 6.1). Data routes reuse
 an answer for a minute per set of parameters and share in-flight
-computations; `/status` is never cached. The one write route, `POST
+computations; `/status` is never cached. `/weather` checks only that the
+range is at most 7 days. The one write route, `POST
 /settings`, validates live settings with `parseLiveSettings` from
 `config.ts` and hands them to the plugin, which merges them into the stored
 configuration, saves it and applies them (for example
@@ -192,10 +198,17 @@ Statistics come from the REST API; a single SignalK WebSocket carries
 external CDNs for its own assets. Views per SPEC 7, each a custom element
 that builds its DOM once and then updates text and attributes only;
 charts reuse their SVG paths and rects. Pure helpers (`units.ts`,
-`time.ts`, `route.ts`, `backoff.ts`, `health.ts`) are unit tested under
+`time.ts`, `route.ts`, `backoff.ts`, `health.ts`, `stats.ts`) are unit tested under
 `test/web`. The overview's health section, its good share and the
 duplicate hint come from `health.ts`; the charts derive the class A and B
-mix from the `positions` series. The map has a basemap switch (OSM/OpenSeaMap or the server's chart
+mix from the `positions` series. The range vs weather section
+(`weather.ts`) pairs the hourly `distance` series the charts view already
+loads with `/weather` by bucket start time; `stats.ts` holds the pairing
+with its 20 report minimum, Pearson's r and the right axis span, the time
+chart is a `Chart` with a right axis, and the scatter is a `ScatterChart`
+(`scatter.ts`). Weather units come from each path's `meta.units` and
+`displayUnits` (`pathMeta` in `signalk.ts`, `quantityUnit` in
+`units.ts`). The map has a basemap switch (OSM/OpenSeaMap or the server's chart
 provider); its default follows the internet-status plugin's online and
 metered state when present, and a manual choice is remembered in
 `localStorage`. Toggles show or hide the coverage cells, the cells beyond
