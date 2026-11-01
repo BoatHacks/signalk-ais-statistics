@@ -85,7 +85,8 @@ Maps each position to an H3 cell (`h3-js`), keeps the cells of the current
 UTC day with their shortest distance and report count, and the day's
 distance histogram. Flushes hourly to a daily JSON file in the plugin data
 directory and reports today's cell count and area to the Publisher. Applies
-the `coverageDistancePercentile` cap (SPEC 2.4) when building a window's
+the `coverageDistancePercentile` cap to cells with fewer than 3 reports
+(`MIN_FAR_CELL_REPORTS`, SPEC 2.4) when building a window's
 footprint, using the distance histograms merged from the day files, so it
 needs no history provider. Computes covered area and produces the GeoJSON
 used by the map and the overlay.

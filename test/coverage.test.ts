@@ -38,9 +38,26 @@ describe('Coverage', () => {
     expect(f.cappedCells).toBe(1)
     expect(f.capNm).toBeLessThan(15)
     expect(f.cells.every((x) => x.minDistanceNm < 15)).toBe(true)
+    const all = await c.footprint(1, T0)
+    expect(all.capped).toHaveLength(1)
+    expect(all.capped[0]!.reports).toBe(1)
     const uncapped = new Coverage(await dir(), 5, 90, 100, T0)
     addAt(uncapped, 45, 2500)
     expect((await uncapped.footprint(1, T0)).cells).toHaveLength(1)
+  })
+
+  it('keeps a far cell beyond the cap when it has 3 reports', async () => {
+    const c = new Coverage(await dir(), 5, 90, 99, T0)
+    for (let i = 0; i < 500; i++) addAt(c, (i * 7) % 360, 10)
+    addAt(c, 45, 60)
+    addAt(c, 45, 60)
+    let f = await c.footprint(1, T0)
+    expect(f.cappedCells).toBe(1)
+    addAt(c, 45, 60)
+    f = await c.footprint(1, T0)
+    expect(f.cappedCells).toBe(0)
+    expect(f.cells.some((x) => x.minDistanceNm > 50)).toBe(true)
+    expect(c.today(T0).cells).toBe(f.cells.length)
   })
 
   it('writes one file per day and reads it back after a restart', async () => {

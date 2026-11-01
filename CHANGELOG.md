@@ -27,6 +27,13 @@ uses [Semantic Versioning](https://semver.org/).
   `GET /coverage?all=true` includes them, marked `capped`.
 - The plotter overlay draws the sector maxima as thin lines.
 
+### Changed
+
+- The coverage distance cap hides only cells with fewer than 3 reports.
+  Far cells with repeated reports are real reception and now stay on the
+  map, in the covered area and in the plotter overlay; single bogus
+  positions are still left out.
+
 ## [0.3.2] - 2026-11-01
 
 ### Changed

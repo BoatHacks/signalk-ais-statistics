@@ -18,6 +18,13 @@ import {
 } from 'h3-js'
 import { DAY_MS } from './aggregate'
 import { addInto, binOf, emptyBins, percentileNm } from './histogram'
+
+/**
+ * A cell beyond the distance cap stays in the footprint with at least this
+ * many reports: repeated reports from one far cell are real reception, a
+ * single bogus position almost never repeats (SPEC 2.4).
+ */
+export const MIN_FAR_CELL_REPORTS = 3
 import { DISTANCE_BIN_COUNT } from './paths'
 
 /** Upper bound on cells kept for one day. */
@@ -41,9 +48,9 @@ export interface Footprint {
   /** Distance cap applied, or null when the cap is disabled or there is no data. */
   capNm: number | null
   cells: { id: string; minDistanceNm: number; reports: number }[]
-  /** Cells left out by the cap. */
+  /** Sparse cells beyond the cap, left out. */
   cappedCells: number
-  /** The cells left out by the cap, for views that show them anyway. */
+  /** The cells left out, for views that show them anyway. */
   capped: { id: string; minDistanceNm: number; reports: number }[]
   areaKm2: number
 }
@@ -242,7 +249,11 @@ export class Coverage {
     const cells: Footprint['cells'] = []
     const capped: Footprint['capped'] = []
     for (const [id, [minDistanceNm, reports]] of Object.entries(merged.cells)) {
-      if (cap !== undefined && minDistanceNm > cap)
+      if (
+        cap !== undefined &&
+        minDistanceNm > cap &&
+        reports < MIN_FAR_CELL_REPORTS
+      )
         capped.push({ id, minDistanceNm, reports })
       else cells.push({ id, minDistanceNm, reports })
     }
