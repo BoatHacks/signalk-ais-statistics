@@ -205,6 +205,7 @@ a.download {
 .segmented a[aria-current],
 .map-switcher button:hover,
 .map-switcher button[aria-pressed='true'],
+.cap-control button[aria-pressed='true'],
 .cap-control button:hover,
 a.download:hover {
   background: var(--theme-color);
@@ -534,7 +535,8 @@ svg.sectors .axis {
   gap: 8px 12px;
   margin-top: 10px;
 }
-.cap-control label {
+.cap-control label,
+.cap-control .label {
   font: 700 0.8rem var(--font-data);
   letter-spacing: 0.1em;
   text-transform: uppercase;

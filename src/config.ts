@@ -16,6 +16,8 @@ export interface Config {
   jumpSpeedLimitHighSpeedKnots: number
   jumpSpeedLimitAircraftKnots: number
   weatherPaths: string[]
+  modeDriftRadiusMeters: number
+  modeDriftMinutes: number
 }
 
 export const DEFAULT_CONFIG: Config = {
@@ -37,6 +39,8 @@ export const DEFAULT_CONFIG: Config = {
     'environment.outside.relativeHumidity',
     'environment.water.temperature',
   ],
+  modeDriftRadiusMeters: 200,
+  modeDriftMinutes: 10,
 }
 
 /**
@@ -180,6 +184,24 @@ export const configSchema = {
       maxItems: MAX_WEATHER_PATHS,
       default: DEFAULT_CONFIG.weatherPaths,
     },
+    modeDriftRadiusMeters: {
+      type: 'number',
+      title: 'Stationary drift radius (metres)',
+      description:
+        'Without a navigation.state, the vessel counts as stationary while its own position stays within this distance for the drift time below, and as underway once it leaves. The default allows for a boat swinging at anchor. Coverage cells are kept per mode.',
+      default: DEFAULT_CONFIG.modeDriftRadiusMeters,
+      minimum: 50,
+      maximum: 2000,
+    },
+    modeDriftMinutes: {
+      type: 'number',
+      title: 'Stationary drift time (minutes)',
+      description:
+        'How long the own position must stay within the drift radius to count as stationary.',
+      default: DEFAULT_CONFIG.modeDriftMinutes,
+      minimum: 2,
+      maximum: 60,
+    },
   },
 }
 
@@ -250,6 +272,13 @@ export function resolveConfig(options: unknown): Config {
       10,
     ),
     weatherPaths: weatherPaths(o.weatherPaths),
+    modeDriftRadiusMeters: num(
+      o.modeDriftRadiusMeters,
+      d.modeDriftRadiusMeters,
+      50,
+      2000,
+    ),
+    modeDriftMinutes: num(o.modeDriftMinutes, d.modeDriftMinutes, 2, 60),
   }
 }
 

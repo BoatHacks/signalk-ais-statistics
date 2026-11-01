@@ -27,6 +27,33 @@ describe('hash routes', () => {
     })
   })
 
+  it('keeps the own vessel mode of the map, and only there', () => {
+    expect(parseRoute('#/map?window=7d&mode=underway')).toEqual({
+      view: 'map',
+      window: '7d',
+      mode: 'underway',
+    })
+    expect(parseRoute('#/map?mode=stationary').mode).toBe('stationary')
+    for (const m of ['all', 'unknown', 'x', ''])
+      expect(parseRoute(`#/map?mode=${m}`), m).toEqual({
+        view: 'map',
+        window: '24h',
+      })
+    expect(parseRoute('#/charts?mode=underway')).toEqual({
+      view: 'charts',
+      window: '24h',
+    })
+    expect(formatRoute({ view: 'map', window: '7d', mode: 'stationary' })).toBe(
+      '#/map?window=7d&mode=stationary',
+    )
+    expect(formatRoute({ view: 'map', window: '7d', mode: 'all' })).toBe(
+      '#/map?window=7d',
+    )
+    expect(
+      formatRoute({ view: 'charts', window: '7d', mode: 'underway' }),
+    ).toBe('#/charts?window=7d')
+  })
+
   it('formats back', () => {
     expect(formatRoute({ view: 'charts', window: '7d' })).toBe(
       '#/charts?window=7d',

@@ -94,6 +94,51 @@ describe('plugin', () => {
     expect(f.errors).toEqual([])
   })
 
+  it('files coverage under the own vessel mode at reception', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'ais-plugin-'))
+    const f = fakeApp(dir)
+    const plugin = createPlugin(f.app as never)
+    const r = fakeRouter()
+    plugin.registerWithRouter!(r.router as never)
+    await plugin.start({}, () => undefined)
+    type Cov = { cells: number }
+    const cells = async (mode: string) =>
+      ((await r.call('/coverage', { mode })).body as Cov).cells
+
+    f.position(OWN.lat, OWN.lon)
+    expect((await r.call('/status')).body).toMatchObject({
+      mode: 'unknown',
+      modeSource: null,
+    })
+    f.app.emit('nmea0183', sentenceAt(999000001, 50, 12))
+    f.navState('moored')
+    expect((await r.call('/status')).body).toMatchObject({
+      mode: 'stationary',
+      modeSource: 'state',
+    })
+    f.app.emit('nmea0183', sentenceAt(999000002, 150, 12))
+    f.navState('sailing')
+    f.app.emit('nmea0183', sentenceAt(999000003, 250, 12))
+    f.app.emit('nmea0183', sentenceAt(999000004, 320, 12))
+    expect(await cells('all')).toBe(4)
+    expect(await cells('stationary')).toBe(1)
+    expect(await cells('underway')).toBe(2)
+
+    // Without a state, ten minutes in one place make it stationary by drift.
+    f.navState('default')
+    for (let i = 0; i < 11 * 60; i++) {
+      await vi.advanceTimersByTimeAsync(1000)
+      f.position(OWN.lat, OWN.lon)
+    }
+    expect((await r.call('/status')).body).toMatchObject({
+      mode: 'stationary',
+      modeSource: 'drift',
+    })
+
+    await plugin.stop()
+    expect(f.selfListeners.get('navigation.state')?.size).toBe(0)
+  })
+
   it('saves live settings into the stored config and applies them', async () => {
     const f = fakeApp(await mkdtemp(join(tmpdir(), 'ais-plugin-')))
     const options = {

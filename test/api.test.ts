@@ -34,7 +34,13 @@ async function setup(withAccess = true, running = true) {
     const p = destination(OWN, 100, 10 + i)
     const located = agg.add({ type: 1, mmsi: `99900000${i}`, ...p }, OWN, T0)
     if (located) {
-      coverage.add(located.lat, located.lon, located.distanceNm, T0)
+      coverage.add(
+        located.lat,
+        located.lon,
+        located.distanceNm,
+        T0,
+        i < 10 ? 'stationary' : 'underway',
+      )
       longRange.add(located, {})
     }
   }
@@ -163,6 +169,25 @@ describe('REST API', () => {
       all.geojson.features.filter((f) => f.properties.capped),
     ).toHaveLength(capped.cappedCells)
     expect((await call('/coverage', { all: 'yes' })).status).toBe(400)
+  })
+
+  it('answers with the cells of one own vessel mode', async () => {
+    const { call } = await setup()
+    type Cov = { mode: string; cells: number; cellIds: string[] }
+    const all = (await call('/coverage', { all: 'true' })).body as Cov
+    expect(all.mode).toBe('all')
+    const st = (await call('/coverage', { mode: 'stationary' })).body as Cov
+    const uw = (await call('/coverage', { mode: 'underway' })).body as Cov
+    expect(st.mode).toBe('stationary')
+    expect(st.cells).toBeGreaterThan(0)
+    expect(uw.cells).toBeGreaterThan(0)
+    for (const id of [...st.cellIds, ...uw.cellIds])
+      expect(all.cellIds).toContain(id)
+    expect(((await call('/coverage', { mode: 'all' })).body as Cov).cells).toBe(
+      all.cells,
+    )
+    for (const mode of ['unknown', 'Stationary', ''])
+      expect((await call('/coverage', { mode })).status, mode).toBe(400)
   })
 
   it('serves the farthest receptions of a window', async () => {
@@ -434,6 +459,21 @@ describe('REST API downloads', () => {
     expect(named.headers['content-disposition']).toContain(
       `ais-coverage-allcells-all-${day(0)}.csv`,
     )
+  })
+
+  it('exports the coverage of one own vessel mode, named by it', async () => {
+    const { call } = await exportSetup()
+    const r = await call('/export/coverage.csv', {
+      window: '7d',
+      mode: 'underway',
+    })
+    expect(r.status).toBe(200)
+    expect(r.headers['content-disposition']).toContain(
+      `ais-coverage-underway-7d-${day(0)}.csv`,
+    )
+    expect(
+      (await call('/export/coverage.csv', { window: '7d', mode: 'x' })).status,
+    ).toBe(400)
   })
 
   it('sends every long-range entry in the window, oldest first', async () => {

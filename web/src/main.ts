@@ -40,6 +40,7 @@ import {
   formatRoute,
   parseRoute,
   type CompareParams,
+  type MapMode,
   type Route,
   type View,
   type WindowName,
@@ -94,6 +95,7 @@ const HEALTH_LABELS: Record<HealthKind, string> = {
 
 interface Context {
   window: WindowName
+  mode?: MapMode
   compare?: CompareParams
   offsetMin: number | undefined
   units: { distance: Unit; area: Unit; speed: Unit }
@@ -1030,6 +1032,7 @@ class MapViewElement extends HTMLElement implements ViewElement {
       ctx.window === '1h' ? '24h' : ctx.window,
       ctx.units,
       ctx.offsetMin,
+      ctx.mode,
     )
   }
 }
@@ -1149,6 +1152,8 @@ const SETTING_LABELS: Record<string, string> = {
   jumpSpeedLimitAircraftKnots: 'Jump speed, SAR aircraft (knots)',
   weatherPaths: 'Weather paths (range vs weather)',
   sourceStatistics: 'Statistics per server event',
+  modeDriftRadiusMeters: 'Stationary drift radius (metres)',
+  modeDriftMinutes: 'Stationary drift time (minutes)',
 }
 
 function renderSettings(config: Record<string, unknown> | undefined): void {
@@ -1190,7 +1195,7 @@ async function updateStatus(): Promise<void> {
       ? 'The plugin is not running.'
       : s.noData
         ? 'No AIS data received since the plugin started.'
-        : `${s.trackedTargets ?? 0} targets tracked. Own position ${s.ownPositionFresh ? 'known' : 'unknown or stale, so distances are not counted'}. History ${s.historyAvailable ? 'available' : 'not available, showing live data only'}.` +
+        : `${s.trackedTargets ?? 0} targets tracked. Own position ${s.ownPositionFresh ? 'known' : 'unknown or stale, so distances are not counted'}.${modeText(s)} History ${s.historyAvailable ? 'available' : 'not available, showing live data only'}.` +
           (s.lastMessageAt
             ? ` Last message ${formatDateTime(Date.parse(s.lastMessageAt), live.offsetMin)}.`
             : '')
@@ -1199,11 +1204,21 @@ async function updateStatus(): Promise<void> {
   }
 }
 
+/** The own vessel mode for the status line, with what decided it. */
+function modeText(s: Status): string {
+  if (!s.mode) return ''
+  if (s.mode === 'unknown') return ' Stationary or underway not known yet.'
+  const by =
+    s.modeSource === 'state' ? 'navigation state' : 'own position drift'
+  return ` ${s.mode === 'stationary' ? 'Stationary' : 'Underway'}, from the ${by}.`
+}
+
 function renderNav(): void {
   for (const [v, a] of tabLinks) {
     a.href = formatRoute({
       view: v,
       window: route.window,
+      mode: route.mode,
       ...(v === 'compare' && route.compare ? { compare: route.compare } : {}),
     })
     a.toggleAttribute('aria-current', v === route.view)
@@ -1213,7 +1228,7 @@ function renderNav(): void {
   for (const [w, a] of windowLinks) {
     const hidden = route.view === 'map' && w === '1h'
     a.hidden = hidden
-    a.href = formatRoute({ view: route.view, window: w })
+    a.href = formatRoute({ view: route.view, window: w, mode: route.mode })
     a.textContent = route.view === 'map' && w === '24h' ? 'Today' : w
     a.toggleAttribute('aria-current', w === route.window)
   }
@@ -1228,6 +1243,7 @@ async function render(): Promise<void> {
     await loadUnits()
     await views[route.view].load({
       window: route.window,
+      mode: route.mode,
       compare: route.compare,
       offsetMin: live.offsetMin,
       units,

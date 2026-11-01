@@ -68,6 +68,7 @@ describe('csvField', () => {
 describe('coverageCsv', () => {
   const f: Footprint = {
     days: ['2030-01-01'],
+    mode: 'all',
     resolution: 6,
     capNm: 40,
     cells: [

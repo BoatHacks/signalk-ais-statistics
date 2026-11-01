@@ -83,14 +83,14 @@ point and offsets in metres; no recorded data.
   `getSelfStream` becomes path aware. `test/web`: route parsing of `mode`.
 
 ## Implementation Steps
-- [ ] Check the `navigation.state` enum in `@signalk/signalk-schema` and
+- [x] Check the `navigation.state` enum in `@signalk/signalk-schema` and
       record it in `docs/findings.md`
-- [ ] Tests for mode, coverage v2, route, config, plugin wiring (own commit)
-- [ ] `src/mode.ts`, config options, coverage v2 with the v1 reader
-- [ ] Plugin wiring: `navigation.state` self stream, mode into
+- [x] Tests for mode, coverage v2, route, config, plugin wiring (own commit)
+- [x] `src/mode.ts`, config options, coverage v2 with the v1 reader
+- [x] Plugin wiring: `navigation.state` self stream, mode into
       `coverage.add`, `/status` fields, `/coverage?mode=`
-- [ ] Web app: mode selector, route, info line
-- [ ] Docs: SPEC 2.4 (split), a new 2.8 for the mode rules, 6.1, 7, 8
+- [x] Web app: mode selector, route, info line
+- [x] Docs: SPEC 2.4 (split), a new 2.8 for the mode rules, 6.1, 7, 8
       (file version 2), 9 (options), 12 (decisions 17 to 19, chosen by the
       maintainer); ARCHITECTURE 1, 2.2 (VesselMode next to OwnPosition),
       2.5, 2.9, 2.11, 7; README "What it does" and status; roadmap entry
@@ -104,15 +104,18 @@ point and offsets in metres; no recorded data.
 `ARCHITECTURE.md`, `README.md`, `docs/findings.md`, the roadmap.
 
 ## Open Points
-- The exact `navigation.state` enum (no `node_modules` copy was at hand
-  while planning); values missing from the list above fall back to drift.
-- Whether a user-set `navigation.state` left at `moored` after leaving is
-  trusted as decided; this plan trusts it, as decision 17 says.
-- Overlay: decided after review, one combined overlay; the mode split is
-  in the web app map only.
-- #13 depends on `mode.current()`; whichever lands first defines it.
-- #19: coverage exports carry the mode per cell (a `mode` column in CSV,
-  field in JSON); the anonymise switch does not affect it.
-- #20: the map mode selector follows the live control pattern from #20 but
-  is a view choice only and is never saved; the drift thresholds stay in
-  the server config form.
+
+Resolved before implementation (2026-11-01):
+- The `navigation.state` enum is recorded in `docs/findings.md`. It spells
+  `not-under-way` with hyphens and misspells "manouverability"; both
+  spellings are accepted (maintainer), as the enum may be corrected.
+  `not under command` is left to drift.
+- A stale `navigation.state` is trusted (maintainer: always trust the
+  state).
+- The overlay stays combined (cross-plan decision C7).
+- #13 reads `Running.mode.current(time)`.
+- #19: the coverage download takes the same `mode` parameter as
+  `/coverage` and names the file after it, rather than a mode column.
+- Leaving the drift radius restarts the window, so the samples around the
+  old spot cannot turn the mode straight back to stationary.
+- "Radar" reads "sectors" throughout (the rename on main).

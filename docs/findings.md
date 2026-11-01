@@ -132,6 +132,19 @@ curl -s -b cookies -X POST -H 'Content-Type: application/json' \
   are not forbidden, and `sensors.ais.status` is already published by another
   plugin, so `sensors.ais.statistics.*` conflicts with nothing.
 
+- `navigation.state` (`schemas/groups/navigation.json` in
+  `@signalk/signalk-schema` 1.8.2) has the enum: `not under command`,
+  `anchored`, `moored`, `sailing`, `motoring`, `towing < 200m`,
+  `towing > 200m`, `pushing`, `fishing`, `fishing-hampered`, `trawling`,
+  `trawling-shooting`, `trawling-hauling`, `pilotage`, `not-under-way`,
+  `aground`, `restricted manouverability` (spelled so) and its three
+  `towing` and `underwater operations` variants, `constrained by draft`,
+  `mine clearance`, reserved values for HSC, WIG and future use, and
+  `not defined (example)`. Note the hyphens in `not-under-way` and the misspelling,
+  which may be corrected upstream; `src/mode.ts` accepts both spellings.
+  Re-check: `npm pack @signalk/signalk-schema` and search the extracted
+  `navigation.json` for `moored`.
+
 ## Related plugins on a typical server
 
 - `@meri-imperiumi/signalk-internet` publishes `network.internet.state` with

@@ -18,6 +18,7 @@ plugin's data directory.
  signalk-server
  ├─ AIS events (!AIVDM, PGNs) ─► Ingest ──► Classifier ──► Aggregator ──► Publisher ──► deltas ──► history provider
  ├─ navigation.position (self) ─► OwnPosition ──┘               │                          │
+ ├─ navigation.state (self) ────► VesselMode ──► Coverage        │                          │
  │                                                              ▼                          │
  │                                                        Live state                       │
  │                                                              │                          │
@@ -57,6 +58,16 @@ health (SPEC 2.8).
 Tracks the latest self `navigation.position` and its timestamp. Exposes
 `at(time)` returning the position or `undefined` when stale
 (`ownPositionMaxAgeSeconds`). Pure state, no I/O.
+
+### 2.2a VesselMode
+`src/mode.ts`. Stationary, underway or unknown (SPEC 2.9), fed with self
+`navigation.state` values and self positions, each with its time. A
+recognised state decides; otherwise up to 60 position samples over
+`modeDriftMinutes` decide against `modeDriftRadiusMeters`. `current(time)`
+gives the mode and `source(time)` what decided it. The plugin passes the
+mode at reception to `Coverage.add`, reports both on `/status`, and holds
+the instance in its running state for alert suppression (#13). Pure state,
+no I/O.
 
 ### 2.3 Classifier
 Maps message type to class and ship type to type group (SPEC 2.1). Nothing
@@ -117,8 +128,9 @@ file loads with an empty list.
 
 ### 2.5 Coverage
 Maps each position to an H3 cell (`h3-js`), keeps the cells of the current
-UTC day with their shortest distance and report count, and the day's
-distance histogram. Flushes hourly to a daily JSON file in the plugin data
+UTC day per own vessel mode with their shortest distance and report count,
+and the day's distance histogram over all modes. Day files are version 2;
+version 1 files load with their cells under `unknown`. Flushes hourly to a daily JSON file in the plugin data
 directory and reports today's cell count and area to the Publisher. Applies
 the `coverageDistancePercentile` cap to cells with fewer than 3 reports
 (`MIN_FAR_CELL_REPORTS`, SPEC 2.4) when building a window's
@@ -126,6 +138,10 @@ footprint, using the distance histograms merged from the day files, so it
 needs no history provider. Computes covered area and produces the GeoJSON
 used by the map and the overlay. `footprintRange` unites any run of UTC
 days for the compare view, and `retainedFrom` names the oldest kept day.
+Both take a `CoverageMode` (`all`, `stationary` or `underway`): the cap is
+always taken from the combined histogram, then only that mode's cells are
+united, so a mode's footprint is a subset of the combined one. `today()`,
+the published cell count and area, and the overlay are combined.
 
 ### 2.6 Publisher
 Emits the SignalK deltas of SPEC 6.2 through the plugin API's delta handler,
@@ -194,7 +210,8 @@ range is at most 7 days. `/summary` and `/sectors` take `from` and `to` on
 whole hours (`rangeParam`), `/coverage` takes them as UTC days
 (`dayRangeParam`), each at most 7 days and never with `window`.
 `/summary?source=<label>` answers from that source's query, and
-`/sources` lists the labels (empty while per-source statistics are off). The one write route, `POST
+`/sources` lists the labels (empty while per-source statistics are off).
+`/coverage` and `/export/coverage.csv` take `mode` (`modeParam`). The one write route, `POST
 /settings`, validates live settings with `parseLiveSettings` from
 `config.ts` and hands them to the plugin, which merges them into the stored
 configuration, saves it and applies them (for example
@@ -240,7 +257,9 @@ metered state when present, and a manual choice is remembered in
 `localStorage`. Toggles show or hide the coverage cells, the cells beyond
 the distance cap (fetched with `all=true`, drawn dashed, off by default)
 and the class A and B sectors (`layers.ts`, also remembered in
-`localStorage`). The distance cap slider under the map refetches
+`localStorage`). A `Cells from` row under the map picks the own vessel
+mode; it sets the hash route (`#/map?mode=underway`, parsed in `route.ts`),
+so it is not stored, and the coverage downloads follow it. The distance cap slider under the map refetches
 `/coverage` with `cap` and, through `settings.ts`, saves with `POST
 /settings`; the save button shows when `/skServer/loginStatus`, read once
 per page load because the server rate limits it, reports security off or a
@@ -345,6 +364,7 @@ src/
   n2k-lookups.ts      canboat lookup names to AIS codes
   classify.ts         class and type group
   ownposition.ts      own position and staleness
+  mode.ts             own vessel mode, stationary or underway
   aggregate.ts        counters, buckets, sectors, vessel registry
   health.ts           duplicate detector and implausible jump tracker
   coverage.ts         H3 cells, daily files, area, GeoJSON

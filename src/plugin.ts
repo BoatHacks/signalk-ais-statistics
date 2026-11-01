@@ -20,6 +20,7 @@ import {
 } from './history'
 import { Ingest, type IngestStats } from './ingest'
 import { LongRangeLog, MAX_PER_DAY } from './longrange'
+import { VesselMode } from './mode'
 import { N2kIngest } from './n2k'
 import { OwnPosition } from './ownposition'
 import {
@@ -55,6 +56,8 @@ interface Running {
   /** One decoder per event and input, so multipart messages stay apart. */
   ingests: { stats: IngestStats }[]
   own: OwnPosition
+  /** Stationary or underway, for coverage and for alert suppression. */
+  mode: VesselMode
   agg: Aggregator
   health: Health
   coverage: Coverage
@@ -159,6 +162,8 @@ export function createPlugin(app: ServerAPI): Plugin {
       ),
       ownPositionAgeSeconds: ownAge === undefined ? null : ownAge / 1000,
       ownPositionFresh: s.own.at(now) !== undefined,
+      mode: s.mode.current(now),
+      modeSource: s.mode.source(now),
       historyAvailable: s.history.available,
       sentences: total((st) => st.sentences),
       ownSentencesSkipped: total((st) => st.ownSkipped),
@@ -219,6 +224,11 @@ export function createPlugin(app: ServerAPI): Plugin {
         config,
         ingests: [],
         own: new OwnPosition(config.ownPositionMaxAgeSeconds * 1000),
+        mode: new VesselMode({
+          radiusM: config.modeDriftRadiusMeters,
+          windowMs: config.modeDriftMinutes * MINUTE_MS,
+          maxGapMs: config.ownPositionMaxAgeSeconds * 1000,
+        }),
         agg,
         health: new Health(
           limitsFromKnots(
@@ -330,6 +340,7 @@ export function createPlugin(app: ServerAPI): Plugin {
               located.lon,
               located.distanceNm,
               located.time,
+              s.mode.current(time),
             )
             s.longRange.add(located, s.agg.vessel(located.mmsi))
           }
@@ -354,11 +365,19 @@ export function createPlugin(app: ServerAPI): Plugin {
         s.stops.push(() => events.removeListener(event, listener))
       }
 
-      const unsubscribe = app.streambundle
-        .getSelfStream('navigation.position' as Path)
-        .onValue((pos: unknown) => s.own.update(pos, Date.now()))
-      // Some hosts return the stream itself rather than an unsubscribe.
-      if (typeof unsubscribe === 'function') s.stops.push(unsubscribe)
+      const self = (path: string, f: (value: unknown) => void) => {
+        const unsubscribe = app.streambundle
+          .getSelfStream(path as Path)
+          .onValue(f)
+        // Some hosts return the stream itself rather than an unsubscribe.
+        if (typeof unsubscribe === 'function') s.stops.push(unsubscribe)
+      }
+      self('navigation.position', (pos) => {
+        const t = Date.now()
+        s.own.update(pos, t)
+        s.mode.position(pos, t)
+      })
+      self('navigation.state', (value) => s.mode.setState(value))
 
       // Publish just before the end of each interval, so every value lands
       // in the bucket it describes. Intervals divide the hour.

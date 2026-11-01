@@ -1,4 +1,5 @@
-// Coverage map with a window selector, the basemap switch and layer
+// Coverage map with a window selector, a selector for the cells of one own
+// vessel mode (stationary or underway), the basemap switch and layer
 // toggles for the coverage cells and the class A and B sectors. Cells and
 // sectors use the plotter overlay's colours. A slider tries another coverage
 // distance cap at once; users with write access can save it (SPEC 9.1).
@@ -35,6 +36,7 @@ import {
   sectorColour,
 } from '../../src/style'
 import { maxTime } from './time'
+import { formatRoute, MAP_MODES, type MapMode } from './route'
 import { SECTOR_WIDTH_DEG } from '../../src/paths'
 import type { Unit } from './units'
 
@@ -44,6 +46,7 @@ export interface MapView {
     window: '24h' | '7d',
     units: { distance: Unit; area: Unit },
     offsetMin?: number,
+    mode?: MapMode,
   ): Promise<void>
   /** Re-reads the theme colours, after a day or night change. */
   restyle(): void
@@ -83,6 +86,12 @@ export function createMap(): MapView {
   const mapEl = el('div', { class: 'map' })
   const card = el('div', { class: 'map-card sk-card' }, mapEl, controls)
 
+  // Cells by own vessel mode, below the map next to the cap slider.
+  const modes = el(
+    'div',
+    { class: 'cap-control', role: 'group', 'aria-label': 'Cells from' },
+    el('span', { class: 'label' }, 'Cells from'),
+  )
   // Distance cap: the slider changes this view only, save stores it.
   const capInput = el('input', {
     type: 'range',
@@ -122,14 +131,36 @@ export function createMap(): MapView {
     'H3 cell ids with reports and the nearest distance. A footprint centred on a harbour can hint at your berth; you decide whether to share the file.',
   )
   let shownWindow: '24h' | '7d' = '24h'
+  let shownMode: MapMode = 'all'
   const renderDownloads = () => {
-    setLink(
-      covWindow,
-      exportHref('coverage.csv', shownWindow, { all: visible.capped }),
-    )
-    setLink(covAll, exportHref('coverage.csv', 'all', { all: visible.capped }))
+    const flags = { all: visible.capped, mode: shownMode }
+    setLink(covWindow, exportHref('coverage.csv', shownWindow, flags))
+    setLink(covAll, exportHref('coverage.csv', 'all', flags))
   }
-  element.append(card, capRow, capNote, info, downloads, downloadNote)
+
+  // The mode is part of the route, so a link keeps it; it is never saved.
+  const MODE_LABELS: Record<MapMode, string> = {
+    all: 'All',
+    stationary: 'Stationary',
+    underway: 'Underway',
+  }
+  for (const m of MAP_MODES) {
+    const btn = el('button', { type: 'button', 'data-mode': m }, MODE_LABELS[m])
+    btn.title =
+      m === 'all'
+        ? 'Cells from all reports'
+        : `Only cells from reports received while ${m}`
+    btn.addEventListener('click', () => {
+      location.hash = formatRoute({ view: 'map', window: shownWindow, mode: m })
+    })
+    modes.append(btn)
+  }
+  const renderModes = () => {
+    for (const btn of modes.querySelectorAll('button'))
+      btn.setAttribute('aria-pressed', String(btn.dataset.mode === shownMode))
+  }
+  renderModes()
+  element.append(card, modes, capRow, capNote, info, downloads, downloadNote)
 
   let map: L.Map | undefined
   let base: L.Layer[] = []
@@ -393,9 +424,11 @@ export function createMap(): MapView {
     restyle() {
       // Cell and sector colours follow the plotter overlay, not the theme.
     },
-    async show(window, units, offsetMin) {
-      lastArgs = [window, units, offsetMin]
+    async show(window, units, offsetMin, mode = 'all') {
+      lastArgs = [window, units, offsetMin, mode]
       shownWindow = window
+      shownMode = mode
+      renderModes()
       renderDownloads()
       const g = ++generation
       await ensureMap()
@@ -405,6 +438,7 @@ export function createMap(): MapView {
         get<CoverageResponse>('/coverage', {
           window,
           all: 'true',
+          ...(mode === 'all' ? {} : { mode }),
           ...(trial === undefined ? {} : { cap: String(trial) }),
         }),
         get<GeoJSON.FeatureCollection>('/overlay/coverage.geojson').catch(
@@ -496,10 +530,17 @@ export function createMap(): MapView {
             : visible.capped
               ? ` Including ${c.cappedCells} sparse cells beyond ${units.distance.format(c.capM)} (the distance percentile cap), dashed.`
               : ` ${c.cappedCells} cells beyond ${units.distance.format(c.capM)} (the distance percentile cap) with fewer than 3 reports are not shown; All cells shows them.`
+        const which =
+          mode === 'all'
+            ? ''
+            : ` Only cells from reports received while ${mode}; the sectors are for all reports.`
         info.textContent =
           c.cells + c.cappedCells === 0
-            ? 'No coverage recorded in this window yet.'
+            ? mode === 'all'
+              ? 'No coverage recorded in this window yet.'
+              : `No coverage recorded while ${mode} in this window yet.`
             : `${c.cells.toLocaleString()} cells, about ${units.area.format(c.areaM2)} covered.` +
+              which +
               beyond +
               ` Basemap: ${current === 'osm' ? 'OpenStreetMap and OpenSeaMap' : 'server charts'}.`
       }

@@ -129,6 +129,14 @@ computed by merging the bucket histograms.
   was.
 - Because the station is mobile, a cell is attributed to the day it was
   observed, and the footprint for a window is the union of its days.
+- Each report's cell is also filed under the own vessel mode at reception
+  (2.9): stationary, underway or unknown. The footprint of one mode holds
+  only its cells; the combined footprint holds all three. Every footprint
+  is capped with the distances of all modes together, so a mode's
+  footprint is always a subset of the combined one. Nothing is left out
+  for its mode: a report received before the mode is known counts under
+  unknown, which only the combined footprint shows. Only coverage is split;
+  distances, sectors, counts and the published paths stay combined.
 
 ### 2.5 Rates
 
@@ -228,6 +236,35 @@ positions and both positions. Both lists are ranked by implied speed
 (chosen by the maintainer), so a bogus jump can be told from a fast craft
 side by side.
 
+### 2.9 Stationary and underway
+
+The own vessel is stationary, underway or unknown (#17). The mode decides
+only which coverage cells a report is filed under (2.4) and, for #13,
+whether alerts are suppressed while underway.
+
+- `navigation.state` on self decides whenever its last value is
+  recognised, even if it may be stale (a state left at `moored` after
+  casting off still counts as stationary; chosen by the maintainer).
+  Stationary: `anchored`, `moored`, `not-under-way`, `aground`. Underway:
+  `sailing`, `motoring`, `towing ...`, `pushing`, `fishing ...`,
+  `trawling ...`, `pilotage`, `restricted manouverability ...`,
+  `constrained by draft`, `mine clearance`. Case, hyphens and underscores
+  do not matter, and "manoeuvrability" and "maneuverability" are accepted
+  next to the schema's spelling. Every other value (`default`,
+  `not under command`, the reserved values, null) hands over to drift.
+- Drift, when no recognised state is set: own positions are sampled at
+  most every 10 s (at most 60 samples per window). Once the samples span
+  `modeDriftMinutes` (default 10) and all lie within
+  `modeDriftRadiusMeters` (default 200, allowing for an anchor swing) of
+  their mean, the vessel is stationary and the mean is its spot; as soon
+  as a position lies beyond the radius from the spot, it is underway and
+  the window starts again. A full window with a wider spread is underway.
+  After a start, or a gap in own positions longer than
+  `ownPositionMaxAgeSeconds`, drift is unknown until the window has
+  filled again.
+- The mode is decided at reception and never revised: a vessel that has
+  just stopped counts as underway for the first `modeDriftMinutes`.
+
 ## 3. State / Lifecycle Model
 
 No domain lifecycle beyond a per-target tracking record: a target is
@@ -268,6 +305,8 @@ subtraction.
   flushed hourly to its file.
 - The duplicate detector's copies of the last 2 s and the jump tracker's
   anchor per sender (2.8), pruned after `targetExpirySeconds`.
+- The own vessel mode (2.9): the last `navigation.state` and at most 60
+  own position samples. Lost on restart; drift starts unknown again.
 
 History is not kept by the plugin. See section 8.
 
@@ -296,7 +335,8 @@ History is not kept by the plugin. See section 8.
    because SignalK's data model does not retain per-message information.
    `!AIVDO` and NMEA 2000 AIS PGNs marked as own transmissions (the
    vessel's own transponder) are excluded from reception statistics.
-2. **Own position** from `navigation.position` on self.
+2. **Own position** from `navigation.position` on self, and the own
+   vessel mode from it and from `navigation.state` on self (2.9).
 3. **History** from whichever history provider the server has registered,
    read through the SignalK v2 History API, for the web app and for windowed
    queries (see 8).
@@ -335,14 +375,14 @@ effective live settings.
 | `GET /series?metric=&resolution=&from=&to=` | time series for the charts, read from history; `metric` is `messages`, `positions`, `distance`, `vessels` or `health` (each health counter and `received` per bucket), `resolution` in seconds (at least 60, at most 2000 points) |
 | `GET /weather?from=&to=` | the configured weather paths (9) read back from history as hourly averages (`aggregate` says `average`, or `last` for a provider that rejects it), buckets starting on the full hour, at most 7 days; only paths with data; `available` is false without a provider and `historyError` is set when the read fails, with no live fallback |
 | `GET /sectors?window=24h&class=a\|b\|all` or `?from=&to=&class=` | 24 sectors with count and p99 distance (the highest hourly p99 in the window, see 2.6), and the farthest reception `maxM` with its time: `maxAt` when known exactly, otherwise `maxHour`, the start of the hour it fell in |
-| `GET /coverage?window=7d&all=false&cap=` or `?from=&to=` | cell ids, GeoJSON for the map, covered area in m²; windows `24h` (today) and `7d`, or `from` and `to` as UTC days (`YYYY-MM-DD`, both included, at most 7) read from the day files only; `retainedFrom` is the oldest day the files are kept for; `all=true` adds the cells beyond the distance cap, marked `capped`; `cap` (50 to 100) tries another distance cap percentile for this answer only, and `capPercentile` gives the percentile applied |
+| `GET /coverage?window=7d&all=false&cap=&mode=all` or `?from=&to=` | cell ids, GeoJSON for the map, covered area in m²; windows `24h` (today) and `7d`, or `from` and `to` as UTC days (`YYYY-MM-DD`, both included, at most 7) read from the day files only; `retainedFrom` is the oldest day the files are kept for; `all=true` adds the cells beyond the distance cap, marked `capped`; `cap` (50 to 100) tries another distance cap percentile for this answer only, and `capPercentile` gives the percentile applied; `mode` (`all`, `stationary` or `underway`, 2.4) picks the cells of one own vessel mode and is echoed |
 | `GET /longrange?window=24h` | the 25 farthest entries of the long-range log (2.7) in the window, farthest first, and the two speed lists of 2.8, 10 senders each, fastest first, speeds in m/s: `fastest` (plausible) and `implausibleJumps`; windows `24h` and `7d` |
-| `GET /export/coverage.csv?window=7d&all=false` | download: one row per H3 cell, `h3_cell,resolution,reports,min_distance_m,capped`, ordered by cell id; `all=true` adds the cells beyond the distance cap with `capped` true; no polygons |
+| `GET /export/coverage.csv?window=7d&all=false&mode=all` | download: one row per H3 cell, `h3_cell,resolution,reports,min_distance_m,capped`, ordered by cell id; `all=true` adds the cells beyond the distance cap with `capped` true; `mode` as on `/coverage`; no polygons |
 | `GET /export/longrange.csv?window=7d&anonymise=false` | download: every long-range entry (2.7) in the window, oldest first, `time,mmsi,name,class,ship_type,distance_m,bearing_deg,lat,lon,own_lat,own_lon`; anonymised, only `time,class,ship_type,distance_m,bearing_deg` |
 | `GET /export/longrange.geojson?window=7d` | download: the same entries as GeoJSON points at the reported position, the other fields as properties; full detail only, `anonymise=true` answers 400 |
 | `GET /overlay/coverage.geojson` | the plotter overlay's GeoJSON: the 7 day footprint and the 24 hour sector wedges of class A and B |
 | `GET /sources` | the sources counted on their own, `{ label, event }` each; empty while `sourceStatistics` is off |
-| `GET /status` | live state: tracked targets, own position age, history reachable or not, and per source its messages and health counts since the start |
+| `GET /status` | live state: tracked targets, own position age, the own vessel `mode` (`stationary`, `underway` or `unknown`, 2.9) and `modeSource` (`state`, `drift` or null), history reachable or not, and per source its messages and health counts since the start |
 | `POST /settings` | saves live settings (body `{ "coverageDistancePercentile": 95 }`), readwrite users only; see above |
 
 The downloads (decisions on #19) take the windows `24h`, `7d` and `all`.
@@ -352,7 +392,8 @@ included, which `coverageRetentionDays` decides (8). There is no archive
 and no import. They answer as attachments with `Cache-Control: no-store`
 and a file name such as `ais-longrange-7d-2026-11-01-anon.csv` (set,
 window, UTC day of the export, `-anon` when anonymised; a coverage file
-with `all=true` is named `coverage-allcells`); errors stay JSON. CSV
+with `all=true` is named `coverage-allcells`, and one of a single mode
+carries it after the set, `ais-coverage-underway-7d-...`); errors stay JSON. CSV
 follows RFC 4180 (comma, CRLF, header row, UTF-8), numbers in plain
 decimals with a dot, times in ISO 8601 UTC, units in SI as the column
 names say, an empty field for an unknown name or ship type. Vessel names
@@ -501,7 +542,8 @@ A SignalK web app, listed in the admin UI, with:
 
 - Overview: type group counts, class A/B split, rates, distance p95 and
   p99, and message health (2.8): the good share, each counter with its
-  share, and the duplicate hint.
+  share, and the duplicate hint. The status line names the own vessel
+  mode and what decided it (2.9).
 - Charts: positions and messages per hour split by class, distance avg,
   p95 and p99 per hour (max shown separately and marked untrusted), the
   class A and B mix as a share per bucket, and the health shares per
@@ -546,10 +588,14 @@ A SignalK web app, listed in the admin UI, with:
   and the user has not chosen otherwise. When the server has no charts, the
   server charts button is greyed out with a short note under it and the map
   uses OSM/OpenSeaMap, since the chart basemap would stay blank.
-  Under the map, a distance cap slider (50th percentile to off) redraws the
+  Under the map, a `Cells from` selector (All, Stationary, Underway, 2.4)
+  shows the cells of one own vessel mode; it is part of the hash route
+  (`#/map?window=7d&mode=underway`), not saved, and the info line says
+  that the sectors are not split. The plotter overlay stays combined.
+  Below it, a distance cap slider (50th percentile to off) redraws the
   cells at once and offers save and reset (live settings, 9.1). Below it,
   coverage CSV downloads (6.1) for the shown window and for all retained
-  days, including the cells beyond the cap while `All cells` is on, with a
+  days, of the selected mode, including the cells beyond the cap while `All cells` is on, with a
   one-line note that a footprint can hint at the berth.
 - Compare (#14): two date windows side by side, to tell whether an
   antenna, cable, splitter or receiver change helped
@@ -629,10 +675,16 @@ directly. Consequences:
   cells. The plugin therefore writes one small cell-set file per UTC day in
   its own data directory (a few KB), `coverage-YYYY-MM-DD.json`, pruned by
   `coverageRetentionDays` (default 14; the 7 day map window and the
-  overlay need at least 7). Per cell it holds the shortest
-  distance seen and the report count; it also holds that day's distance
-  histogram, so a window's coverage cap is computed from the files alone. A
-  day holds at most 20000 cells. Files are written atomically every hour,
+  overlay need at least 7). From file version 2 it holds one cell map per
+  own vessel mode (`modes.stationary`, `modes.underway`, `modes.unknown`,
+  2.4); per cell the shortest distance seen and the report count. It also
+  holds that day's distance histogram over all modes, so a window's
+  coverage cap is computed from the files alone. A day holds at most 20000
+  cells, a cell seen in two modes counting twice. A version 1 file (one
+  `cells` map) loads with its cells under unknown, and today's file is
+  written as version 2 at the next flush; version 1 code does not read a
+  version 2 file, so after a downgrade the map starts empty until the
+  files of the newer version are pruned. Files are written atomically every hour,
   at the UTC day change and on stop, and today's file is merged back in on
   start.
 - The long-range log (2.7) is kept the same way, one file per UTC day,
@@ -661,6 +713,8 @@ directly. Consequences:
 | `jumpSpeedLimitKnots` | 60 | implied speed above which a position counts as an implausible jump (2.8) |
 | `jumpSpeedLimitHighSpeedKnots` | 120 | the same for ship types 20 to 29 (WIG) and 40 to 49 (high-speed craft) |
 | `jumpSpeedLimitAircraftKnots` | 600 | the same for message 9 (SAR aircraft) |
+| `modeDriftRadiusMeters` | 200 | without a recognised `navigation.state`, stationary while the own position stays within this distance (2.9); 50 to 2000 |
+| `modeDriftMinutes` | 10 | for this long; 2 to 60 |
 | `weatherPaths` | `environment.outside.pressure`, `environment.outside.temperature`, `environment.outside.relativeHumidity`, `environment.water.temperature` | numeric paths of this vessel for range vs weather (7), read from history; at most 8 (one history request), dotted names without wildcards; an empty list hides the section |
 
 ### 9.1 Live settings
@@ -850,6 +904,17 @@ help of `max` (6.2). Verified across a plugin restart on the test server.
   and message health, labelled by event name only, while sectors,
   coverage and vessels stay combined. A split per NMEA 2000 device comes
   later, if at all.
+
+- **Stationary and underway split coverage only (chosen by the
+  maintainer, #17).** `navigation.state` decides when it is recognised,
+  and is trusted even when it may be stale; otherwise position drift
+  decides, about 200 m for 10 minutes, both settings. Only the coverage
+  cells are kept per mode, in the existing day file, so there are no new
+  paths and range, sectors and counts stay combined. The mode is decided
+  at reception and not revised, accepting that a boat that has just
+  stopped counts as underway for the first minutes. There is no footprint
+  per mooring spot (the #14 date compare covers a change of berth), and
+  the plotter overlay stays one combined footprint.
 
 ## 13. Open Questions
 
