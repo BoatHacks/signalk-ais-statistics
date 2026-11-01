@@ -2,7 +2,9 @@
 // them in the user's preferred units from the path metadata's
 // `displayUnits`, or in SI with ISO prefixes when there is none.
 
-export type SIUnit = 'm' | 'm2'
+export type SIUnit = 'm' | 'm2' | 'm/s'
+
+const MPS_PER_KNOT = 1852 / 3600
 
 export interface DisplayUnits {
   formula?: string
@@ -104,6 +106,8 @@ export function formatSI(v: number | null | undefined, unit: SIUnit): string {
   if (v === null || v === undefined || !Number.isFinite(v)) return 'no data'
   if (unit === 'm')
     return Math.abs(v) >= 1000 ? `${short(v / 1000)} km` : `${short(v)} m`
+  // Speeds read in knots at sea when the server names no preference.
+  if (unit === 'm/s') return `${short(v / MPS_PER_KNOT)} kn`
   return Math.abs(v) >= 1e6 ? `${short(v / 1e6)} km²` : `${short(v)} m²`
 }
 
@@ -126,10 +130,10 @@ export function makeUnit(si: SIUnit, meta: DisplayUnits | undefined): Unit {
     }
   }
   return {
-    symbol: si === 'm' ? 'm' : 'm²',
-    toDisplay: (v) => v,
+    symbol: si === 'm' ? 'm' : si === 'm/s' ? 'kn' : 'm²',
+    toDisplay: (v) => (si === 'm/s' ? v / MPS_PER_KNOT : v),
     format: (v) => formatSI(v, si),
-    formatDisplay: (v) => formatSI(v, si),
+    formatDisplay: (v) => (si === 'm/s' ? `${short(v)} kn` : formatSI(v, si)),
   }
 }
 

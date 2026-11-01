@@ -344,6 +344,23 @@ svg.sectors .axis {
 .long-range th.num {
   text-align: right;
 }
+.long-range tr.implausible td {
+  color: var(--color-orange);
+}
+.hint {
+  border: 1px solid rgba(var(--theme-color-rgb), 0.5);
+  color: var(--text-main);
+  padding: 8px 12px;
+  margin: 0 0 10px;
+  font: 0.85rem var(--font-data);
+}
+.hint::before {
+  content: '[ CHECK ] ';
+  color: var(--theme-color);
+}
+.health-line {
+  font-family: var(--font-data);
+}
 .legend {
   display: flex;
   flex-wrap: wrap;
