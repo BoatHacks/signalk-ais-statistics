@@ -141,10 +141,19 @@ export function mergeInto(a: Bucket, b: Bucket): void {
     a.maxNm = b.maxNm
 }
 
-/** p99 per sector for one bucket, indexed [class][sector]. */
+/**
+ * p99 per sector for one bucket, indexed [class][sector]. The coarse bins
+ * are about 60 percent wide, so interpolation within a bin can land above
+ * the farthest reception in that sector; the p99 is capped at it, as
+ * `summarize` caps the overall figures.
+ */
 export function sectorP99(bucket: Bucket): (number | undefined)[][] {
-  return bucket.sectorBins.map((cls) =>
-    cls.map((bins) => sectorPercentileNm(bins, 0.99)),
+  return bucket.sectorBins.map((cls, c) =>
+    cls.map((bins, s) => {
+      const p = sectorPercentileNm(bins, 0.99)
+      const max = bucket.sectorMaxNm[c]![s]!
+      return p !== undefined && max > 0 ? Math.min(p, max) : p
+    }),
   )
 }
 

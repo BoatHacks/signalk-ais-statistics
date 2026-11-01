@@ -147,7 +147,10 @@ the bucket's `last` also marks one). Series start on a whole multiple of
 their resolution, so hourly bars begin on the hour. The sectors query reads the
 closed hours from history and adds the open hour from the live bucket,
 because the sector paths are published hourly. Only hours with at least
-20 reports in a sector count toward its p99 (`MIN_SECTOR_REPORTS`). The
+20 reports in a sector count toward its p99 (`MIN_SECTOR_REPORTS`), and
+the window's p99 is capped at the window's farthest reception in the sector,
+because hourly p99s written before the hourly cap in `sectorP99` can exceed
+it. The
 sector maxima come from the live buckets with their exact time, or from the
 hourly `max` paths with the hour's start, which a matching long-range log
 entry (same sector and class, within a metre) replaces with the exact time. A null before

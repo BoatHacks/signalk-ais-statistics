@@ -139,7 +139,9 @@ positions, and the count of unique vessels per hour and per type group.
 
 For each of 24 sectors and for each class: number of position reports and
 the p99 distance, per hour bucket, from a coarse per-sector histogram (the
-distance bins merged in pairs, 16 bins). The
+distance bins merged in pairs, 16 bins), capped at the farthest reception
+in that sector and hour, since interpolation within a coarse bin can land
+beyond it. The
 sectors view shows, per sector, the highest hourly p99 in the window (a
 conservative figure, since percentiles do not merge exactly from hourly
 values), counting only hours with at least 20 reports in that sector. The
