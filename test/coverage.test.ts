@@ -70,6 +70,17 @@ describe('Coverage', () => {
     expect(f.cells.some((x) => x.minDistanceNm > 2000)).toBe(true)
   })
 
+  it('applies a changed percentile, and a trial one for one answer only', async () => {
+    const c = new Coverage(await dir(), 5, 90, 99, T0)
+    for (let i = 0; i < 500; i++) addAt(c, (i * 7) % 360, 10)
+    addAt(c, 45, 2500)
+    expect((await c.footprint(1, T0, 100)).cappedCells).toBe(0)
+    expect((await c.footprint(1, T0)).cappedCells).toBe(1)
+    c.setPercentile(100)
+    expect((await c.footprint(1, T0)).cappedCells).toBe(0)
+    expect(c.today(T0).cells).toBe((await c.footprint(1, T0)).cells.length)
+  })
+
   it('takes the cap of a window from the merged days', async () => {
     const d = await dir()
     const c = new Coverage(d, 5, 90, 99, T0 - DAY_MS)
