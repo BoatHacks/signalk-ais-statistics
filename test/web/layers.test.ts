@@ -25,17 +25,6 @@ describe('map layer visibility', () => {
     expect(layerVisible('sectorsA')).toBe(true)
   })
 
-  it('carries a saved radar choice over to both sector layers', () => {
-    const storage = fakeStorage()
-    storage.setItem('signalk-ais-statistics.layer.radar', 'off')
-    vi.stubGlobal('localStorage', storage)
-    expect(layerVisible('sectorsA')).toBe(false)
-    expect(layerVisible('sectorsB')).toBe(false)
-    saveLayerVisible('sectorsB', true)
-    expect(layerVisible('sectorsB')).toBe(true)
-    expect(layerVisible('sectorsA')).toBe(false)
-  })
-
   it('hides the cells beyond the cap until switched on', () => {
     vi.stubGlobal('localStorage', fakeStorage())
     expect(layerVisible('capped')).toBe(false)

@@ -1,6 +1,5 @@
 // Hash routes: #/overview, #/charts, #/sectors and #/map, with the window as
-// a query part, for example #/charts?window=7d. #/radar, the sectors view's
-// earlier name, still opens it.
+// a query part, for example #/charts?window=7d.
 export const VIEWS = ['overview', 'charts', 'sectors', 'map'] as const
 export type View = (typeof VIEWS)[number]
 export const WINDOWS = ['1h', '24h', '7d'] as const
@@ -12,8 +11,7 @@ export interface Route {
 }
 
 export function parseRoute(hash: string): Route {
-  const [raw = '', query = ''] = hash.replace(/^#\/?/, '').split('?')
-  const path = raw === 'radar' ? 'sectors' : raw
+  const [path = '', query = ''] = hash.replace(/^#\/?/, '').split('?')
   const view = (VIEWS as readonly string[]).includes(path)
     ? (path as View)
     : 'overview'

@@ -3,7 +3,7 @@
 // and the choice is remembered per browser.
 export type Layer = 'cells' | 'capped' | 'sectorsA' | 'sectorsB'
 
-const key = (l: string) => `signalk-ais-statistics.layer.${l}`
+const key = (l: Layer) => `signalk-ais-statistics.layer.${l}`
 
 /** Cells beyond the cap start hidden; the other layers start shown. */
 const DEFAULTS: Record<Layer, boolean> = {
@@ -13,21 +13,9 @@ const DEFAULTS: Record<Layer, boolean> = {
   sectorsB: true,
 }
 
-/**
- * An earlier single "radar" toggle covered both classes; its saved choice
- * stands for each sector layer until that layer is switched itself.
- */
-const LEGACY: Partial<Record<Layer, string>> = {
-  sectorsA: 'radar',
-  sectorsB: 'radar',
-}
-
 export function layerVisible(l: Layer): boolean {
   try {
-    const legacy = LEGACY[l]
-    const v =
-      localStorage.getItem(key(l)) ??
-      (legacy === undefined ? null : localStorage.getItem(key(legacy)))
+    const v = localStorage.getItem(key(l))
     return v === null ? DEFAULTS[l] : v === 'on'
   } catch {
     return DEFAULTS[l]
