@@ -136,6 +136,7 @@ describe('REST API', () => {
       '/overlay/coverage.geojson',
       '/sectors',
       '/series',
+      '/sources',
       '/status',
       '/summary',
       '/weather',

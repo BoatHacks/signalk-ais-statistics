@@ -38,10 +38,22 @@ describe('hash routes', () => {
     expect(parseRoute('#/compare?date=2030-01-08&days=3', now)).toEqual({
       view: 'compare',
       window: '24h',
-      compare: { date: '2030-01-08', days: 3 },
+      compare: { date: '2030-01-08', days: 3, source: 'all' },
     })
+    expect(
+      parseRoute('#/compare?date=2030-01-08&days=3&source=nmea0183', now)
+        .compare?.source,
+    ).toBe('nmea0183')
+    expect(
+      parseRoute('#/compare?date=2030-01-08&days=3&source=a.b', now).compare
+        ?.source,
+    ).toBe('all')
     // The default: seven days each side, the after window ending today.
-    expect(defaultCompare(now)).toEqual({ date: '2030-01-14', days: 7 })
+    expect(defaultCompare(now)).toEqual({
+      date: '2030-01-14',
+      days: 7,
+      source: 'all',
+    })
     for (const hash of [
       '#/compare',
       '#/compare?date=2030-02-30&days=0',
@@ -56,8 +68,15 @@ describe('hash routes', () => {
       formatRoute({
         view: 'compare',
         window: '7d',
-        compare: { date: '2030-01-08', days: 7 },
+        compare: { date: '2030-01-08', days: 7, source: 'all' },
       }),
     ).toBe('#/compare?date=2030-01-08&days=7')
+    expect(
+      formatRoute({
+        view: 'compare',
+        window: '7d',
+        compare: { date: '2030-01-08', days: 7, source: 'N2KAnalyzerOut' },
+      }),
+    ).toBe('#/compare?date=2030-01-08&days=7&source=N2KAnalyzerOut')
   })
 })
