@@ -216,9 +216,13 @@ describe('plugin', () => {
     expect(values.get(paths.healthImplausibleJumps)).toBe(1)
     expect(values.get(paths.healthNoOwnPosition)).toBe(0)
     const lr = (await r.call('/longrange', { window: '24h' })).body as {
-      fastest: { mmsi: string; implausible: boolean }[]
+      fastest: unknown[]
+      implausibleJumps: { mmsi: string; implausible: boolean }[]
     }
-    expect(lr.fastest).toMatchObject([{ mmsi: '999000002', implausible: true }])
+    expect(lr.fastest).toEqual([])
+    expect(lr.implausibleJumps).toMatchObject([
+      { mmsi: '999000002', implausible: true },
+    ])
     const summary = (await r.call('/summary', { window: '1h' })).body as {
       health: { received: number }
     }

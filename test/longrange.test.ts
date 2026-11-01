@@ -147,9 +147,11 @@ describe('LongRangeLog fastest list', () => {
     log.addSpeed(speed('999000001', 15, T0 + 2000), {})
     log.addSpeed(speed('999000002', 300, T0 + 3000), {})
     const f = await log.fastest(T0, T0 + HOUR_MS, 10)
-    expect(f.map((x) => x.mmsi)).toEqual(['999000002', '999000001'])
-    expect(f[0]!.implausible).toBe(true)
-    expect(f[1]).toMatchObject({
+    expect(f.map((x) => x.mmsi)).toEqual(['999000001'])
+    const jumps = await log.fastest(T0, T0 + HOUR_MS, 10, true)
+    expect(jumps.map((x) => x.mmsi)).toEqual(['999000002'])
+    expect(jumps[0]!.implausible).toBe(true)
+    expect(f[0]).toMatchObject({
       time: new Date(T0 + 1000).toISOString(),
       speedMps: 20,
       sogMps: 19.5,
@@ -158,6 +160,21 @@ describe('LongRangeLog fastest list', () => {
       cls: 'A',
       gapS: 30,
     })
+  })
+
+  it('keeps plausible speeds and implausible jumps in separate lists', async () => {
+    const log = new LongRangeLog(await dir(), 14, T0)
+    // A day full of bogus jumps does not push out a real fast craft.
+    for (let i = 0; i < MAX_FASTEST_PER_DAY + 5; i++)
+      log.addSpeed(speed(`9991${String(i).padStart(5, '0')}`, 100 + i), {})
+    log.addSpeed(speed('999000009', 25), {})
+    // One sender can be in both: its fastest real speed and its worst jump.
+    log.addSpeed(speed('999000009', 500), {})
+    const f = await log.fastest(T0, T0 + 1, 100)
+    expect(f.map((x) => [x.mmsi, x.speedMps])).toEqual([['999000009', 25]])
+    const jumps = await log.fastest(T0, T0 + 1, 100, true)
+    expect(jumps).toHaveLength(MAX_FASTEST_PER_DAY)
+    expect(jumps[0]).toMatchObject({ mmsi: '999000009', speedMps: 500 })
   })
 
   it('keeps only the fastest senders of a day', async () => {
