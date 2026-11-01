@@ -64,6 +64,7 @@ unit preferences convert them for display. A blank unit is a plain count.
 | `vessels.byGroup.<group>.last24h` | | gauge | interval | Distinct vessels per type group, last 24 hours |
 | `coverage.cells.today` | | gauge | interval | Coverage cells today (UTC) |
 | `coverage.area.today` | m2 | gauge | interval | Area of the coverage cells today (UTC) |
+| `propagation.ratio` | ratio | gauge | interval | Recent p99 distance over the normal p99 (only with `propagationAlerts`) |
 | `sources.<label>.messages.total` | | counter | interval | Decoded AIS messages on one server event (only with `sourceStatistics`) |
 | `sources.<label>.positions.classA` | | counter | interval | Class A position reports on one server event |
 | `sources.<label>.positions.classB` | | counter | interval | Class B position reports on one server event |
@@ -82,6 +83,22 @@ on: one set of 43 counters per configured server event, beside the main
 figures, which still count every event (a receiver on two events counts
 twice there). There are no per-source gauges; window figures come from
 the bins, as for the main statistics.
+
+`propagation.ratio` exists only while the `propagationAlerts` setting is
+on, and is left out until a normal range is known. It divides the p99
+distance of the recent window (`propagationWindowMinutes`, default 15) by
+the median hourly p99 of the last 7 days (SPEC 2.10); 2 means range is
+twice normal.
+
+## Notification
+
+With `propagationAlerts` on, the plugin also raises the SignalK
+notification `notifications.sensors.ais.statistics.propagation`. Its value
+is an object, not a number: `state` (`warn` by default, a setting),
+`method` (`["visual"]` by default, a setting) and `message`, which names the
+ratio, both distances, the vessels beyond normal and their sectors. It is
+sent when the alert starts, and with `state: "normal"` when it clears and
+when the plugin stops.
 
 The `health.*` counters only count: a duplicate, a jump or a message
 received without an own position still counts everywhere else (SPEC 2.8).

@@ -264,6 +264,47 @@ whether alerts are suppressed while underway.
   filled again.
 - The mode is decided at reception and never revised: a vessel that has
   just stopped counts as underway for the first `modeDriftMinutes`.
+### 2.10 Propagation alerts
+
+With `propagationAlerts` on (off by default, chosen by the maintainer),
+the plugin raises a SignalK notification while reception range is well
+above normal, as in a tropospheric ducting or sporadic E opening, so the
+crew can watch it live instead of finding it in the long-range log (2.7)
+the next day.
+
+- **Normal range**: the median of the hourly p99 distance over the last 7
+  days, from hours that have ended with at least 20 position reports (the
+  sectors' minimum, 2.6), each hour's p99 capped at its farthest
+  reception. It is read once an hour, and again when a history provider
+  comes or goes, through the same hourly distance series the charts use,
+  so it comes from the bin counters with `last` and `max` only; in
+  live-only mode it comes from the live hour buckets, at most 24 hours. No
+  time-of-day baseline. Alerts are armed once 24 qualifying hours are
+  known.
+- **Check**: once a minute, over the recent window
+  (`propagationWindowMinutes`, default 15): the p99 of the window's minute
+  buckets is at least `propagationFactor` (2) times the normal p99, and at
+  least `propagationMinVessels` (3) distinct MMSIs were received beyond
+  the normal p99 distance, each counted once at its farthest report in the
+  window. The maximum is never used, so one bogus position cannot fire the
+  alert (2.3).
+- **Hysteresis by time** (chosen by the maintainer): the alert fires once
+  both conditions have held at every check for
+  `propagationSustainMinutes` (15), and clears once they have failed at
+  every check for the same time. There is no second threshold.
+- **Underway**: with `propagationSuppressUnderway` on (the default), the
+  alert is held back while the own vessel is underway (2.9), since range then
+  changes with the position anyway. The detector keeps evaluating; the
+  state reads `suppressed`, and the notification returns to normal. While
+  the mode is unknown nothing is held back.
+- **Notification**: `notifications.sensors.ais.statistics.propagation`
+  (6.2), state `propagationNotificationState` (`warn`) and methods
+  `propagationNotificationMethods` (`visual`). The message names the
+  ratio, the recent and normal p99, the vessels beyond normal and their
+  sectors. It goes back to `normal` when the alert clears and when the
+  plugin stops.
+- The detector is a side view of the located reports; nothing is dropped
+  from any statistic, and it keeps no state across restarts.
 
 ## 3. State / Lifecycle Model
 
@@ -293,6 +334,7 @@ subtraction.
 | gauge | sector p99, rolling 1 h | p99 distance per sector and class |
 | gauge | unique vessels, rolling 1 h and 24 h | total and per type group |
 | gauge | coverage | cells and area covered today |
+| gauge | propagation ratio (opt-in) | recent p99 over the normal p99 (2.10) |
 
 ### 4.2 Live state (kept in memory)
 
@@ -307,6 +349,9 @@ subtraction.
   anchor per sender (2.8), pruned after `targetExpirySeconds`.
 - The own vessel mode (2.9): the last `navigation.state` and at most 60
   own position samples. Lost on restart; drift starts unknown again.
+- With propagation alerts on (2.10): the normal range, the farthest report
+  per sender and minute in the recent window, the alert state and the last
+  60 checks.
 
 History is not kept by the plugin. See section 8.
 
@@ -383,6 +428,7 @@ effective live settings.
 | `GET /overlay/coverage.geojson` | the plotter overlay's GeoJSON: the 7 day footprint and the 24 hour sector wedges of class A and B |
 | `GET /sources` | the sources counted on their own, `{ label, event }` each; empty while `sourceStatistics` is off |
 | `GET /status` | live state: tracked targets, own position age, the own vessel `mode` (`stationary`, `underway` or `unknown`, 2.9) and `modeSource` (`state`, `drift` or null), history reachable or not, and per source its messages and health counts since the start |
+| `GET /propagation` | the propagation alert (2.10): `{ enabled: false }` while off; otherwise `state` (`unarmed`, `normal`, `alert` or `suppressed`), `ratio`, `p99M`, `baselineM`, `baselineHours`, `vessels` beyond normal, their `sectors`, `since`, the own `mode`, the `rule` in effect and the last 60 `checks` (time, armed, ratio, vessels), from which the web app replays trial settings |
 | `POST /settings` | saves live settings (body `{ "coverageDistancePercentile": 95 }`), readwrite users only; see above |
 
 The downloads (decisions on #19) take the windows `24h`, `7d` and `all`.
@@ -465,6 +511,16 @@ Gauges, in SI units like every SignalK path:
 - `vessels.last1h` and `vessels.last24h`, and
   `vessels.byGroup.<group>.last1h` and `.last24h`
 - `coverage.area.today` in square metres, and `coverage.cells.today`
+- With `propagationAlerts` on, `propagation.ratio`: the recent p99 over the
+  normal p99 (2.10), unitless, at every interval once a normal range is
+  known
+
+With `propagationAlerts` on, the plugin also raises the notification
+`notifications.sensors.ais.statistics.propagation` (2.10). It is the one
+output that is not a number and not under `sensors.ais.statistics`: its
+value is `{ state, method, message }`, sent when the alert starts and
+with `state: normal` when it clears and on stop. History providers do not
+need to store it.
 
 On start the plugin suggests default metadata for the distance and area
 gauges (`units` `m` or `m2`, and the `distance` display unit category) with
@@ -614,6 +670,14 @@ A SignalK web app, listed in the admin UI, with:
   source picker limits the table to one server event; the sectors and
   coverage stay combined and the view says so. The state is in the hash,
   not in the plugin config. Markers for a change on the charts come later.
+- Propagation alert (2.10): while the server's notification is active, a
+  banner under the offline banner shows its message, live over the one
+  WebSocket, and links to the sectors page. There, with alerts on, a card
+  at the top shows the state (learning the normal range, no alert, alert
+  since, or held back while underway) and sliders for the factor, vessel
+  count and duration (9.1). The web app replays the last hour of checks
+  with the slider values and says whether an alert would be active now, so
+  the effect shows before saving.
 - Settings: a collapsed panel at the foot of every page lists the settings
   in effect, read only, and says where to change them.
 
@@ -634,7 +698,7 @@ It follows the SignalK plugin UI guideline the maintainer adopted (a dark
 - Ship time without a zone suffix when `environment.time.timezoneOffset`
   is published, otherwise UTC with `Z`; dates as `YYYY-MM-DD`.
 - Views selected by hash routes (`#/charts?window=7d`); one WebSocket for
-  mode, time offset and internet state, throttled to one update per 5 s,
+  mode, time offset, internet state and the propagation alert, throttled to one update per 5 s,
   reconnecting with backoff and showing an offline banner while down.
 - A button or tab whose click starts a load fades out and in, one cycle
   per 0.5 s, until the load ends (chosen by the maintainer). Loads under
@@ -694,7 +758,8 @@ directly. Consequences:
   with the cell files. The downloads (6.1) read these files, so
   `coverageRetentionDays` is also how far back an export reaches. A version 1 file loads with an empty fastest list,
   and version 1 code reads a version 2 file's farthest entries and ignores
-  the rest. Everything else is stateless across restarts; the
+  the rest. Everything else is stateless across restarts, including the
+  propagation alert (2.10), which learns its normal range from history; the
   last counter values are published once more on stop.
 
 ## 9. Configuration
@@ -715,6 +780,14 @@ directly. Consequences:
 | `jumpSpeedLimitAircraftKnots` | 600 | the same for message 9 (SAR aircraft) |
 | `modeDriftRadiusMeters` | 200 | without a recognised `navigation.state`, stationary while the own position stays within this distance (2.9); 50 to 2000 |
 | `modeDriftMinutes` | 10 | for this long; 2 to 60 |
+| `propagationAlerts` | false | raise the propagation alert (2.10) and publish `propagation.ratio` (chosen by the maintainer) |
+| `propagationFactor` | 2 | recent p99 over the normal p99 that counts as an opening; 1.2 to 10; live setting |
+| `propagationMinVessels` | 3 | distinct vessels beyond the normal p99 in the window; 1 to 50; live setting |
+| `propagationSustainMinutes` | 15 | how long both conditions must hold to fire, and fail to clear; 1 to 60; live setting |
+| `propagationWindowMinutes` | 15 | the recent window of the check; 5 to 60 (a setting of its own, chosen by the maintainer) |
+| `propagationNotificationState` | `warn` | `alert`, `warn`, `alarm` or `emergency` |
+| `propagationNotificationMethods` | `visual` | `visual` and `sound`; visual alone asks displays to stay silent |
+| `propagationSuppressUnderway` | true | hold the alert back while underway |
 | `weatherPaths` | `environment.outside.pressure`, `environment.outside.temperature`, `environment.outside.relativeHumidity`, `environment.water.temperature` | numeric paths of this vessel for range vs weather (7), read from history; at most 8 (one history request), dotted names without wildcards; an empty list hides the section |
 
 ### 9.1 Live settings
@@ -732,9 +805,13 @@ The live settings are listed once, in `LIVE_SETTINGS` in `src/config.ts`:
 | Option | Web app control |
 |---|---|
 | `coverageDistancePercentile` | slider on the map, 50 to 100; tried with `GET /coverage?cap=` |
+| `propagationFactor` | slider on the sectors page, 1.2 to 10 |
+| `propagationMinVessels` | slider on the sectors page, 1 to 50 |
+| `propagationSustainMinutes` | slider on the sectors page, 1 to 60 minutes |
 
-The alert factor, vessel count and duration of #13 join this list when they
-land. The plotter overlay always uses the saved value.
+The alert sliders are tried by replaying the last hour of checks from
+`GET /propagation` in the web app, so they need no query parameter. The
+plotter overlay always uses the saved coverage cap.
 
 ## 10. MVP Scope
 
@@ -915,6 +992,18 @@ help of `max` (6.2). Verified across a plugin restart on the test server.
   stopped counts as underway for the first minutes. There is no footprint
   per mooring spot (the #14 date compare covers a change of berth), and
   the plotter overlay stays one combined footprint.
+- **Propagation alerts compare against a 7 day median (chosen by the
+  maintainer, #13).** Normal is the median hourly p99 of 7 days, without a
+  time-of-day baseline; an opening is 2 times that, with 3 vessels beyond
+  it, for 15 minutes, all three settings and live in the web app. Distinct
+  vessels guard against one bogus position, so the trigger uses the p99
+  and never the maximum. The alert clears after the same time without the
+  conditions, rather than at a lower threshold, and the recent window is a
+  setting of its own. Alerts are off by default; when on they are a
+  `warn`, visual only, and held back while underway, all settings. The
+  baseline is read from the bin counters through history rather than
+  stored, so the plugin owns no new state. Per-source alerts are not
+  planned.
 
 ## 13. Open Questions
 
@@ -928,3 +1017,9 @@ unverified.
    GeoJSON source it handles smoothly (hundreds of cells over 7 days) is
    untested. Whether the class A teal and class B orange sector outlines
    read well on chart water and land there is also unchecked.
+
+2. **How displays show the propagation alert.** How the notification
+   (2.10) appears in the admin UI, Freeboard-SK and KIP, and whether
+   `method: ["visual"]` keeps each of them silent, is unchecked (the
+   maintainer chose to skip the check for now). Check on a development
+   server and record it in docs/findings.md.

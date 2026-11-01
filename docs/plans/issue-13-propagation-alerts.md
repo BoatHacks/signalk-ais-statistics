@@ -70,12 +70,15 @@ shape and `normal` on stop; the ratio path; the route; the banner helper
 under `test/web`.
 
 ## Implementation Steps
-- [ ] Paths in `src/paths.ts`: `propagationRatio` and the notification path
-- [ ] Config options, schema and `resolveConfig` clamping
-- [ ] `src/propagation.ts`: detector, baseline helper, per-MMSI window
-- [ ] Wiring in `plugin.ts` (minute timer, hourly baseline, stop), publish, metadata
-- [ ] `GET /propagation`, web banner and WebSocket path
-- [ ] Tests (separate commit), docs, CHANGELOG
+- [x] Paths in `src/paths.ts`: `propagationRatio` and the notification path
+- [x] Config options, schema and `resolveConfig` clamping
+- [x] `src/propagation.ts`: detector, baseline helper, per-MMSI window
+- [x] Wiring in `plugin.ts` (minute timer, hourly baseline, stop), publish, metadata
+- [x] `GET /propagation`, web banner and WebSocket path
+- [x] Live settings for factor, vessels and duration, with a trial replay
+  of the last hour of checks on the sectors page
+- [x] Tests (separate commit), docs, CHANGELOG
+- [x] Pass the #17 mode (`VesselMode.current`) to the detector
 
 ## Files to Create/Modify
 src/propagation.ts (new), src/paths.ts, src/config.ts, src/plugin.ts,
@@ -111,12 +114,18 @@ vessel rule already covers a single jumping vessel. #19: the ratio series
 is exportable like any path.
 
 ## Open Points
-- How a plugin notification delta shows in the admin UI, Freeboard-SK and
-  KIP, and that `method: ['visual']` stays silent, is unverified; check on
-  the development server the maintainer names and record it in
-  docs/findings.md.
-- To confirm with the maintainer: the on/off option, time-based hysteresis,
-  and the fixed 15 minute evaluation window. None changes decisions 1 to 4.
-- With `coverageRetentionDays` below 7 nothing changes, since the baseline
-  comes from history; with a provider retention under 7 days the baseline
-  covers what history holds.
+Answered by the maintainer on 2026-11-01, after this plan was written:
+- On/off switch: yes, `propagationAlerts`, off by default.
+- Clearing: once the conditions failed for the sustain time, no second
+  threshold.
+- Window: a setting of its own, `propagationWindowMinutes`, default 15
+  (5 to 60).
+- Display check in the admin UI, Freeboard-SK and KIP: skipped for now,
+  listed in SPEC 13.
+- Live controls: factor, vessel count and duration join `LIVE_SETTINGS`
+  (decision C2); the web app tries them by replaying the last 60 checks
+  from `GET /propagation`, so no trial query parameter is needed.
+
+With `coverageRetentionDays` below 7 nothing changes, since the baseline
+comes from history; with a provider retention under 7 days the baseline
+covers what history holds.
