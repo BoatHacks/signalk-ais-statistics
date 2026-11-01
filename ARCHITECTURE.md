@@ -166,8 +166,7 @@ metered state when present, and a manual choice is remembered in
 `localStorage`. Toggles show or hide the coverage cells, the cells beyond
 the distance cap (fetched with `all=true`, drawn dashed, off by default)
 and the class A and B sectors (`layers.ts`, also remembered in
-`localStorage`; a saved choice for the older single radar toggle carries
-over to both). The sectors view draws the sector maxima as ticks with a wide invisible hover line,
+`localStorage`). The sectors view draws the sector maxima as ticks with a wide invisible hover line,
 leaves a quarter more room on the scale for them, and lists `/longrange`
 in a table. The map's sector wedges
 come from the overlay GeoJSON route, and the cell and sector colours are

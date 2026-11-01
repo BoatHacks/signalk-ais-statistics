@@ -237,7 +237,7 @@ including when it is embedded in another page such as an infodisplay panel.
 |---|---|
 | `GET /summary?window=24h` | headline figures: messages, positions, vessels by group, distance avg, p95, p99 and max |
 | `GET /series?metric=&resolution=&from=&to=` | time series for the charts, read from history; `metric` is `messages`, `positions`, `distance` or `vessels`, `resolution` in seconds (at least 60, at most 2000 points) |
-| `GET /sectors?window=24h&class=a\|b\|all` | 24 sectors with count and p99 distance (the highest hourly p99 in the window, see 2.6), and the farthest reception `maxM` with its time: `maxAt` when known exactly, otherwise `maxHour`, the start of the hour it fell in. `GET /radar`, the route's earlier name, answers the same |
+| `GET /sectors?window=24h&class=a\|b\|all` | 24 sectors with count and p99 distance (the highest hourly p99 in the window, see 2.6), and the farthest reception `maxM` with its time: `maxAt` when known exactly, otherwise `maxHour`, the start of the hour it fell in |
 | `GET /coverage?window=7d&all=false` | cell ids, GeoJSON for the map, covered area in m²; windows `24h` (today) and `7d`; `all=true` adds the cells beyond the distance cap, marked `capped` |
 | `GET /longrange?window=24h` | the 25 farthest entries of the long-range log (2.7) in the window, farthest first; windows `24h` and `7d` |
 | `GET /overlay/coverage.geojson` | the plotter overlay's GeoJSON: the 7 day footprint and the 24 hour sector wedges of class A and B |
@@ -358,8 +358,7 @@ A SignalK web app, listed in the admin UI, with:
 - Overview: type group counts, class A/B split, rates, distance p95 and p99.
 - Charts: positions and messages per hour split by class, distance avg,
   p95 and p99 per hour (max shown separately and marked untrusted).
-- Sectors: the 24-sector bearing view for class A and B (`#/sectors`; the
-  older `#/radar` link opens it too), with a thin tick
+- Sectors: the 24-sector bearing view for class A and B (`#/sectors`), with a thin tick
   per sector out to its farthest reception (hover shows distance and time;
   a tick beyond the scale stops at the rim and is dashed), and below it a
   table of the farthest receptions from the long-range log (2.7): time,
@@ -584,8 +583,8 @@ help of `max` (6.2). Verified across a plugin restart on the test server.
 - **The bearing view is called "sectors", not "radar" (chosen by the
   maintainer).** "Radar" invited confusion with a real radar overlay on
   the plotter. The view, its route, the overlay layers and feature kinds
-  use "sectors"; `GET /radar` and `#/radar` stay as aliases so older links
-  keep working. On the map and in the plotter the sectors are drawn per
+  use "sectors". The old `GET /radar` and `#/radar` are gone rather than
+  kept as aliases, so no compatibility code is carried into 1.0.0. On the map and in the plotter the sectors are drawn per
   class, in the same colours as the sectors view.
 
 ## 13. Open Questions

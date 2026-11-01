@@ -165,19 +165,19 @@ export function registerRoutes(router: RouterLike, deps: ApiDeps): void {
     ),
   )
 
-  const sectors = handle((req) => {
-    const cls = param(req, 'class') ?? 'all'
-    if (cls !== 'all' && !SECTOR_CLASSES.includes(cls as SectorClass))
-      throw new BadRequest('class must be a, b or all')
-    return query().sectors(
-      windowParam(req, '24h'),
-      cls as SectorClass | 'all',
-      now(),
-    )
-  }, cachedRoute())
-  r.get('/sectors', sectors)
-  // The route's earlier name, kept so older links and scripts work.
-  r.get('/radar', sectors)
+  r.get(
+    '/sectors',
+    handle((req) => {
+      const cls = param(req, 'class') ?? 'all'
+      if (cls !== 'all' && !SECTOR_CLASSES.includes(cls as SectorClass))
+        throw new BadRequest('class must be a, b or all')
+      return query().sectors(
+        windowParam(req, '24h'),
+        cls as SectorClass | 'all',
+        now(),
+      )
+    }, cachedRoute()),
+  )
 
   r.get(
     '/series',
