@@ -55,7 +55,7 @@ describe('overlay manifest', () => {
       ['cells', 'fill', 'cell'],
       ['cell-outlines', 'line', 'cell'],
       ['sectors', 'line', 'sector'],
-      ['sector-max', 'line', 'sector-max'],
+      ['sector-max', 'circle', 'sector-max'],
     ])
   })
 })
@@ -79,7 +79,7 @@ describe('sectorFeatures', () => {
     })),
   }
 
-  it('draws a tick from the wedge out to the farthest reception', () => {
+  it('puts one dot at the farthest reception and outlines its sector', () => {
     const withMax: SectorStats = {
       ...stats,
       sectors: stats.sectors.map((s) =>
@@ -90,21 +90,31 @@ describe('sectorFeatures', () => {
             : s,
       ),
     }
-    const ticks = (
-      sectorFeatures(withMax, { lat: 0, lon: 0 }) as {
-        properties: Record<string, unknown>
-        geometry: { type: string; coordinates: number[][] }
-      }[]
-    ).filter((f) => f.properties.kind === 'sector-max')
-    expect(ticks.map((t) => t.properties.sector)).toEqual([2, 5])
-    expect(ticks[0]!.geometry.type).toBe('LineString')
-    expect(ticks[0]!.properties).toMatchObject({
+    const f = sectorFeatures(withMax, { lat: 0, lon: 0 }) as {
+      properties: Record<string, unknown>
+      geometry: { type: string; coordinates: number[] }
+    }[]
+    const dots = f.filter((x) => x.properties.kind === 'sector-max')
+    expect(dots).toHaveLength(1)
+    expect(dots[0]!.geometry.type).toBe('Point')
+    expect(dots[0]!.properties).toMatchObject({
+      sector: 2,
       maxM: 300 * 1852,
       maxAt: '2030-01-01T12:00:00.000Z',
     })
-    // Sector 5 has no wedge, so its tick starts at own position.
-    expect(ticks[1]!.geometry.coordinates[0]).toEqual([0, 0])
-    expect(ticks[1]!.properties.maxHour).toBe('2030-01-01T11:00:00.000Z')
+    // 300 nmi along 22.5 degrees from 0, 0 lies north-east.
+    expect(dots[0]!.geometry.coordinates[0]).toBeGreaterThan(0)
+    expect(dots[0]!.geometry.coordinates[1]).toBeGreaterThan(0)
+    const wedge = f.find((x) => x.properties.kind === 'sector')!
+    expect(wedge.properties.farthest).toBe(true)
+  })
+
+  it('draws no dot and no bold outline without a farthest reception', () => {
+    const f = sectorFeatures(stats, { lat: 0, lon: 0 }) as {
+      properties: Record<string, unknown>
+    }[]
+    expect(f.some((x) => x.properties.kind === 'sector-max')).toBe(false)
+    expect(f.some((x) => x.properties.farthest)).toBe(false)
   })
 
   it('tags each feature with its class and keeps the ids apart', () => {

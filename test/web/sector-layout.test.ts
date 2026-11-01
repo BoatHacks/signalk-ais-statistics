@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { SectorStats } from '../../web/src/api'
-import { TICK_ROOM, sectorLayout } from '../../web/src/ticks'
+import { SCALE_ROOM, sectorLayout } from '../../web/src/sector-layout'
 
 const RIM = 100
 
@@ -26,62 +26,58 @@ function stats(sectors: [number | null, number | null][]): SectorStats {
 }
 
 describe('sectorLayout', () => {
-  it('gives every sector with a reception a tick, also one at its wedge', () => {
-    // Sector 4: farthest reception at the wedge's edge, as after the p99 cap.
-    const { ticks } = sectorLayout(
+  it('puts one dot in the sector with the farthest reception', () => {
+    const { max, farthest } = sectorLayout(
       stats([
         [10_000, 20_000],
         [null, null],
         [null, 5_000],
-        [null, null],
         [40_000, 40_000],
       ]),
       RIM,
     )
-    expect(ticks[0]).not.toBeNull()
-    expect(ticks[1]).toBeNull()
-    expect(ticks[2]!.wedge).toBe(0)
-    expect(ticks[4]!.outer).toBe(ticks[4]!.wedge)
-    expect(ticks[4]!.outer).toBeGreaterThan(0)
+    expect(max).toBe(40_000)
+    expect(farthest).toEqual({ sector: 3, r: RIM, clipped: false })
   })
 
-  it('marks only the farthest reception of the chart', () => {
-    const { ticks } = sectorLayout(
+  it('takes the first sector when two tie', () => {
+    const { farthest } = sectorLayout(
       stats([
-        [10_000, 20_000],
-        [10_000, 30_000],
-        [10_000, 30_000],
+        [10_000, 11_000],
+        [10_000, 12_000],
+        [10_000, 12_000],
       ]),
       RIM,
     )
-    expect(ticks.map((t) => t?.farthest ?? false).filter(Boolean)).toHaveLength(
-      1,
-    )
-    expect(ticks[1]!.farthest).toBe(true)
-    expect(ticks[0]!.farthest).toBe(false)
+    expect(farthest!.sector).toBe(1)
+    expect(farthest!.r).toBe(RIM)
   })
 
-  it('stops ticks beyond the scale at the rim', () => {
-    const { max, ticks } = sectorLayout(
+  it('puts a farthest reception beyond the scale on the rim', () => {
+    const { max, farthest } = sectorLayout(
       stats([
         [10_000, 12_000],
         [10_000, 1_000_000],
       ]),
       RIM,
     )
-    expect(max).toBe(10_000 * TICK_ROOM)
-    expect(ticks[1]).toMatchObject({
-      outer: RIM,
-      clipped: true,
-      farthest: true,
-    })
-    expect(ticks[0]!.clipped).toBe(false)
-    expect(ticks[0]!.outer).toBeCloseTo((12_000 / max) * RIM)
+    expect(max).toBe(10_000 * SCALE_ROOM)
+    expect(farthest).toEqual({ sector: 1, r: RIM, clipped: true })
+  })
+
+  it('follows a shared scale', () => {
+    const { max, farthest } = sectorLayout(
+      stats([[10_000, 10_000]]),
+      RIM,
+      20_000,
+    )
+    expect(max).toBe(20_000)
+    expect(farthest!.r).toBeCloseTo(RIM / 2)
   })
 
   it('draws nothing without receptions', () => {
-    const { max, ticks } = sectorLayout(stats([]), RIM)
+    const { max, farthest } = sectorLayout(stats([]), RIM)
     expect(max).toBe(0)
-    expect(ticks.every((t) => t === null)).toBe(true)
+    expect(farthest).toBeNull()
   })
 })
