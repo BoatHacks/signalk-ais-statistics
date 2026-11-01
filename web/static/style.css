@@ -671,3 +671,8 @@ a.download[aria-disabled='true']:hover {
 table.compare th[scope='row'] {
   font-weight: normal;
 }
+.long-range table.compare th,
+.long-range table.compare td {
+  white-space: normal;
+  padding: 6px;
+}

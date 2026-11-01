@@ -886,8 +886,9 @@ class CompareView extends HTMLElement implements ViewElement {
     ])
     const label = (w: CompareWindow) =>
       w.fromDay === w.toDay ? w.fromDay : `${w.fromDay} to ${w.toDay}`
-    this.heads!.before.textContent = `Before, ${label(before)}`
-    this.heads!.after.textContent = `After, ${label(after)}`
+    // Two lines, so the table fits a phone.
+    this.heads!.before.replaceChildren('Before', el('br'), label(before))
+    this.heads!.after.replaceChildren('After', el('br'), label(after))
     this.chartHeads!.before.textContent = `Before, ${label(before)}`
     this.chartHeads!.after.textContent = `After, ${label(after)}`
 
