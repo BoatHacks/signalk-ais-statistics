@@ -392,6 +392,7 @@ export function createPlugin(app: ServerAPI): Plugin {
         query: () => state?.query,
         coverage: () => state?.coverage,
         longRange: () => state?.longRange,
+        retentionDays: () => state?.config.coverageRetentionDays,
         status,
         saveSettings,
         overlayExtras: async () => {
