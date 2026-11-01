@@ -121,3 +121,17 @@ remains.
       the farthest receptions with names and both positions, and an "All
       cells" map toggle for the cells beyond the distance cap
       ([item-10](item-10-long-range-receptions.md), 0.4.0)
+
+## 11. Road to 1.0.0
+
+All seven issues land before 1.0.0, with 0.x releases on the way. The
+maintainer's answers to each issue's open questions are in its
+"Decisions" comment; each plan lists what is still open.
+
+- [ ] Propagation alerts (#13, [plan](issue-13-propagation-alerts.md))
+- [ ] Antenna and receiver comparison (#14, [plan](issue-14-source-comparison.md))
+- [ ] Range vs weather (#15, [plan](issue-15-range-vs-weather.md))
+- [ ] Message health (#16, [plan](issue-16-message-health.md))
+- [ ] Stationary vs underway coverage (#17, [plan](issue-17-stationary-underway.md))
+- [ ] Export (#19, [plan](issue-19-export.md))
+- [ ] 1.0 basics: settings, README, tests, path docs (#20, [plan](issue-20-basics.md))
