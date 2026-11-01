@@ -83,6 +83,31 @@ describe('Query with history', () => {
     expect(all.sectors[13]!.count).toBe(180)
   })
 
+  it('adds the open hour of the radar from live data, once', async () => {
+    const history = new FakeHistory()
+    const agg = new Aggregator(T0)
+    run(agg, history, T0, 120)
+    // Sector paths go out hourly, so history has nothing of the open hour.
+    run(agg, new FakeHistory(), T0 + 120 * MINUTE_MS, 30)
+    const q = new Query(agg, () => new HistoryApiReader(history))
+    for (const w of ['24h', '7d'] as const) {
+      const r = await q.radar(w, 'a', T0 + 150 * MINUTE_MS)
+      expect(r.source).toBe('history')
+      expect(r.sectors[3]!.count).toBe(150)
+    }
+  })
+
+  it('starts history series on a whole bucket', async () => {
+    const history = new FakeHistory()
+    const agg = new Aggregator(T0)
+    run(agg, history, T0, 180)
+    const q = new Query(agg, () => new HistoryApiReader(history))
+    const from = T0 + 50 * MINUTE_MS
+    const s = await q.series('positions', 3600, from, from + 2 * HOUR_MS)
+    expect(s.times[0]).toBe(new Date(T0).toISOString())
+    expect(s.classA).toEqual([60, 60, 60])
+  })
+
   it('returns hourly series of positions and distance', async () => {
     const history = new FakeHistory()
     const agg = new Aggregator(T0)

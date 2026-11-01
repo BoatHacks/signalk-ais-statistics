@@ -32,6 +32,13 @@ describe('increments', () => {
     ])
   })
 
+  it('counts a restart that does not drop below the previous bucket', () => {
+    // The counter reached 1 and restarted at 0 inside the second bucket.
+    expect(increments([0, 0], [0, 1])).toEqual([1])
+    // 10 to 12, restart, then up to 11 inside the second bucket.
+    expect(increments([10, 11], [10, 12])).toEqual([2 + 11])
+  })
+
   it('ignores max where it adds nothing', () => {
     expect(increments([0, 5, 9], [null, 5, 9])).toEqual([5, 4])
     expect(increments([100, 120, 7], [100, 120, null])).toEqual([20, 7])
