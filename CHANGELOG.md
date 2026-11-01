@@ -8,6 +8,20 @@ uses [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Compare view (#14, `#/compare`): the days before a date next to the
+  days from it on (1 to 7 days each), with messages, positions by class,
+  distance figures, coverage cells and area, the change between them, and
+  both sector charts on one scale. `GET /summary` and `GET /sectors` take
+  `from` and `to` on whole hours instead of `window`, and `GET /coverage`
+  takes them as UTC days and reports `retainedFrom`, the oldest kept day.
+  Per-source statistics follow separately.
+
+## [0.5.0] - 2026-11-01
+
+### Added
+
+- A tab, window or map button whose click starts a load fades out and in
+  (0.5 s per cycle) until the data or basemap tiles have loaded.
 - Message health (#16): seven counters under
   `sensors.ais.statistics.health.*` for decode errors, incomplete
   multipart messages, duplicates on the same event and across events
@@ -39,16 +53,13 @@ uses [Semantic Versioning](https://semver.org/).
   history provider as hourly averages, so the provider must record those
   paths; the plugin stores nothing new. The paths are a setting,
   `weatherPaths` (at most 8), served by `GET /weather`.
-- Compare view (#14, `#/compare`): the days before a date next to the
-  days from it on (1 to 7 days each), with messages, positions by class,
-  distance figures, coverage cells and area, the change between them, and
-  both sector charts on one scale. `GET /summary` and `GET /sectors` take
-  `from` and `to` on whole hours instead of `window`, and `GET /coverage`
-  takes them as UTC days and reports `retainedFrom`, the oldest kept day.
-  Per-source statistics follow separately.
 
 ### Changed
 
+- Every sector with a reception shows its farthest-reception tick, drawn
+  from the centre to a dot at that distance, also when the farthest
+  reception is at the wedge's edge. The tick of the chart's farthest
+  reception is broader.
 - The daily long-range files are version 2, with the fastest list beside
   the farthest receptions. Version 1 files still load.
 
@@ -235,7 +246,8 @@ First release.
 - A dark tactical web app theme following day and night mode, with
   distances in the server's display units and the plugin's app icon.
 
-[Unreleased]: https://github.com/BoatHacks/signalk-ais-statistics/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/BoatHacks/signalk-ais-statistics/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/BoatHacks/signalk-ais-statistics/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/BoatHacks/signalk-ais-statistics/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/BoatHacks/signalk-ais-statistics/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/BoatHacks/signalk-ais-statistics/compare/v0.3.0...v0.3.1

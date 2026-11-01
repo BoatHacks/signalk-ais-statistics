@@ -4,6 +4,7 @@
 // distance cap at once; users with write access can save it (SPEC 9.1).
 import * as L from 'leaflet'
 import { exportHref, get, type CoverageResponse } from './api'
+import { showLoading } from './loading'
 import {
   chooseBasemap,
   internetState,
@@ -161,6 +162,23 @@ export function createMap(): MapView {
   let charts: ChartLayer[] = []
   let fitted = false
 
+  /**
+   * Resolves once the basemap's visible tiles have loaded or failed, or
+   * after 20 s, whichever comes first.
+   */
+  function tilesLoaded(): Promise<void> {
+    const layers = base.filter(
+      (l): l is L.TileLayer => l instanceof L.TileLayer,
+    )
+    const loaded = Promise.all(
+      layers.map((l) => new Promise<void>((r) => l.once('load', () => r()))),
+    ).then(() => undefined)
+    return Promise.race([
+      loaded,
+      new Promise<void>((r) => setTimeout(r, 20_000)),
+    ])
+  }
+
   async function setBasemap(b: Basemap) {
     if (!map) return
     current = b
@@ -205,6 +223,7 @@ export function createMap(): MapView {
     btn.addEventListener('click', () => {
       saveBasemap(b)
       void setBasemap(b)
+      showLoading(btn, tilesLoaded())
     })
     switcher.append(btn)
   }
@@ -288,12 +307,18 @@ export function createMap(): MapView {
     trialCap = undefined
     saveMessage = ''
     renderCap()
-    if (lastArgs) void view.show(...lastArgs).catch(() => undefined)
+    if (lastArgs)
+      showLoading(
+        resetBtn,
+        view.show(...lastArgs).catch(() => undefined),
+      )
   })
   saveBtn.addEventListener('click', () => {
     if (trialCap === undefined) return
     saveBtn.disabled = true
-    saveSettings({ coverageDistancePercentile: trialCap })
+    const saving = saveSettings({ coverageDistancePercentile: trialCap })
+    showLoading(saveBtn, saving)
+    saving
       .then((s) => {
         savedCap = s.coverageDistancePercentile
         trialCap = undefined

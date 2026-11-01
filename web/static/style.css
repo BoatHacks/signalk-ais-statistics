@@ -211,6 +211,22 @@ a.download:hover {
   color: var(--bg-base);
 }
 
+/* A control whose load is running fades out and in, 0.5 s per cycle. */
+.loading {
+  animation: loading-fade 0.5s ease-in-out infinite;
+}
+@keyframes loading-fade {
+  50% {
+    opacity: 0.3;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .loading {
+    animation: none;
+    opacity: 0.6;
+  }
+}
+
 /* Value tiles. */
 .tiles {
   display: grid;
@@ -318,9 +334,26 @@ svg.sectors .axis {
 }
 .tick {
   stroke-width: 1;
+  pointer-events: none;
+}
+.tick-dot {
+  pointer-events: none;
+  stroke-width: 0;
 }
 .tick.clipped {
   stroke-dasharray: 3 2;
+}
+.tick.farthest {
+  stroke-width: 2.5;
+}
+/* Beyond the rim: a hollow dot where the tick stops. */
+.tick-dot.clipped {
+  fill: var(--bg-panel);
+  stroke-width: 1.5;
+}
+.dot-hit {
+  fill: transparent;
+  pointer-events: fill;
 }
 .tick-hit {
   stroke: transparent;

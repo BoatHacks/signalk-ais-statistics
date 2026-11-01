@@ -148,10 +148,12 @@ values), counting only hours with at least 20 reports in that sector. The
 sector's report count still includes every hour.
 
 Each hour bucket also keeps the farthest reception per sector and class and
-when it arrived. The sectors view draws it as a thin tick beyond the sector's
-wedge (from the centre when the sector has no radius), so rare far
-receptions such as sporadic E or tropospheric ducting stay visible without
-moving the radius. The maximum is untrusted like every maximum (2.3).
+when it arrived. The sectors view draws it as a thin tick along the
+sector's centre line, from the centre out to a dot at that distance, in
+every sector with a reception, also when the farthest reception is at the
+wedge's edge (chosen by the maintainer). The tick of the chart's farthest
+reception is broader. So rare far receptions such as sporadic E or
+tropospheric ducting stay visible without moving the radius. The maximum is untrusted like every maximum (2.3).
 
 ### 2.7 Long-range log
 
@@ -496,8 +498,9 @@ A SignalK web app, listed in the admin UI, with:
   path's display unit, otherwise hPa for pressure, °C for temperature and
   percent for ratios.
 - Sectors: the 24-sector bearing view for class A and B (`#/sectors`), with a thin tick
-  per sector out to its farthest reception (hover shows distance and time;
-  a tick beyond the scale stops at the rim and is dashed), and below it a
+  per sector from the centre to a dot at its farthest reception, broader
+  for the chart's farthest (hover shows distance and time; a tick beyond
+  the scale stops at the rim, dashed, with a hollow dot), and below it a
   table of the farthest receptions from the long-range log (2.7): time,
   distance, bearing, class, vessel name and MMSI, its position and the own
   position. Below that, the fastest vessels and the implausible jumps
@@ -565,6 +568,10 @@ It follows the SignalK plugin UI guideline the maintainer adopted (a dark
 - Views selected by hash routes (`#/charts?window=7d`); one WebSocket for
   mode, time offset and internet state, throttled to one update per 5 s,
   reconnecting with backoff and showing an offline banner while down.
+- A button or tab whose click starts a load fades out and in, one cycle
+  per 0.5 s, until the load ends (chosen by the maintainer). Loads under
+  200 ms do not blink, the minute refresh shows nothing, and with reduced
+  motion the control dims instead.
 - The plugin's app icon (`signalk.appIcon`) is also the favicon.
 
 ## 8. Persistence
