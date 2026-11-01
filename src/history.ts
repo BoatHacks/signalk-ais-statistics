@@ -139,7 +139,9 @@ export function mergeSeries(parts: Series[]): Series {
  *
  * With the `max` series of the same buckets, a restart inside a bucket also
  * counts what the old counter reached in that bucket before it restarted:
- * the bucket's max minus the previous last, plus the new last.
+ * the bucket's max minus the previous last, plus the new last. A bucket
+ * whose max exceeds its last restarted inside it, even when the new count
+ * has not dropped below the previous bucket's.
  */
 export function increments(
   last: (number | null)[],
@@ -151,11 +153,12 @@ export function increments(
     const v = last[i] ?? prev ?? 0
     if (i > 0) {
       const p = prev ?? 0
-      if (v >= p) out.push(v - p)
-      else {
-        const m = max?.[i]
-        out.push((m !== null && m !== undefined && m > p ? m - p : 0) + v)
-      }
+      const m = max?.[i] ?? undefined
+      // A cumulative counter ends its bucket at its maximum unless it
+      // restarted inside the bucket; a drop below the previous bucket also
+      // means a restart.
+      if (v >= p && !(m !== undefined && m > v)) out.push(v - p)
+      else out.push((m !== undefined && m > p ? m - p : 0) + v)
     }
     prev = v
   }

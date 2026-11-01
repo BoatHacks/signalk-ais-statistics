@@ -334,15 +334,28 @@ export class Query {
           countPaths.push(paths.sectorCount(s, c))
           p99Paths.push(paths.sectorP99(s, c))
         }
-      const res = this.resolution(w.resolution)
+      // The sector paths are published once an hour, at its end, so history
+      // holds the closed hours and the open hour comes from the live bucket.
+      const hourStart = Math.floor(now / HOUR_MS) * HOUR_MS
+      const from = Math.min(hourStart - HOUR_MS, hourStart - w.ms + HOUR_MS)
+      const res = Math.max(HOUR_MS / 1000, this.resolution(w.resolution))
       const [cs, ps] = await Promise.all([
-        counterIncrements(h, countPaths, now - w.ms, now, res),
-        h.series(p99Paths, 'max', now - w.ms, now, w.ms / 1000),
+        counterIncrements(h, countPaths, from, hourStart, res),
+        h.series(p99Paths, 'max', from, hourStart, (hourStart - from) / 1000),
       ])
       cs.increments.forEach((col, i) => {
         counts[i % SECTOR_COUNT]! += sum(col)
       })
       ps.values.forEach((col, i) => raise(i % SECTOR_COUNT, toNm(maxOf(col))))
+      const open = this.agg.hourBuckets(now).find((b) => b.start === hourStart)
+      if (open) {
+        const bp = sectorP99(open)
+        for (const c of classes.map((k) => SECTOR_CLASSES.indexOf(k)))
+          for (let s = 0; s < SECTOR_COUNT; s++) {
+            counts[s]! += open.sectorCounts[c]![s]!
+            raise(s, bp[c]![s])
+          }
+      }
       return result('history', counts, p99)
     }, live)
   }
@@ -356,8 +369,13 @@ export class Query {
     const live = () => this.liveSeries(metric, resolution, from, to)
     // Within the last hour the live minute buckets are finer than history.
     if (!this.useHistory(to - from, to)) return live()
+    const res = this.resolution(resolution)
+    // Buckets follow the start of the range, so start on a whole multiple
+    // of the resolution: hourly bars then begin on the hour.
+    const step = res * 1000
+    const start = Math.floor(from / step) * step
     return this.withFallback(
-      () => this.historySeries(metric, this.resolution(resolution), from, to),
+      () => this.historySeries(metric, res, start, to),
       live,
     )
   }
