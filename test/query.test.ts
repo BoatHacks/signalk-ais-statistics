@@ -353,3 +353,89 @@ describe('Query in live-only mode', () => {
     expect(s.distance.maxM).toBeNull()
   })
 })
+
+describe('Query message health', () => {
+  /** Like `run`, plus one duplicate and one decode error per minute. */
+  function runWithHealth(
+    agg: Aggregator,
+    history: FakeHistory,
+    start: number,
+    minutes: number,
+  ) {
+    for (let m = 0; m < minutes; m++) {
+      const t = start + m * MINUTE_MS
+      agg.add(report(999000001, 50, 10), OWN, t + 1000)
+      agg.add(report(999000001, 50, 10), OWN, t + 1500)
+      agg.countHealth('duplicates', t + 1500)
+      agg.countHealth('decodeErrors', t + 2000)
+      history.record(buildValues(agg, t + 59_000), t + 59_000)
+    }
+  }
+
+  it('totals health counters from history across a restart', async () => {
+    const history = new FakeHistory()
+    runWithHealth(new Aggregator(T0), history, T0, 120)
+    const restart = T0 + 120 * MINUTE_MS
+    const agg = new Aggregator(restart)
+    runWithHealth(agg, history, restart, 120)
+    const q = new Query(agg, () => new HistoryApiReader(history))
+    const s = await q.summary('24h', restart + 120 * MINUTE_MS)
+    expect(s.source).toBe('history')
+    expect(s.health.counts.duplicates).toBe(240)
+    expect(s.health.counts.decodeErrors).toBe(240)
+    expect(s.health.received).toBe(480 + 240)
+    expect(s.distance.count).toBe(480)
+  })
+
+  it('agrees between history and live health series', async () => {
+    const history = new FakeHistory()
+    const agg = new Aggregator(T0)
+    runWithHealth(agg, history, T0, 180)
+    const now = T0 + 180 * MINUTE_MS
+    const from = now - 3 * HOUR_MS
+    const h = await new Query(agg, () => new HistoryApiReader(history)).series(
+      'health',
+      3600,
+      from,
+      now,
+    )
+    const l = await new Query(agg, () => nullHistoryReader).series(
+      'health',
+      3600,
+      from,
+      now,
+    )
+    expect(h.source).toBe('history')
+    expect(l.source).toBe('live')
+    const sum = (r: typeof h, k: string) =>
+      (r[k] as number[]).reduce((a, b) => a + b, 0)
+    for (const k of ['received', 'duplicates', 'decodeErrors'])
+      expect(sum(h, k), k).toBe(sum(l, k))
+    expect(sum(l, 'duplicates')).toBe(180)
+    expect(sum(l, 'received')).toBe(540)
+    expect(l.implausibleJumps).toBeDefined()
+  })
+
+  it('answers health from live data without history', async () => {
+    const agg = new Aggregator(T0)
+    agg.add({ type: 1, mmsi: '999000001' }, OWN, T0 + 1000)
+    agg.add(report(999000002, 50, 10), undefined, T0 + 2000)
+    agg.countHealth('incomplete', T0 + 3000)
+    const s = await new Query(agg, () => nullHistoryReader).summary(
+      '24h',
+      T0 + 5000,
+    )
+    expect(s.health).toEqual({
+      received: 3,
+      counts: {
+        decodeErrors: 0,
+        incomplete: 1,
+        duplicates: 0,
+        duplicatesCrossEvent: 0,
+        positionInvalid: 1,
+        implausibleJumps: 0,
+        noOwnPosition: 1,
+      },
+    })
+  })
+})

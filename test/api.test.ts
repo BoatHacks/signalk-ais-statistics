@@ -164,6 +164,7 @@ describe('REST API', () => {
     const entries = (r.body as { entries: { mmsi: string }[] }).entries
     expect(entries[0]!.mmsi).toBe('9990000019')
     expect(entries).toHaveLength(20)
+    expect((r.body as { fastest: unknown[] }).fastest).toEqual([])
     expect((await call('/longrange', { window: '1h' })).status).toBe(400)
   })
 
