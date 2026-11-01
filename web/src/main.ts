@@ -5,6 +5,7 @@
 import {
   HttpError,
   get,
+  type FastEntry,
   type LongRange,
   type SectorStats,
   type Series,
@@ -439,8 +440,8 @@ class SectorsView extends HTMLElement implements ViewElement {
   private source?: HTMLElement
   private longRange?: HTMLTableSectionElement
   private longRangeEmpty?: HTMLElement
-  private fastest?: HTMLTableSectionElement
-  private fastestEmpty?: HTMLElement
+  private fastest?: SpeedTable
+  private jumps?: SpeedTable
 
   connectedCallback(): void {
     if (this.a) return
@@ -506,43 +507,17 @@ class SectorsView extends HTMLElement implements ViewElement {
         this.longRangeEmpty,
       ),
     )
-    this.fastest = el('tbody')
-    this.fastestEmpty = el(
-      'p',
-      { class: 'muted small' },
+    this.fastest = new SpeedTable(
+      'Fastest vessels',
+      'The highest plausible speed of each sender per day, implied by two of its positions at least 500 m apart, beside the speed it reported.',
       'No sender moved far enough in this window to measure its speed.',
     )
-    const fastHead = el('tr')
-    for (const [label, num] of [
-      ['Time', false],
-      ['Implied speed', true],
-      ['Reported SOG', true],
-      ['Over', true],
-      ['Class', false],
-      ['Vessel', false],
-      ['From', false],
-      ['To', false],
-      ['', false],
-    ] as const)
-      fastHead.append(el('th', num ? { class: 'num' } : {}, label))
-    this.append(
-      el(
-        'div',
-        { class: 'sk-card' },
-        el('h2', {}, 'Fastest vessels'),
-        el(
-          'p',
-          { class: 'muted small' },
-          'The highest speed of each sender per day, implied by two of its positions at least 500 m apart, beside the speed it reported. A speed above the limit for the sender is marked: likely a wrong position rather than a fast craft.',
-        ),
-        el(
-          'div',
-          { class: 'long-range' },
-          el('table', {}, el('thead', {}, fastHead), this.fastest),
-        ),
-        this.fastestEmpty,
-      ),
+    this.jumps = new SpeedTable(
+      'Implausible jumps',
+      'The fastest jumps above the limit for the sender: most likely a wrong position rather than a fast craft. Kept apart so they cannot push real fast craft out of the list above.',
+      'No implausible jumps in this window.',
     )
+    this.append(this.fastest.element, this.jumps.element)
   }
 
   async load(ctx: Context): Promise<void> {
@@ -551,7 +526,9 @@ class SectorsView extends HTMLElement implements ViewElement {
       get<SectorStats>('/sectors', { window: ctx.window, class: 'b' }),
       get<LongRange>('/longrange', {
         window: ctx.window === '1h' ? '24h' : ctx.window,
-      }).catch(() => ({ entries: [], fastest: [] }) as LongRange),
+      }).catch(
+        () => ({ entries: [], fastest: [], implausibleJumps: [] }) as LongRange,
+      ),
     ])
     this.a!.update(a, ctx.units.distance, ctx.offsetMin)
     this.b!.update(b, ctx.units.distance, ctx.offsetMin)
@@ -575,28 +552,69 @@ class SectorsView extends HTMLElement implements ViewElement {
       }),
     )
     this.longRangeEmpty!.hidden = lr.entries.length > 0
+    this.fastest!.update(lr.fastest ?? [], ctx)
+    this.jumps!.update(lr.implausibleJumps ?? [], ctx)
+  }
+}
+
+/** A card with a table of implied speeds (SPEC 2.8). */
+class SpeedTable {
+  readonly element: HTMLElement
+  private readonly body = el('tbody')
+  private readonly empty: HTMLElement
+
+  constructor(title: string, note: string, emptyText: string) {
+    this.empty = el('p', { class: 'muted small' }, emptyText)
+    const head = el('tr')
+    for (const [label, num] of [
+      ['Time', false],
+      ['Implied speed', true],
+      ['Reported SOG', true],
+      ['Limit', true],
+      ['Over', true],
+      ['Class', false],
+      ['Vessel', false],
+      ['From', false],
+      ['To', false],
+    ] as const)
+      head.append(el('th', num ? { class: 'num' } : {}, label))
+    this.element = el(
+      'div',
+      { class: 'sk-card' },
+      el('h2', {}, title),
+      el('p', { class: 'muted small' }, note),
+      el(
+        'div',
+        { class: 'long-range' },
+        el('table', {}, el('thead', {}, head), this.body),
+      ),
+      this.empty,
+    )
+  }
+
+  update(entries: FastEntry[], ctx: Context): void {
     const v = ctx.units.speed
-    const fastest = lr.fastest ?? []
-    this.fastest!.replaceChildren(
-      ...fastest.map((e) => {
-        const cell = (text: string, num = false) =>
-          el('td', num ? { class: 'num' } : {}, text)
-        return el(
+    const cell = (text: string, num = false) =>
+      el('td', num ? { class: 'num' } : {}, text)
+    this.body.replaceChildren(
+      ...entries.map((e) =>
+        el(
           'tr',
-          e.implausible ? { class: 'implausible' } : {},
+          // Rows in the class colours of the sectors view.
+          { class: `cls-${e.cls.toLowerCase()}` },
           cell(formatDateTime(Date.parse(e.time), ctx.offsetMin)),
           cell(v.format(e.speedMps), true),
           cell(e.sogMps === undefined ? '–' : v.format(e.sogMps), true),
+          cell(v.format(e.limitMps), true),
           cell(`${Math.round(e.gapS)} s`, true),
           cell(e.cls),
           cell(e.name ? `${e.name} (${e.mmsi})` : e.mmsi),
           cell(formatPosition(e.fromLat, e.fromLon)),
           cell(formatPosition(e.lat, e.lon)),
-          cell(e.implausible ? `above ${v.format(e.limitMps)} limit` : ''),
-        )
-      }),
+        ),
+      ),
     )
-    this.fastestEmpty!.hidden = fastest.length > 0
+    this.empty.hidden = entries.length > 0
   }
 }
 

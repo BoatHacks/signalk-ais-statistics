@@ -98,7 +98,8 @@ hourly, at the day change and on stop. Writes are queued so two never
 share a temporary file. Earlier days are read on first use and pruned with
 `coverageRetentionDays`. It also gives the sectors exact times for the
 sector maxima read from history. The same file (version 2) holds the
-day's fastest senders by implied speed, up to 20 (SPEC 2.8); a version 1
+day's fastest senders by implied speed, 10 plausible and 10 implausible
+(SPEC 2.8); a version 1
 file loads with an empty list.
 
 ### 2.5 Coverage
@@ -200,7 +201,8 @@ and the class A and B sectors (`layers.ts`, also remembered in
 per page load because the server rate limits it, reports security off or a
 readwrite or admin user. The sectors view draws the sector maxima as ticks with a wide invisible hover line,
 leaves a quarter more room on the scale for them, and lists `/longrange`
-in two tables, the farthest receptions and the fastest vessels. The map's sector wedges
+in tables: the farthest receptions, the fastest vessels and the
+implausible jumps. The map's sector wedges
 come from the overlay GeoJSON route, and the cell and sector colours are
 imported from `src/style.ts`, which the plotter overlay uses too, so the
 app map and the plotter look the same.

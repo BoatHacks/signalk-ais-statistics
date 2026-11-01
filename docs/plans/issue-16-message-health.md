@@ -65,15 +65,17 @@ everything). ARCHITECTURE 2.1, 2.4, 2.5a, 2.6, 2.8, 2.9, 2.11 and 7.
   (high-speed craft, including hovercraft ferries), 600 kn for message 9
   (SAR aircraft). Vessels whose type is not yet known use the normal limit.
   Ship type comes from the aggregator's vessel registry.
-- **Fastest vessels.** Per UTC day, the highest implied speed of each MMSI,
-  capped at the 20 fastest, kept by `LongRangeLog` in the same daily file
+- **Fastest vessels.** Per UTC day, the highest implied speed of each MMSI
+  in two lists, the 10 fastest plausible and the 10 fastest implausible
+  (chosen by the maintainer, so bogus jumps cannot crowd out real fast
+  craft), kept by `LongRangeLog` in the same daily file
   (decision 16: no new kind of state). Ranked by implied speed (chosen by
   the maintainer), with the reported SOG of the later report beside it
   (C4). An entry: `time`, `mmsi`, `name?`, `cls`, `shipType?`, `speedMps`,
   `sogMps?`, `limitMps`, `implausible`, `gapS`, `fromLat`, `fromLon`,
   `lat`, `lon`. Names are filled in by the existing `enrich`. Implausible
-  entries stay in the list and are marked, so a bogus jump can be told
-  from a fast ferry, like far entries in the farthest list.
+  entries go to their own list, so a bogus jump can be told from a fast
+  ferry, like far entries in the farthest list.
 - **File schema.** `longrange-YYYY-MM-DD.json` becomes `version: 2` with a
   `fastest` array beside `entries`. A version 1 file (or one with no or a
   malformed `fastest`) loads with an empty list; each entry is checked
@@ -89,8 +91,8 @@ everything). ARCHITECTURE 2.1, 2.4, 2.5a, 2.6, 2.8, 2.9, 2.11 and 7.
   and `incomplete`.
 - **REST.** `/series` gains `metric=health` (each counter per bucket and
   the denominator); `/summary` gains a `health` object (the counts and the
-  received total for the window); `/longrange` gains `fastest`, the 10
-  fastest in the window, so no new route. The class A/B mix needs no paths:
+  received total for the window); `/longrange` gains `fastest` and
+  `implausibleJumps`, 10 each in the window, so no new route. The class A/B mix needs no paths:
   the web app derives it from the `positions` series.
 - **Web app.** Overview: one line with the good-message share, and a hint
   when duplicates exceed 20 percent of messages ("one receiver may reach
@@ -98,8 +100,8 @@ everything). ARCHITECTURE 2.1, 2.4, 2.5a, 2.6, 2.8, 2.9, 2.11 and 7.
   same-event duplicates, and cross-event ones too while per-source
   statistics (#14) are off, which is always until #14 lands (C1a). Charts:
   a health chart of shares per bucket and the class A/B mix as a share.
-  Sectors page: a "Fastest vessels" table below the farthest receptions
-  table, implausible rows marked, implied speed and reported SOG side by
+  Sectors page: "Fastest vessels" and "Implausible jumps" tables below
+  the farthest receptions table, implied speed and reported SOG side by
   side.
 - **Config** (server config form, basic settings per #20 decision 25):
   `jumpSpeedLimitKnots` 60, `jumpSpeedLimitHighSpeedKnots` 120 (ship types

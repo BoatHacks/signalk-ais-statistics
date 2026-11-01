@@ -212,14 +212,17 @@ per-source statistics are off, and are shown as receiver overlap once
 they exist.
 
 **Fastest vessels.** Per UTC day the plugin keeps the highest implied
-speed of each sender, up to the 20 fastest, in the long-range file (2.7, 8).
+speed of each sender in two lists of up to 10 in the long-range file (2.7,
+8): plausible speeds, and implausible jumps (above the sender's limit). Kept
+apart, a day of bogus positions cannot push real fast craft out (chosen by
+the maintainer); one sender can appear in both.
 An entry holds the time, MMSI, name when known, class, ship type, the
 implied speed, the speed over ground reported with the later position (both
 decoders deliver it; the "not available" value is left out), the limit
 that applied, whether the speed is above it, the time between the two
-positions and both positions. The list is ranked by implied speed (chosen
-by the maintainer), and speeds above the limit stay in it, marked, so a
-bogus jump can be told from a fast craft.
+positions and both positions. Both lists are ranked by implied speed
+(chosen by the maintainer), so a bogus jump can be told from a fast craft
+side by side.
 
 ## 3. State / Lifecycle Model
 
@@ -316,7 +319,7 @@ effective live settings.
 | `GET /series?metric=&resolution=&from=&to=` | time series for the charts, read from history; `metric` is `messages`, `positions`, `distance`, `vessels` or `health` (each health counter and `received` per bucket), `resolution` in seconds (at least 60, at most 2000 points) |
 | `GET /sectors?window=24h&class=a\|b\|all` | 24 sectors with count and p99 distance (the highest hourly p99 in the window, see 2.6), and the farthest reception `maxM` with its time: `maxAt` when known exactly, otherwise `maxHour`, the start of the hour it fell in |
 | `GET /coverage?window=7d&all=false&cap=` | cell ids, GeoJSON for the map, covered area in m²; windows `24h` (today) and `7d`; `all=true` adds the cells beyond the distance cap, marked `capped`; `cap` (50 to 100) tries another distance cap percentile for this answer only, and `capPercentile` gives the percentile applied |
-| `GET /longrange?window=24h` | the 25 farthest entries of the long-range log (2.7) in the window, farthest first, and `fastest`, the 10 fastest senders (2.8), fastest first, speeds in m/s; windows `24h` and `7d` |
+| `GET /longrange?window=24h` | the 25 farthest entries of the long-range log (2.7) in the window, farthest first, and the two speed lists of 2.8, 10 senders each, fastest first, speeds in m/s: `fastest` (plausible) and `implausibleJumps`; windows `24h` and `7d` |
 | `GET /overlay/coverage.geojson` | the plotter overlay's GeoJSON: the 7 day footprint and the 24 hour sector wedges of class A and B |
 | `GET /status` | live state: tracked targets, own position age, history reachable or not |
 | `POST /settings` | saves live settings (body `{ "coverageDistancePercentile": 95 }`), readwrite users only; see above |
@@ -448,9 +451,10 @@ A SignalK web app, listed in the admin UI, with:
   a tick beyond the scale stops at the rim and is dashed), and below it a
   table of the farthest receptions from the long-range log (2.7): time,
   distance, bearing, class, vessel name and MMSI, its position and the own
-  position. Below that, the fastest vessels (2.8): time, implied speed,
-  reported speed over ground, the time between the two positions, class,
-  vessel, both positions, and a mark on speeds above the sender's limit.
+  position. Below that, the fastest vessels and the implausible jumps
+  (2.8), each with time, implied speed, reported speed over ground, the
+  limit, the time between the two positions, class, vessel and both
+  positions, rows in the class colours of the sectors view.
 - Map: the coverage footprint with a window selector (day, 7 days), the 24 hour sector wedges and maxima of class A and B from the plotter overlay, in the class colours of the sectors view, on-screen
   toggles that show or hide the cells, the sparse cells beyond the distance cap
   (`All cells`, off by default, drawn dashed) and the class A and B
@@ -530,7 +534,7 @@ directly. Consequences:
   start.
 - The long-range log (2.7) is kept the same way, one file per UTC day,
   `longrange-YYYY-MM-DD.json`, at most 50 entries (about 15 KB) and, from
-  file version 2, the fastest list (2.8, at most 20, about 6 KB), written
+  file version 2, the two speed lists (2.8, at most 10 each, about 6 KB), written
   hourly, at the day change and on stop, loaded back on start and pruned
   with the cell files. A version 1 file loads with an empty fastest list,
   and version 1 code reads a version 2 file's farthest entries and ignores
@@ -715,7 +719,8 @@ help of `max` (6.2). Verified across a plugin restart on the test server.
   The jump limits allow for SAR aircraft and high-speed and WIG craft. The
   fastest list lives in the long-range file, so the plugin owns no new kind
   of state, and is ranked by implied speed with the reported speed over
-  ground beside it.
+  ground beside it, plausible speeds and implausible jumps in separate top
+  10 lists.
 
 ## 13. Open Questions
 

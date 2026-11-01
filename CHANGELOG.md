@@ -21,9 +21,10 @@ uses [Semantic Versioning](https://semver.org/).
   and a hint when more than 20 percent of the messages are duplicates,
   which usually means one receiver reaches two configured events.
 - Charts of the class A/B mix and of the health shares over time.
-- Fastest vessels on the sectors page: per day the highest implied speed
-  of each sender, with the reported speed over ground beside it and speeds
-  above the limit marked. `GET /longrange` returns them as `fastest`,
+- Fastest vessels and implausible jumps on the sectors page: per day the
+  10 highest plausible implied speeds and the 10 fastest jumps above the
+  limit, each with the reported speed over ground beside it. `GET
+  /longrange` returns them as `fastest` and `implausibleJumps`,
   `GET /summary` gains `health`, and `GET /series` takes `metric=health`.
 
 ### Changed

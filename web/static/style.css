@@ -344,7 +344,10 @@ svg.sectors .axis {
 .long-range th.num {
   text-align: right;
 }
-.long-range tr.implausible td {
+.long-range tr.cls-a td {
+  color: var(--color-teal);
+}
+.long-range tr.cls-b td {
   color: var(--color-orange);
 }
 .hint {

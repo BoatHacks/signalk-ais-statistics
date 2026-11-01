@@ -1,6 +1,8 @@
 // Long-range log (SPEC 2.7, 2.8 and 8): per UTC day, the farthest reception
 // of each vessel, capped at the farthest MAX_PER_DAY, and the highest
-// implied speed of each sender, capped at the fastest MAX_FASTEST_PER_DAY.
+// implied speed of each sender, kept as two lists of MAX_FASTEST_PER_DAY:
+// plausible speeds and implausible jumps, so bogus positions cannot push
+// real fast craft out.
 // It keeps what history cannot: when, from where and from whom a far
 // position or a fast jump was received, so a propagation event or a fast
 // craft can be told from a bogus position. Each day lives in a small JSON
@@ -15,8 +17,8 @@ import type { SpeedSample } from './health'
 
 /** Entries kept per UTC day. */
 export const MAX_PER_DAY = 50
-/** Fastest senders kept per UTC day. */
-export const MAX_FASTEST_PER_DAY = 20
+/** Fastest senders kept per UTC day, in each of the two lists. */
+export const MAX_FASTEST_PER_DAY = 10
 /** Version 2 adds `fastest`; version 1 files load with an empty list. */
 const FILE_VERSION = 2
 const FILE_RE = /^longrange-(\d{4}-\d{2}-\d{2})\.json$/
@@ -109,6 +111,10 @@ function isFastEntry(x: unknown): x is FastEntry {
   )
 }
 
+/** One entry per sender in each list: plausible and implausible. */
+const fastKey = (e: { mmsi: string; implausible: boolean }) =>
+  `${e.implausible ? 'implausible' : 'plausible'}|${e.mmsi}`
+
 const inRange = (time: string, from: number, to: number) => {
   const t = Date.parse(time)
   return t >= from && t < to
@@ -118,7 +124,7 @@ export class LongRangeLog {
   private date: string
   /** Today's entries by MMSI. */
   private today = new Map<string, LongRangeEntry>()
-  /** Today's fastest senders by MMSI. */
+  /** Today's fastest senders by list and MMSI (see `fastKey`). */
   private todayFast = new Map<string, FastEntry>()
   /** Earlier days, read from their files on first use. */
   private days = new Map<string, Day>()
@@ -200,7 +206,7 @@ export class LongRangeLog {
   /** Offers one implied speed; keeps it if it is among the day's fastest. */
   addSpeed(sample: SpeedSample, vessel: VesselInfo): void {
     this.roll(sample.time)
-    const prev = this.todayFast.get(sample.mmsi)
+    const prev = this.todayFast.get(fastKey(sample))
     if (prev && prev.speedMps >= sample.speedMps) {
       if (!prev.name && vessel.name) {
         prev.name = vessel.name
@@ -256,14 +262,21 @@ export class LongRangeLog {
   }
 
   /**
-   * The fastest senders in [from, to), fastest first, one entry per MMSI
-   * (its highest speed in the range).
+   * The fastest senders in [from, to) of one list, plausible speeds or
+   * implausible jumps, fastest first, one entry per MMSI (its highest speed
+   * in the range).
    */
-  async fastest(from: number, to: number, limit: number): Promise<FastEntry[]> {
+  async fastest(
+    from: number,
+    to: number,
+    limit: number,
+    implausible = false,
+  ): Promise<FastEntry[]> {
     const best = new Map<string, FastEntry>()
     for (const day of await this.range(from, to))
       for (const e of day.fastest) {
-        if (!inRange(e.time, from, to)) continue
+        if (e.implausible !== implausible || !inRange(e.time, from, to))
+          continue
         const prev = best.get(e.mmsi)
         if (!prev || e.speedMps > prev.speedMps) best.set(e.mmsi, e)
       }
@@ -325,16 +338,22 @@ export class LongRangeLog {
   }
 
   private keepFast(entry: FastEntry): void {
-    const prev = this.todayFast.get(entry.mmsi)
+    const key = fastKey(entry)
+    const prev = this.todayFast.get(key)
     if (prev && prev.speedMps >= entry.speedMps) return
-    if (!prev && this.todayFast.size >= MAX_FASTEST_PER_DAY) {
-      let slowest: FastEntry | undefined
-      for (const e of this.todayFast.values())
-        if (!slowest || e.speedMps < slowest.speedMps) slowest = e
-      if (!slowest || slowest.speedMps >= entry.speedMps) return
-      this.todayFast.delete(slowest.mmsi)
+    if (!prev) {
+      const list = [...this.todayFast.values()].filter(
+        (e) => e.implausible === entry.implausible,
+      )
+      if (list.length >= MAX_FASTEST_PER_DAY) {
+        let slowest: FastEntry | undefined
+        for (const e of list)
+          if (!slowest || e.speedMps < slowest.speedMps) slowest = e
+        if (!slowest || slowest.speedMps >= entry.speedMps) return
+        this.todayFast.delete(fastKey(slowest))
+      }
     }
-    this.todayFast.set(entry.mmsi, entry)
+    this.todayFast.set(key, entry)
     this.dirty = true
   }
 

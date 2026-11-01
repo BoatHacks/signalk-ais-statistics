@@ -81,7 +81,10 @@ export interface FastEntry {
 
 export interface LongRange {
   entries: LongRangeEntry[]
+  /** Plausible speeds, fastest first. */
   fastest: FastEntry[]
+  /** Speeds above the sender's limit, fastest first. */
+  implausibleJumps: FastEntry[]
 }
 
 export interface Series {

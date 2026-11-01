@@ -54,7 +54,7 @@ export interface ApiDeps {
 export const CACHE_MS = 60_000
 /** Entries the long-range route returns, farthest first. */
 export const LONG_RANGE_LIMIT = 25
-/** Fastest senders the long-range route returns, fastest first. */
+/** Senders the long-range route returns in each fastest list. */
 export const FASTEST_LIMIT = 10
 
 interface Getter {
@@ -282,6 +282,7 @@ export function registerRoutes(router: RouterLike, deps: ApiDeps): void {
         to: new Date(to).toISOString(),
         entries: await log.entries(from, to + 1, LONG_RANGE_LIMIT),
         fastest: await log.fastest(from, to + 1, FASTEST_LIMIT),
+        implausibleJumps: await log.fastest(from, to + 1, FASTEST_LIMIT, true),
       }
     }, cachedRoute()),
   )
