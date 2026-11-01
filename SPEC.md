@@ -92,6 +92,9 @@ No position report is dropped or flagged. Every report with a valid
 latitude and longitude counts toward every statistic, so the numbers always
 reflect everything the receiver decoded. Reports with latitude or longitude
 out of range cannot be used for distance and are skipped for distance only.
+The message health counters (2.8) count such reports and implausible
+position jumps, but only count: nothing they find is removed from any
+other statistic.
 
 Distance statistics are made robust by reporting percentiles instead of
 trusting the maximum:
@@ -159,6 +162,64 @@ later that day if it arrives after the position), class, ship type,
 distance, bearing, the reported position and the own position at
 reception. Entries are not judged: a far one can be real propagation or a
 wrong position sent by the vessel, and the log is there to tell them apart.
+The same daily file keeps the fastest senders of the day (2.8).
+
+### 2.8 Message health
+
+What the receiver decodes is judged as well as counted. Each finding is a
+cumulative counter (6.2), and none removes a message from any other
+statistic (2.3):
+
+- **Decode errors and incomplete messages**: sentences or PGNs that could
+  not be decoded, and multipart messages dropped because a part never
+  arrived.
+- **Duplicates**: a message with the same MMSI and message type (and part,
+  for message 24) and a position within 2e-5 degrees, about 2 m, or no
+  position on either, received less than 2 s after the first copy. The
+  window is fixed. The key does not depend on the decoder, so a sentence
+  and a PGN carrying the same message match. One detector serves all
+  configured events and counts two kinds: same-event duplicates (a
+  receiver repeating itself, or two receivers on one event) and
+  cross-event duplicates (the same message on two configured events, the
+  likely cause being one receiver reaching both).
+- **Invalid positions**: position reports whose position was out of range
+  or "not available" (91, 181).
+- **No own position**: position reports with a usable position received
+  while the own position was unknown or stale (2.2), which explains a gap
+  in the distance figures.
+- **Implausible jumps**: per sender the plugin keeps an anchor position.
+  When a position report lies at least 500 m from the anchor and at least
+  1 s later, distance over time is the implied speed, and the report
+  becomes the anchor; a report closer than 500 m replaces an anchor older
+  than 60 s. So GPS jitter never counts, a fast craft reporting every 2 s
+  is still measured, and a bogus position is judged against a position at
+  most a minute or one reporting interval old. A speed above the sender's
+  limit is a jump. One bogus position counts as two jumps, out and back.
+  Limits are settings (9): 60 kn by default, 120 kn for ship types 20 to
+  29 (wing in ground) and 40 to 49 (high-speed craft such as hovercraft
+  ferries), 600 kn for message 9 (SAR aircraft). A sender whose ship type
+  is not yet known is judged by the ordinary limit, so a high-speed craft
+  can count a few jumps before its message 5 or 24 is heard.
+
+Shares over a window divide a counter by everything received: decoded
+messages plus decode errors and incomplete messages. The good share leaves
+out decode errors, incomplete messages, duplicates and invalid positions;
+jumps and reports without an own position are no fault of the message.
+The web app hints at a misconfiguration when duplicates exceed 20 percent
+of the decoded messages (fixed, no notification). Same-event duplicates
+always count toward the hint; cross-event duplicates count too while
+per-source statistics are off, and are shown as receiver overlap once
+they exist.
+
+**Fastest vessels.** Per UTC day the plugin keeps the highest implied
+speed of each sender, up to the 20 fastest, in the long-range file (2.7, 8).
+An entry holds the time, MMSI, name when known, class, ship type, the
+implied speed, the speed over ground reported with the later position (both
+decoders deliver it; the "not available" value is left out), the limit
+that applied, whether the speed is above it, the time between the two
+positions and both positions. The list is ranked by implied speed (chosen
+by the maintainer), and speeds above the limit stay in it, marked, so a
+bogus jump can be told from a fast craft.
 
 ## 3. State / Lifecycle Model
 
@@ -182,6 +243,7 @@ subtraction.
 | counter | positions by class | position reports, class A, class B, other |
 | counter | distance bins | position reports per log-spaced distance bin, used to compute window avg, median, p95 and p99 |
 | counter | sector counts | position reports per sector and class |
+| counter | message health | decode errors, incomplete, duplicates (same and cross event), invalid positions, implausible jumps, reports without own position (2.8) |
 | gauge | distance, rolling 1 h | average, median, p95, p99 and max distance |
 | gauge | sector p99, rolling 1 h | p99 distance per sector and class |
 | gauge | unique vessels, rolling 1 h and 24 h | total and per type group |
@@ -194,7 +256,10 @@ subtraction.
 - The open minute and hour buckets.
 - The set of cells observed in the current UTC day, flushed hourly to the
   day's cell-set file (section 8).
-- The current UTC day's long-range log (2.7), flushed hourly to its file.
+- The current UTC day's long-range log (2.7) and fastest list (2.8),
+  flushed hourly to its file.
+- The duplicate detector's copies of the last 2 s and the jump tracker's
+  anchor per sender (2.8), pruned after `targetExpirySeconds`.
 
 History is not kept by the plugin. See section 8.
 
@@ -247,11 +312,11 @@ effective live settings.
 
 | Route | Returns |
 |---|---|
-| `GET /summary?window=24h` | headline figures: messages, positions, vessels by group, distance avg, p95, p99 and max |
-| `GET /series?metric=&resolution=&from=&to=` | time series for the charts, read from history; `metric` is `messages`, `positions`, `distance` or `vessels`, `resolution` in seconds (at least 60, at most 2000 points) |
+| `GET /summary?window=24h` | headline figures: messages, positions, vessels by group, distance avg, p95, p99 and max, and `health`: the health counts (2.8) and `received`, their denominator |
+| `GET /series?metric=&resolution=&from=&to=` | time series for the charts, read from history; `metric` is `messages`, `positions`, `distance`, `vessels` or `health` (each health counter and `received` per bucket), `resolution` in seconds (at least 60, at most 2000 points) |
 | `GET /sectors?window=24h&class=a\|b\|all` | 24 sectors with count and p99 distance (the highest hourly p99 in the window, see 2.6), and the farthest reception `maxM` with its time: `maxAt` when known exactly, otherwise `maxHour`, the start of the hour it fell in |
 | `GET /coverage?window=7d&all=false&cap=` | cell ids, GeoJSON for the map, covered area in m²; windows `24h` (today) and `7d`; `all=true` adds the cells beyond the distance cap, marked `capped`; `cap` (50 to 100) tries another distance cap percentile for this answer only, and `capPercentile` gives the percentile applied |
-| `GET /longrange?window=24h` | the 25 farthest entries of the long-range log (2.7) in the window, farthest first; windows `24h` and `7d` |
+| `GET /longrange?window=24h` | the 25 farthest entries of the long-range log (2.7) in the window, farthest first, and `fastest`, the 10 fastest senders (2.8), fastest first, speeds in m/s; windows `24h` and `7d` |
 | `GET /overlay/coverage.geojson` | the plotter overlay's GeoJSON: the 7 day footprint and the 24 hour sector wedges of class A and B |
 | `GET /status` | live state: tracked targets, own position age, history reachable or not |
 | `POST /settings` | saves live settings (body `{ "coverageDistancePercentile": 95 }`), readwrite users only; see above |
@@ -283,6 +348,9 @@ Counters (monotonic, count since the plugin started):
 - `positions.classA`, `positions.classB`, `positions.other`
 - `distance.bin.<nn>`, one path per distance bin (32 bins)
 - `sectors.<nnn>.<class>.count`, one path per sector and class (48)
+- `health.decodeErrors`, `health.incomplete`, `health.duplicates`,
+  `health.duplicatesCrossEvent`, `health.positionInvalid`,
+  `health.implausibleJumps`, `health.noOwnPosition` (2.8)
 
 Gauges, in SI units like every SignalK path:
 - `distance.avg`, `distance.median`, `distance.p95`, `distance.p99`,
@@ -368,15 +436,21 @@ button:
 
 A SignalK web app, listed in the admin UI, with:
 
-- Overview: type group counts, class A/B split, rates, distance p95 and p99.
+- Overview: type group counts, class A/B split, rates, distance p95 and
+  p99, and message health (2.8): the good share, each counter with its
+  share, and the duplicate hint.
 - Charts: positions and messages per hour split by class, distance avg,
-  p95 and p99 per hour (max shown separately and marked untrusted).
+  p95 and p99 per hour (max shown separately and marked untrusted), the
+  class A and B mix as a share per bucket, and the health shares per
+  bucket.
 - Sectors: the 24-sector bearing view for class A and B (`#/sectors`), with a thin tick
   per sector out to its farthest reception (hover shows distance and time;
   a tick beyond the scale stops at the rim and is dashed), and below it a
   table of the farthest receptions from the long-range log (2.7): time,
   distance, bearing, class, vessel name and MMSI, its position and the own
-  position.
+  position. Below that, the fastest vessels (2.8): time, implied speed,
+  reported speed over ground, the time between the two positions, class,
+  vessel, both positions, and a mark on speeds above the sender's limit.
 - Map: the coverage footprint with a window selector (day, 7 days), the 24 hour sector wedges and maxima of class A and B from the plotter overlay, in the class colours of the sectors view, on-screen
   toggles that show or hide the cells, the sparse cells beyond the distance cap
   (`All cells`, off by default, drawn dashed) and the class A and B
@@ -410,6 +484,8 @@ It follows the SignalK plugin UI guideline the maintainer adopted (a dark
   and large monospace values; touch targets of at least 48 px.
 - Distances and areas in the user's display units from the path metadata
   (`meta.displayUnits`), otherwise SI with ISO prefixes (`12.3 km`).
+  Speeds in the display unit of `navigation.speedOverGround`, otherwise
+  knots.
 - Ship time without a zone suffix when `environment.time.timezoneOffset`
   is published, otherwise UTC with `Z`; dates as `YYYY-MM-DD`.
 - Views selected by hash routes (`#/charts?window=7d`); one WebSocket for
@@ -453,9 +529,12 @@ directly. Consequences:
   at the UTC day change and on stop, and today's file is merged back in on
   start.
 - The long-range log (2.7) is kept the same way, one file per UTC day,
-  `longrange-YYYY-MM-DD.json`, at most 50 entries (about 15 KB), written
+  `longrange-YYYY-MM-DD.json`, at most 50 entries (about 15 KB) and, from
+  file version 2, the fastest list (2.8, at most 20, about 6 KB), written
   hourly, at the day change and on stop, loaded back on start and pruned
-  with the cell files. Everything else is stateless across restarts; the
+  with the cell files. A version 1 file loads with an empty fastest list,
+  and version 1 code reads a version 2 file's farthest entries and ignores
+  the rest. Everything else is stateless across restarts; the
   last counter values are published once more on stop.
 
 ## 9. Configuration
@@ -470,6 +549,9 @@ directly. Consequences:
 | `publishIntervalMinutes` | 5 | how often the statistics paths are published; a divisor of 60; sector paths go out hourly regardless |
 | `publishOverlay` | true | register the plotter extension overlay |
 | `sentenceEvents` | `nmea0183`, `N2KAnalyzerOut` | server events to read AIS from: raw sentences or canboat PGNs; any event names |
+| `jumpSpeedLimitKnots` | 60 | implied speed above which a position counts as an implausible jump (2.8) |
+| `jumpSpeedLimitHighSpeedKnots` | 120 | the same for ship types 20 to 29 (WIG) and 40 to 49 (high-speed craft) |
+| `jumpSpeedLimitAircraftKnots` | 600 | the same for message 9 (SAR aircraft) |
 
 ### 9.1 Live settings
 
@@ -509,9 +591,10 @@ land. The plotter overlay always uses the saved value.
 - Availability, gaps and last-signal age: not in the MVP; the definition
   needs care (see 1.2) and the data needed for it (gap tracking with an
   injectable clock) is separable.
-- Optional rejection of bogus positions (range cap, speed filter) with
-  counters: not needed while percentiles carry the distance figures and
-  coverage has its own percentile cap.
+- Optional rejection of bogus positions (range cap, speed filter): not
+  needed while percentiles carry the distance figures and coverage has its
+  own percentile cap. The implausible jump counter (2.8) counts what a
+  speed filter would catch without dropping anything.
 - Per-MMSI history. The long-range log (2.7) covers the "best catches".
 
 ## 11. References
@@ -603,7 +686,8 @@ help of `max` (6.2). Verified across a plugin restart on the test server.
 - **Configurable events (chosen by the maintainer).** Some setups carry AIS
   on other events, so the events are an option defaulting to `nmea0183` and
   `N2KAnalyzerOut`. Cost: a receiver that reaches two listed events is
-  counted twice; the option's description says so.
+  counted twice; the option's description says so, and the cross-event
+  duplicate counter (2.8) shows it.
 - **NMEA 2000 AIS from `N2KAnalyzerOut`, not through a converter.** The
   server already decodes every PGN with canboatjs and emits the result on
   `N2KAnalyzerOut`, so reading AIS PGNs there needs no second decoder, only
@@ -622,6 +706,16 @@ help of `max` (6.2). Verified across a plugin restart on the test server.
   use "sectors". The old `GET /radar` and `#/radar` are gone rather than
   kept as aliases, so no compatibility code is carried into 1.0.0. On the map and in the plotter the sectors are drawn per
   class, in the same colours as the sectors view.
+
+- **Message health only counts (chosen by the maintainer).** Duplicates,
+  implausible jumps and invalid positions are counters (2.8), and nothing
+  is dropped (2.3). The duplicate key is MMSI, type and near-identical
+  position within a fixed 2 s, so it works across both decoders; a payload
+  hash was rejected because NMEA 0183 and NMEA 2000 copies differ in form.
+  The jump limits allow for SAR aircraft and high-speed and WIG craft. The
+  fastest list lives in the long-range file, so the plugin owns no new kind
+  of state, and is ranked by implied speed with the reported speed over
+  ground beside it.
 
 ## 13. Open Questions
 

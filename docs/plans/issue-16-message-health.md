@@ -131,22 +131,22 @@ Paths published, shares from history, `/longrange` and `/summary` shapes,
 web share and hint helpers.
 
 ## Implementation Steps
-- [ ] SOG in both inputs
-- [ ] Paths, metadata and config options with defaults
-- [ ] `health.ts`: counters, duplicate detector, jump tracker (tests first)
-- [ ] `noOwnPosition` in aggregator totals; wiring in `plugin.ts`, publish
-- [ ] Long-range file version 2 with `fastest`, loader for version 1
-- [ ] Query: `health` series and summary; `/longrange` `fastest`
-- [ ] Web: overview line and duplicate hint, health and A/B mix charts,
+- [x] SOG in both inputs
+- [x] Paths, metadata and config options with defaults
+- [x] `health.ts`: counters, duplicate detector, jump tracker (tests first)
+- [x] `noOwnPosition` in aggregator totals; wiring in `plugin.ts`, publish
+- [x] Long-range file version 2 with `fastest`, loader for version 1
+- [x] Query: `health` series and summary; `/longrange` `fastest`
+- [x] Web: overview line and duplicate hint, health and A/B mix charts,
       fastest table on the sectors page, checked at phone width
-- [ ] Docs: SPEC 2.3, new 2.8 Message health, 2.7, 4.1, 4.2, 6.1, 6.2, 7,
+- [x] Docs: SPEC 2.3, new 2.8 Message health, 2.7, 4.1, 4.2, 6.1, 6.2, 7,
       8, 9, 10.2 (speed filter replaced by the count-only counter), 12 (new
       decision; the configurable events entry now names the duplicate
       counter); ARCHITECTURE 2.1, new 2.4a Health, 2.5a, 2.6, 2.8, 2.9,
       2.11, 7; README "What it does"; `docs/paths.md` (#20); CHANGELOG
 
 ## Files to Create/Modify
-src/health.ts (new), src/paths.ts, src/config.ts, src/aggregate.ts,
+src/health.ts (new), web/src/health.ts (new), src/paths.ts, src/config.ts, src/aggregate.ts,
 src/publish.ts, src/plugin.ts, src/longrange.ts, src/query.ts, src/api.ts,
 web/src/api.ts, web/src/main.ts, web/src/charts.ts, web/static/style.css,
 test/health.test.ts (new), test/fixtures (version 1 long-range file),

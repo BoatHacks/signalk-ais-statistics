@@ -6,6 +6,31 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Message health (#16): seven counters under
+  `sensors.ais.statistics.health.*` for decode errors, incomplete
+  multipart messages, duplicates on the same event and across events
+  (same MMSI, type and position within 2 s, matched across the NMEA 0183
+  and NMEA 2000 inputs), invalid positions, implausible position jumps and
+  position reports received without an own position. They only count;
+  every message still counts everywhere else.
+- Jump limits as settings: 60 kn, 120 kn for high-speed and WIG craft
+  (ship types 40 to 49 and 20 to 29) and 600 kn for SAR aircraft.
+- The overview shows the share of good messages and each health counter,
+  and a hint when more than 20 percent of the messages are duplicates,
+  which usually means one receiver reaches two configured events.
+- Charts of the class A/B mix and of the health shares over time.
+- Fastest vessels on the sectors page: per day the highest implied speed
+  of each sender, with the reported speed over ground beside it and speeds
+  above the limit marked. `GET /longrange` returns them as `fastest`,
+  `GET /summary` gains `health`, and `GET /series` takes `metric=health`.
+
+### Changed
+
+- The daily long-range files are version 2, with the fastest list beside
+  the farthest receptions. Version 1 files still load.
+
 ## [0.4.0] - 2026-11-01
 
 ### Added

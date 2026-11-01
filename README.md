@@ -18,6 +18,12 @@ server; the open points are in SPEC section 13.
   its farthest reception, and a daily log lists the farthest receptions
   with time, vessel name and MMSI, and both positions, so a ducting or
   sporadic E event can be told from a wrong position.
+- Check message health: undecodable, incomplete and duplicate messages,
+  invalid positions, implausible position jumps and the class A/B mix,
+  with a hint when one receiver reaches two configured events. A daily
+  list of the fastest vessels shows the implied speed beside the reported
+  SOG, so a fast ferry can be told from a bad position. These only count;
+  nothing is dropped.
 - Track coverage: which areas you have actually received traffic from, per
   day, for a moving boat.
 - Publish all of it as numeric SignalK paths under `sensors.ais.statistics.*`,
