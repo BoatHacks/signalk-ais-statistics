@@ -25,7 +25,10 @@ server; the open points are in SPEC section 13.
   SOG, so a fast ferry can be told from a bad position. These only count;
   nothing is dropped.
 - Track coverage: which areas you have actually received traffic from, per
-  day, for a moving boat.
+  day, for a moving boat. Cells are kept apart for stationary and underway
+  (from `navigation.state`, or from your own position drifting less than
+  200 m in 10 minutes), so the map can show the footprint from the berth
+  or the one collected along a passage.
 - Publish all of it as numeric SignalK paths under `sensors.ais.statistics.*`,
   every 5 minutes by default, so any history provider (QuestDB, InfluxDB,
   ...) records it. Windows reach back up to 7 days, so about 14 days of

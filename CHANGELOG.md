@@ -23,6 +23,21 @@ uses [Semantic Versioning](https://semver.org/).
   each source's totals, and the compare view gains a source picker. While
   it is on, the duplicate hint counts copies on the same event only, since
   copies across events are then receiver overlap.
+- Stationary vs underway coverage (#17): coverage cells are kept per own
+  vessel mode. A recognised `navigation.state` decides; otherwise the
+  vessel is stationary while its own position stays within 200 m for 10
+  minutes (settings `modeDriftRadiusMeters` and `modeDriftMinutes`). The
+  map gets a "Cells from" selector (All, Stationary, Underway),
+  `GET /coverage` and the coverage download take `mode`, and `GET /status`
+  reports `mode` and `modeSource`. Paths, sectors and the plotter overlay
+  stay combined.
+
+### Changed
+
+- Coverage day files are written as version 2, with cells per mode.
+  Version 1 files still load, their cells counting as mode unknown (shown
+  under All only). An older plugin version does not read version 2 files,
+  so after a downgrade the coverage map starts empty for the retained days.
 
 ## [0.5.0] - 2026-11-01
 
