@@ -3,7 +3,7 @@
 // sectors use the plotter overlay's colours. A slider tries another coverage
 // distance cap at once; users with write access can save it (SPEC 9.1).
 import * as L from 'leaflet'
-import { get, type CoverageResponse } from './api'
+import { exportHref, get, type CoverageResponse } from './api'
 import {
   chooseBasemap,
   internetState,
@@ -14,6 +14,7 @@ import {
   type ChartLayer,
 } from './basemap'
 import { el } from './format'
+import { downloadLink, setLink } from './downloads'
 import {
   SETTINGS_SAVED,
   canSave,
@@ -103,7 +104,31 @@ export function createMap(): MapView {
     saveBtn,
     resetBtn,
   )
-  element.append(card, capRow, capNote, info)
+  // Coverage downloads: the shown window and every retained day, with the
+  // cells beyond the cap when All cells is on.
+  const covWindow = downloadLink('CSV')
+  const covAll = downloadLink('CSV, all days')
+  const downloads = el(
+    'div',
+    { class: 'downloads', role: 'group', 'aria-label': 'Download coverage' },
+    el('span', { class: 'downloads-label' }, 'Download cells'),
+    covWindow,
+    covAll,
+  )
+  const downloadNote = el(
+    'p',
+    { class: 'muted small' },
+    'H3 cell ids with reports and the nearest distance. A footprint centred on a harbour can hint at your berth; you decide whether to share the file.',
+  )
+  let shownWindow: '24h' | '7d' = '24h'
+  const renderDownloads = () => {
+    setLink(
+      covWindow,
+      exportHref('coverage.csv', shownWindow, { all: visible.capped }),
+    )
+    setLink(covAll, exportHref('coverage.csv', 'all', { all: visible.capped }))
+  }
+  element.append(card, capRow, capNote, info, downloads, downloadNote)
 
   let map: L.Map | undefined
   let base: L.Layer[] = []
@@ -201,6 +226,7 @@ export function createMap(): MapView {
         'aria-pressed',
         String(visible[btn.dataset.layer as Layer]),
       )
+    renderDownloads()
     lastInfo?.()
   }
 
@@ -344,6 +370,8 @@ export function createMap(): MapView {
     },
     async show(window, units, offsetMin) {
       lastArgs = [window, units, offsetMin]
+      shownWindow = window
+      renderDownloads()
       const g = ++generation
       await ensureMap()
       map!.invalidateSize()

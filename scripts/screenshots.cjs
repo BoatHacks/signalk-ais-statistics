@@ -107,6 +107,7 @@ function serve({ agg, cov, log }) {
       query: () => query,
       coverage: () => cov,
       longRange: () => log,
+      retentionDays: () => DEFAULT_CONFIG.coverageRetentionDays,
       overlayExtras: async () => [
         ...sectorFeatures(await query.sectors('24h', 'a', Date.now()), OWN),
         ...sectorFeatures(await query.sectors('24h', 'b', Date.now()), OWN),
@@ -152,6 +153,7 @@ function serve({ agg, cov, log }) {
         setHeader: (k, v) => res.setHeader(k, v),
         status: (s) => ((res.statusCode = s), r),
         json: (b) => json(res, b),
+        send: (b) => res.end(b),
       }
       let text = ''
       req.on('data', (c) => (text += c))

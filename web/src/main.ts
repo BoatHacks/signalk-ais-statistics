@@ -4,6 +4,7 @@
 // and the internet state come over one SignalK WebSocket.
 import {
   HttpError,
+  exportHref,
   get,
   type FastEntry,
   type LongRange,
@@ -23,6 +24,7 @@ import {
   type HealthKind,
 } from './health'
 import { createMap } from './map'
+import { downloadLink, setLink } from './downloads'
 import { SETTINGS_SAVED } from './settings'
 import { SectorChart } from './sectors'
 import {
@@ -442,6 +444,7 @@ class SectorsView extends HTMLElement implements ViewElement {
   private longRangeEmpty?: HTMLElement
   private fastest?: SpeedTable
   private jumps?: SpeedTable
+  private renderDownloads?: (window: '24h' | '7d') => void
 
   connectedCallback(): void {
     if (this.a) return
@@ -505,6 +508,7 @@ class SectorsView extends HTMLElement implements ViewElement {
           el('table', {}, el('thead', {}, head), this.longRange),
         ),
         this.longRangeEmpty,
+        this.downloads(),
       ),
     )
     this.fastest = new SpeedTable(
@@ -518,6 +522,12 @@ class SectorsView extends HTMLElement implements ViewElement {
       'No implausible jumps in this window.',
     )
     this.append(this.fastest.element, this.jumps.element)
+  }
+
+  private downloads(): HTMLElement {
+    const d = longRangeDownloads()
+    this.renderDownloads = d.render
+    return d.element
   }
 
   async load(ctx: Context): Promise<void> {
@@ -552,9 +562,75 @@ class SectorsView extends HTMLElement implements ViewElement {
       }),
     )
     this.longRangeEmpty!.hidden = lr.entries.length > 0
+    this.renderDownloads!(ctx.window === '1h' ? '24h' : ctx.window)
     this.fastest!.update(lr.fastest ?? [], ctx)
     this.jumps!.update(lr.implausibleJumps ?? [], ctx)
   }
+}
+
+/**
+ * Downloads of every farthest reception in the table's window and in all
+ * retained days, as CSV or GeoJSON. Anonymise drops MMSIs, names and
+ * positions, which leaves nothing to map, so GeoJSON is then greyed out.
+ */
+function longRangeDownloads(): {
+  element: HTMLElement
+  render: (window: '24h' | '7d') => void
+} {
+  const csvWindow = downloadLink('CSV')
+  const geoWindow = downloadLink('GeoJSON')
+  const csvAll = downloadLink('CSV, all days')
+  const geoAll = downloadLink('GeoJSON, all days')
+  const anon = el('input', { type: 'checkbox', id: 'export-anonymise' })
+  let window: '24h' | '7d' = '24h'
+  const render = (w: '24h' | '7d' = window) => {
+    window = w
+    const anonymise = anon.checked
+    setLink(csvWindow, exportHref('longrange.csv', w, { anonymise }))
+    setLink(csvAll, exportHref('longrange.csv', 'all', { anonymise }))
+    const noMap = 'Anonymised exports have no positions: CSV only.'
+    setLink(
+      geoWindow,
+      anonymise ? undefined : exportHref('longrange.geojson', w),
+      noMap,
+    )
+    setLink(
+      geoAll,
+      anonymise ? undefined : exportHref('longrange.geojson', 'all'),
+      noMap,
+    )
+  }
+  anon.addEventListener('change', () => render())
+  render()
+  const element = el(
+    'div',
+    {},
+    el(
+      'div',
+      {
+        class: 'downloads',
+        role: 'group',
+        'aria-label': 'Download receptions',
+      },
+      el('span', { class: 'downloads-label' }, 'Download'),
+      csvWindow,
+      geoWindow,
+      csvAll,
+      geoAll,
+      el(
+        'label',
+        { class: 'downloads-check', for: 'export-anonymise' },
+        anon,
+        'Anonymise',
+      ),
+    ),
+    el(
+      'p',
+      { class: 'muted small' },
+      'Every entry in the window, not only the farthest shown. Anonymise leaves out MMSIs, names and all positions, keeping time, class, ship type, distance and bearing.',
+    ),
+  )
+  return { element, render }
 }
 
 /** A card with a table of implied speeds (SPEC 2.8). */

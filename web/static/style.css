@@ -176,7 +176,8 @@ h3 {
 .tabs a,
 .segmented a,
 .map-switcher button,
-.cap-control button {
+.cap-control button,
+a.download {
   appearance: none;
   display: inline-flex;
   align-items: center;
@@ -204,7 +205,8 @@ h3 {
 .segmented a[aria-current],
 .map-switcher button:hover,
 .map-switcher button[aria-pressed='true'],
-.cap-control button:hover {
+.cap-control button:hover,
+a.download:hover {
   background: var(--theme-color);
   color: var(--bg-base);
 }
@@ -522,6 +524,46 @@ svg.sectors .axis {
 }
 .cap-control + p {
   margin: 4px 0 0;
+}
+
+/* Download links under the map and the farthest receptions table. */
+.downloads {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin-top: 12px;
+}
+.downloads-label,
+.downloads-check {
+  font: 700 0.8rem var(--font-data);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.downloads-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 6px;
+  cursor: pointer;
+}
+.downloads-check input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--theme-color);
+}
+.downloads + p {
+  margin: 4px 0 0;
+}
+a.download[aria-disabled='true'] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+a.download[aria-disabled='true']:hover {
+  background: transparent;
+  color: var(--theme-color);
 }
 
 /* Effective settings, read only, at the foot of every page. */

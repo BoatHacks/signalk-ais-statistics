@@ -146,3 +146,19 @@ export async function get<T>(
   }
   return (await res.json()) as T
 }
+
+/** Export files the plugin serves as downloads (SPEC 6.1). */
+export type ExportFile = 'coverage.csv' | 'longrange.csv' | 'longrange.geojson'
+export type ExportWindow = '24h' | '7d' | 'all'
+
+/** The URL of one export; flags that are off are left out. */
+export function exportHref(
+  file: ExportFile,
+  window: ExportWindow,
+  flags: { all?: boolean; anonymise?: boolean } = {},
+): string {
+  const q = new URLSearchParams({ window })
+  if (flags.all) q.set('all', 'true')
+  if (flags.anonymise) q.set('anonymise', 'true')
+  return `${API}/export/${file}?${q.toString()}`
+}
