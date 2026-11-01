@@ -247,11 +247,14 @@ export function registerRoutes(router: RouterLike, deps: ApiDeps): void {
       const all = param(req, 'all')
       if (all !== undefined && all !== 'true' && all !== 'false')
         throw new BadRequest('all must be true or false')
-      const f = await coverage().footprint(days, now(), capParam(req))
+      const cov = coverage()
+      const percentile = capParam(req) ?? cov.capPercentile()
+      const f = await cov.footprint(days, now(), percentile)
       return {
         window,
         days: f.days,
         resolution: f.resolution,
+        capPercentile: percentile,
         cells: f.cells.length,
         cappedCells: f.cappedCells,
         capM: f.capNm === null ? null : Math.round(f.capNm * M_PER_NM),

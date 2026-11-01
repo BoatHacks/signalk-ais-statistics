@@ -170,7 +170,11 @@ metered state when present, and a manual choice is remembered in
 `localStorage`. Toggles show or hide the coverage cells, the cells beyond
 the distance cap (fetched with `all=true`, drawn dashed, off by default)
 and the class A and B sectors (`layers.ts`, also remembered in
-`localStorage`). The sectors view draws the sector maxima as ticks with a wide invisible hover line,
+`localStorage`). The distance cap slider under the map refetches
+`/coverage` with `cap` and, through `settings.ts`, saves with `POST
+/settings`; the save button shows when `/skServer/loginStatus`, read once
+per page load because the server rate limits it, reports security off or a
+readwrite or admin user. The sectors view draws the sector maxima as ticks with a wide invisible hover line,
 leaves a quarter more room on the scale for them, and lists `/longrange`
 in a table. The map's sector wedges
 come from the overlay GeoJSON route, and the cell and sector colours are

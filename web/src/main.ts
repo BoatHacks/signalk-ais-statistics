@@ -14,6 +14,7 @@ import {
 import { Chart } from './charts'
 import { el, int } from './format'
 import { createMap } from './map'
+import { SETTINGS_SAVED } from './settings'
 import { SectorChart } from './sectors'
 import {
   VIEWS,
@@ -462,6 +463,18 @@ const banner = el('div', { class: 'banner theme-offline', hidden: '' })
 const nav = el('nav', { class: 'tabs' })
 const windows = el('nav', { class: 'segmented', 'aria-label': 'Window' })
 const error = el('p', { class: 'error theme-red', hidden: '' })
+const settingsBody = el('tbody')
+const settings = el(
+  'details',
+  { class: 'settings' },
+  el('summary', {}, 'Settings'),
+  el(
+    'p',
+    { class: 'muted small' },
+    'The settings in effect, read only. Change them in the server admin under Server, Plugin Config, AIS Statistics. The coverage distance cap can also be tried and saved on the map.',
+  ),
+  el('table', {}, settingsBody),
+)
 const views = Object.fromEntries(
   VIEWS.map((v) => [v, el(`ais-${v}` as 'div', { hidden: '' })]),
 ) as unknown as Record<View, ViewElement>
@@ -490,6 +503,7 @@ app.append(
   windows,
   error,
   el('main', {}, ...VIEWS.map((v) => views[v])),
+  settings,
 )
 
 let live: LiveState = {
@@ -525,9 +539,49 @@ function describe(err: unknown): string {
   return `Could not load: ${err instanceof Error ? err.message : String(err)}`
 }
 
+/** Names of the settings as the server's config form shows them. */
+const SETTING_LABELS: Record<string, string> = {
+  sentenceEvents: 'Server events read',
+  publishIntervalMinutes: 'Publish interval (minutes)',
+  coverageDistancePercentile: 'Coverage distance cap (percentile)',
+  h3Resolution: 'Coverage cell resolution (H3)',
+  coverageRetentionDays: 'Coverage retention (days)',
+  targetExpirySeconds: 'Target expiry (seconds)',
+  ownPositionMaxAgeSeconds: 'Own position maximum age (seconds)',
+  publishOverlay: 'Plotter overlay',
+}
+
+function renderSettings(config: Record<string, unknown> | undefined): void {
+  settings.hidden = !config
+  if (!config) return
+  const value = (v: unknown) =>
+    Array.isArray(v)
+      ? v.join(', ')
+      : typeof v === 'boolean'
+        ? v
+          ? 'on'
+          : 'off'
+        : String(v)
+  const keys = [
+    ...Object.keys(SETTING_LABELS).filter((k) => k in config),
+    ...Object.keys(config).filter((k) => !(k in SETTING_LABELS)),
+  ]
+  settingsBody.replaceChildren(
+    ...keys.map((k) =>
+      el(
+        'tr',
+        {},
+        el('th', { scope: 'row' }, SETTING_LABELS[k] ?? k),
+        el('td', {}, value(config[k])),
+      ),
+    ),
+  )
+}
+
 async function updateStatus(): Promise<void> {
   try {
     const s = await get<Status>('/status')
+    renderSettings(s.running ? s.config : undefined)
     statusLine.textContent = !s.running
       ? 'The plugin is not running.'
       : s.noData
@@ -584,6 +638,8 @@ function renderLive(): void {
       ? 'Connecting to the SignalK server...'
       : `Connection to the SignalK server lost. Retrying in ${live.retryInS} s.`
 }
+
+window.addEventListener(SETTINGS_SAVED, () => void updateStatus())
 
 window.addEventListener('hashchange', () => {
   route = parseRoute(location.hash)

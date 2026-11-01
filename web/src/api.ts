@@ -1,4 +1,5 @@
 // Client for the plugin's REST API (SPEC 6.1).
+/// <reference types="geojson" />
 export const API = '/plugins/signalk-ais-statistics'
 
 import type { WindowName } from './route'
@@ -74,6 +75,8 @@ export interface CoverageResponse {
   cells: number
   cappedCells: number
   capM: number | null
+  /** The distance cap percentile applied to this answer. */
+  capPercentile: number
   areaM2: number
   geojson: GeoJSON.FeatureCollection
 }
@@ -86,6 +89,8 @@ export interface Status {
   ownPositionFresh?: boolean
   historyAvailable?: boolean
   decodeErrors?: number
+  /** The effective plugin settings. */
+  config?: Record<string, unknown>
 }
 
 export class HttpError extends Error {

@@ -250,7 +250,7 @@ effective live settings.
 | `GET /summary?window=24h` | headline figures: messages, positions, vessels by group, distance avg, p95, p99 and max |
 | `GET /series?metric=&resolution=&from=&to=` | time series for the charts, read from history; `metric` is `messages`, `positions`, `distance` or `vessels`, `resolution` in seconds (at least 60, at most 2000 points) |
 | `GET /sectors?window=24h&class=a\|b\|all` | 24 sectors with count and p99 distance (the highest hourly p99 in the window, see 2.6), and the farthest reception `maxM` with its time: `maxAt` when known exactly, otherwise `maxHour`, the start of the hour it fell in |
-| `GET /coverage?window=7d&all=false&cap=` | cell ids, GeoJSON for the map, covered area in m²; windows `24h` (today) and `7d`; `all=true` adds the cells beyond the distance cap, marked `capped`; `cap` (50 to 100) tries another distance cap percentile for this answer only |
+| `GET /coverage?window=7d&all=false&cap=` | cell ids, GeoJSON for the map, covered area in m²; windows `24h` (today) and `7d`; `all=true` adds the cells beyond the distance cap, marked `capped`; `cap` (50 to 100) tries another distance cap percentile for this answer only, and `capPercentile` gives the percentile applied |
 | `GET /longrange?window=24h` | the 25 farthest entries of the long-range log (2.7) in the window, farthest first; windows `24h` and `7d` |
 | `GET /overlay/coverage.geojson` | the plotter overlay's GeoJSON: the 7 day footprint and the 24 hour sector wedges of class A and B |
 | `GET /status` | live state: tracked targets, own position age, history reachable or not |
@@ -393,6 +393,10 @@ A SignalK web app, listed in the admin UI, with:
   and the user has not chosen otherwise. When the server has no charts, the
   server charts button is greyed out with a short note under it and the map
   uses OSM/OpenSeaMap, since the chart basemap would stay blank.
+  Under the map, a distance cap slider (50th percentile to off) redraws the
+  cells at once and offers save and reset (live settings, 9.1).
+- Settings: a collapsed panel at the foot of every page lists the settings
+  in effect, read only, and says where to change them.
 
 It must work on a phone, since the boat server is often viewed remotely
 over a metered link, so the app's own assets are bundled locally (no CDN)

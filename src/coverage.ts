@@ -119,6 +119,11 @@ export class Coverage {
     this.percentile = percentile
   }
 
+  /** The configured distance cap percentile. */
+  capPercentile(): number {
+    return this.percentile
+  }
+
   /** Loads today's file so a restart continues the day. */
   async load(now: number): Promise<void> {
     const date = utcDay(now)

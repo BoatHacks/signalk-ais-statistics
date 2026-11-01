@@ -175,7 +175,8 @@ h3 {
 }
 .tabs a,
 .segmented a,
-.map-switcher button {
+.map-switcher button,
+.cap-control button {
   appearance: none;
   display: inline-flex;
   align-items: center;
@@ -202,7 +203,8 @@ h3 {
 .segmented a:active,
 .segmented a[aria-current],
 .map-switcher button:hover,
-.map-switcher button[aria-pressed='true'] {
+.map-switcher button[aria-pressed='true'],
+.cap-control button:hover {
   background: var(--theme-color);
   color: var(--bg-base);
 }
@@ -467,6 +469,73 @@ svg.sectors .axis {
   border-radius: 0;
   box-shadow: none;
   font-family: var(--font-data);
+}
+
+/* Coverage distance cap slider under the map, with save and reset. */
+.cap-control {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 10px;
+}
+.cap-control label {
+  font: 700 0.8rem var(--font-data);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.cap-control input[type='range'] {
+  flex: 1 1 160px;
+  min-width: 120px;
+  max-width: 360px;
+  min-height: 48px;
+  accent-color: var(--theme-color);
+}
+.cap-control output {
+  min-width: 9em;
+  font: 0.9rem var(--font-data);
+}
+.cap-control button:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+.cap-control + p {
+  margin: 4px 0 0;
+}
+
+/* Effective settings, read only, at the foot of every page. */
+.settings {
+  margin-top: 24px;
+}
+.settings summary {
+  cursor: pointer;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  font: 700 0.8rem var(--font-data);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--theme-color);
+}
+.settings table {
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.settings th,
+.settings td {
+  text-align: left;
+  padding: 4px 12px 4px 0;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+.settings th {
+  font-weight: 400;
+  color: var(--text-muted);
+}
+.settings td {
+  font-family: var(--font-data);
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 600px) {
