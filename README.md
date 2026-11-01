@@ -3,7 +3,7 @@
 A SignalK server plugin that turns the AIS traffic your server already
 receives into reception statistics for your own AIS station.
 
-**Status: 0.5.0.** The plugin, its REST API, the web
+**Status: 0.6.0.** The plugin, its REST API, the web
 app and the plotter overlay are unit tested and run on a development
 server; the open points are in SPEC section 13.
 
