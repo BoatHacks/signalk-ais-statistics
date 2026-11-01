@@ -77,6 +77,27 @@ the aggregates above.
   router`.
 - Data that should be readable anonymously can instead be served through the
   Resources API with `app.registerResourceProvider`.
+- `router.access('readwrite').post(...)` registers a write route that
+  `readwrite` and `admin` users reach. Checked on 2026-11-01 on a
+  development server (2.35.1, token security on, read-only access allowed)
+  with `POST /settings`: no login and `readonly` users got 401 with the
+  server's HTML login page before the plugin's handler ran, `readwrite` and
+  `admin` users got the plugin's answer.
+- `GET /skServer/loginStatus` answers `status` (`loggedIn` or
+  `notLoggedIn`), `authenticationRequired` and, only when logged in,
+  `userLevel` (`readonly`, `readwrite` or `admin`). Without a login the
+  `userLevel` field is absent, not null.
+- `app.savePluginOptions(configuration, cb)` stores exactly the object it is
+  given as the plugin's `configuration` and does not restart the plugin. The
+  admin config form loads the saved value (`GET /skServer/plugins`), and
+  saving that form unchanged keeps it.
+
+```bash
+curl -s -b cookies $SK/skServer/loginStatus
+curl -s -b cookies -X POST -H 'Content-Type: application/json' \
+  -d '{"coverageDistancePercentile":97}' \
+  $SK/plugins/signalk-ais-statistics/settings
+```
 
 ## Chart plotter overlay (Freeboard-SK)
 

@@ -66,8 +66,9 @@ Verified in the published packages (`@signalk/server-api` 2.35.0 typings,
   save button shows when security is off or `userLevel` is `readwrite` or
   `admin`; a 401 or 403 from the POST still hides it and explains why.
 
-Assumed until the dev server check (step 7): the admin config form shows
-the saved value after a POST, and a later save from that form keeps it.
+Checked on the development server (findings.md, 2026-11-01): the admin
+config form shows the saved value after a POST, and a later save from that
+form keeps it. Refused users get the server's 401 before the route runs.
 
 **README.** Outline: what it does; requirements; install from the App
 Store; first run and what each view shows (overview, charts, sectors, map,
