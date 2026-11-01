@@ -157,9 +157,8 @@ MID 999 data. Gaps found in `test/`:
 ## Open Points
 - Which time frames count as live settings beyond the coverage cap? The
   plan assumes only those that #13 and #17 add; confirm before step 4.
-- The issue mentions a "3 report rule" for coverage, but neither SPEC 2.4
-  nor `src/coverage.ts` has one (a cell needs one report). Ask whether it
-  is wanted; until then only the cap is tested.
+- The coverage cap's 3 report rule (`MIN_FAR_CELL_REPORTS` in
+  `src/coverage.ts`, from #18) is tested together with the cap.
 - If a dev server shows that the config form overwrites a saved live
   value, the save route must also say so in the web app.
 - The Freeboard-SK check needs the maintainer and a plotter; if it is not
