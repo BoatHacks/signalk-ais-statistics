@@ -45,6 +45,17 @@ uses [Semantic Versioning](https://semver.org/).
 - The daily long-range files are version 2, with the fastest list beside
   the farthest receptions. Version 1 files still load.
 
+### Fixed
+
+- A sector's p99 no longer exceeds the farthest reception in that sector.
+  The per-sector histogram bins are about 60 percent wide, and the p99 was
+  interpolated within its bin without a cap, so a sector with all its
+  reports low in a bin got a radius beyond any of them and its
+  farthest-reception tick vanished inside the wedge. Each hour's p99 is now
+  capped at that hour's farthest reception, and a window's p99 at the
+  window's farthest reception, which also corrects hourly values already
+  in history.
+
 ## [0.4.0] - 2026-11-01
 
 ### Added

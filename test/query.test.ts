@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { Aggregator, HOUR_MS, MINUTE_MS } from '../src/aggregate'
 import { destination } from '../src/geo'
 import { HistoryApiReader, nullHistoryReader } from '../src/history'
+import { paths } from '../src/paths'
 import { buildValues } from '../src/publish'
 import { HISTORY_FAILED, Query } from '../src/query'
 import { OWN } from './fixtures/ais'
@@ -146,6 +147,49 @@ describe('Query with history', () => {
         if (counted) expect(p99, `${reader}, ${far}`).toBeGreaterThan(30 * NM)
         else expect(p99, `${reader}, ${far}`).toBeLessThan(15 * NM)
       }
+  })
+
+  it('keeps the sector p99 within the farthest reception', async () => {
+    // Thirty reports a minute at 27 nm in 60 to 75 degrees: the coarse bin
+    // runs to 40.3 nm, and an uncapped p99 hid the farthest-reception tick.
+    for (const reader of ['history', 'live'] as const)
+      for (const window of ['1h', '24h'] as const) {
+        const history = new FakeHistory()
+        const agg = new Aggregator(T0)
+        for (let m = 0; m < 150; m++) {
+          const t = T0 + m * MINUTE_MS
+          agg.add(report(999000004, 67, 27), OWN, t + 1000)
+          history.record(buildValues(agg, t + 59_000), t + 59_000)
+        }
+        const q = new Query(agg, () =>
+          reader === 'history'
+            ? new HistoryApiReader(history)
+            : nullHistoryReader,
+        )
+        const r = await q.sectors(window, 'a', T0 + 150 * MINUTE_MS)
+        const s = r.sectors[4]!
+        const label = `${reader}, ${window}`
+        expect(s.maxM, label).toBeCloseTo(27 * NM, -1)
+        expect(s.p99M, label).toBeLessThanOrEqual(s.maxM!)
+      }
+  })
+
+  it('caps uncapped sector p99s already in history', async () => {
+    // Hourly p99s published by 0.4.0 can exceed that hour's maximum.
+    const history = new FakeHistory()
+    const agg = new Aggregator(T0)
+    for (let m = 0; m < 150; m++) {
+      const t = T0 + m * MINUTE_MS
+      agg.add(report(999000004, 67, 27), OWN, t + 1000)
+      const values = buildValues(agg, t + 59_000).map((v) =>
+        v.path === paths.sectorP99(4, 'a') ? { ...v, value: 40 * NM } : v,
+      )
+      history.record(values, t + 59_000)
+    }
+    const q = new Query(agg, () => new HistoryApiReader(history))
+    const r = await q.sectors('24h', 'a', T0 + 150 * MINUTE_MS)
+    expect(r.source).toBe('history')
+    expect(r.sectors[4]!.p99M).toBe(r.sectors[4]!.maxM)
   })
 
   it('derives the same distance figures from history as from live data', async () => {

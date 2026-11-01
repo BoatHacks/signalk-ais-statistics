@@ -130,6 +130,17 @@ describe('Aggregator', () => {
     expect(p99[0]![0]).toBeUndefined()
     expect(p99[1]![6]).toBeUndefined()
   })
+
+  it('caps the sector p99 at the farthest reception in the sector', () => {
+    // 27 nm sits low in the coarse 25.4 to 40.3 nm bin, so the interpolated
+    // p99 would land near the top of the bin, far beyond any report.
+    const agg = new Aggregator(T0)
+    for (let i = 0; i < 30; i++) agg.add(at(`9990002${i}`, 67, 27), OWN, T0)
+    const hour = agg.lastHour(T0)
+    const p99 = sectorP99(hour)[0]![4]!
+    expect(p99).toBeCloseTo(hour.sectorMaxNm[0]![4]!, 6)
+    expect(p99).toBeLessThan(27.01)
+  })
 })
 
 describe('Aggregator sector maxima and names', () => {

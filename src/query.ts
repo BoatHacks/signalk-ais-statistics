@@ -408,12 +408,19 @@ export class Query {
       source: Source,
       a: Accumulator,
     ): Promise<SectorStats> => {
+      // Each hour's p99 is capped at that hour's farthest reception, but
+      // hourly p99s written by 0.4.0 and earlier are not, so the window's
+      // p99 is capped at the window's farthest reception too.
+      const p99 = (s: number) => {
+        const p = a.p99[s]
+        return p !== undefined && a.max[s]! > 0 ? Math.min(p, a.max[s]!) : p
+      }
       const sectors: SectorStat[] = a.counts.map((count, s) => ({
         sector: s,
         fromDeg: s * SECTOR_WIDTH_DEG,
         toDeg: (s + 1) * SECTOR_WIDTH_DEG,
         count,
-        p99M: metres(a.p99[s]),
+        p99M: metres(p99(s)),
         maxM: a.max[s]! > 0 ? Math.round(a.max[s]! * M_PER_NM) : null,
         maxAt: iso(a.maxAt[s]),
         maxHour: a.maxAt[s] === undefined ? iso(a.maxHour[s]) : null,
