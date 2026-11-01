@@ -175,12 +175,18 @@ describe('REST API', () => {
 
   it('tries a coverage cap without saving it', async () => {
     const { call, saved } = await setup()
-    type Cov = { cappedCells: number; capM: number | null }
+    type Cov = {
+      cappedCells: number
+      capM: number | null
+      capPercentile: number
+    }
     const base = (await call('/coverage')).body as Cov
     expect(base.cappedCells).toBe(1)
+    expect(base.capPercentile).toBe(99)
     const open = (await call('/coverage', { cap: '100' })).body as Cov
     expect(open.cappedCells).toBe(0)
     expect(open.capM).toBeNull()
+    expect(open.capPercentile).toBe(100)
     // The configured cap is unchanged, cached or not.
     expect(((await call('/coverage')).body as Cov).cappedCells).toBe(1)
     expect(saved).toEqual([])
