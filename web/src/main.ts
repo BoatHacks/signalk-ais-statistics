@@ -5,6 +5,7 @@
 import {
   HttpError,
   get,
+  type FastEntry,
   type LongRange,
   type SectorStats,
   type Series,
@@ -13,6 +14,14 @@ import {
 } from './api'
 import { Chart } from './charts'
 import { el, int } from './format'
+import {
+  classMix,
+  duplicateHint,
+  formatShare,
+  goodShare,
+  share,
+  type HealthKind,
+} from './health'
 import { createMap } from './map'
 import { SETTINGS_SAVED } from './settings'
 import { SectorChart } from './sectors'
@@ -52,11 +61,22 @@ const VIEW_LABELS: Record<View, string> = {
 }
 const DISTANCE_PATH = 'sensors.ais.statistics.distance.p99'
 const AREA_PATH = 'sensors.ais.statistics.coverage.area.today'
+/** Speeds follow the server's unit preference for speed over ground. */
+const SPEED_PATH = 'navigation.speedOverGround'
+const HEALTH_LABELS: Record<HealthKind, string> = {
+  decodeErrors: 'Undecodable',
+  incomplete: 'Incomplete (part missing)',
+  duplicates: 'Duplicates',
+  duplicatesCrossEvent: 'Duplicates across events',
+  positionInvalid: 'Invalid positions',
+  implausibleJumps: 'Implausible jumps',
+  noOwnPosition: 'Without own position',
+}
 
 interface Context {
   window: WindowName
   offsetMin: number | undefined
-  units: { distance: Unit; area: Unit }
+  units: { distance: Unit; area: Unit; speed: Unit }
 }
 
 interface ViewElement extends HTMLElement {
@@ -122,6 +142,9 @@ class OverviewView extends HTMLElement implements ViewElement {
   >()
   private groupsEmpty?: HTMLElement
   private source?: HTMLElement
+  private healthLine?: HTMLElement
+  private healthHint?: HTMLElement
+  private healthRows = new Map<HealthKind, HTMLElement>()
 
   connectedCallback(): void {
     if (this.tiles) return
@@ -151,6 +174,25 @@ class OverviewView extends HTMLElement implements ViewElement {
     }
     this.groupsEmpty = el('p', { class: 'muted' }, 'No vessels in this window.')
     this.source = el('p', { class: 'muted small' })
+    this.healthLine = el('p', { class: 'health-line' })
+    this.healthHint = el(
+      'p',
+      { class: 'hint theme-orange', hidden: '' },
+      'Many messages arrive twice. One receiver may reach two of the configured server events (Server events to read AIS from); remove one of them.',
+    )
+    const health = el('div', { class: 'groups sk-card' })
+    for (const k of Object.keys(HEALTH_LABELS) as HealthKind[]) {
+      const value = el('span', { class: 'num' })
+      health.append(
+        el(
+          'div',
+          { class: 'group-row' },
+          el('span', {}, HEALTH_LABELS[k]),
+          value,
+        ),
+      )
+      this.healthRows.set(k, value)
+    }
     this.append(
       el('div', { class: 'tiles' }, t.messages, t.classA, t.classB, t.vessels),
       el('h2', {}, 'Distance'),
@@ -158,6 +200,15 @@ class OverviewView extends HTMLElement implements ViewElement {
       el('h2', {}, 'Vessels by type'),
       groups,
       this.groupsEmpty,
+      el('h2', {}, 'Message health'),
+      this.healthLine,
+      this.healthHint,
+      health,
+      el(
+        'p',
+        { class: 'muted small' },
+        'Counted only: duplicates, jumps and the rest still count everywhere else. A jump is a position implying a speed above the limit for the sender; one bad position counts twice, out and back.',
+      ),
       this.source,
     )
   }
@@ -188,6 +239,14 @@ class OverviewView extends HTMLElement implements ViewElement {
     }
     this.groupsEmpty!.hidden = any || !s.vessels
     ;(this.querySelector('.groups') as HTMLElement).hidden = !any
+    const h = s.health
+    this.healthLine!.textContent =
+      h.received > 0
+        ? `${formatShare(goodShare(h))} of ${int(h.received)} received messages are good: decodable, complete, not a copy, and with a usable position.`
+        : 'No messages received in this window.'
+    this.healthHint!.hidden = !duplicateHint(h)
+    for (const [k, value] of this.healthRows)
+      value.textContent = `${int(h.counts[k])} (${formatShare(share(h.counts[k], h.received))})`
     this.source!.textContent = sourceText(s.source, s.historyError)
   }
 }
@@ -210,6 +269,8 @@ class ChartsView extends HTMLElement implements ViewElement {
     distance: Chart
     max: Chart
     vessels: Chart
+    mix: Chart
+    health: Chart
   }
   private headings = new Map<string, HTMLElement>()
   private source?: HTMLElement
@@ -231,6 +292,17 @@ class ChartsView extends HTMLElement implements ViewElement {
       ]),
       max: new Chart('line', [{ name: 'Maximum', color: COLORS.b }]),
       vessels: new Chart('line', [{ name: 'Vessels', color: COLORS.a }]),
+      mix: new Chart('bars', [
+        { name: 'Class A', color: COLORS.a },
+        { name: 'Class B', color: COLORS.b },
+      ]),
+      health: new Chart('line', [
+        { name: 'Undecodable', color: 'var(--color-red)' },
+        { name: 'Duplicates', color: COLORS.b },
+        { name: 'Across events', color: COLORS.a },
+        { name: 'Invalid positions', color: COLORS.grey },
+        { name: 'Jumps', color: COLORS.other },
+      ]),
     }
     this.charts = c
     const h = (key: string, tag: 'h2' | 'h3' = 'h2') => {
@@ -250,6 +322,10 @@ class ChartsView extends HTMLElement implements ViewElement {
       c.max.element,
       h('vessels'),
       c.vessels.element,
+      el('h2', {}, 'Class A and B mix'),
+      c.mix.element,
+      h('health'),
+      c.health.element,
       this.source,
     )
   }
@@ -262,11 +338,12 @@ class ChartsView extends HTMLElement implements ViewElement {
       from: new Date(to.getTime() - SPAN[ctx.window]).toISOString(),
       to: to.toISOString(),
     }
-    const [pos, msg, dist, ves] = await Promise.all([
+    const [pos, msg, dist, ves, hl] = await Promise.all([
       get<Series>('/series', { ...params, metric: 'positions' }),
       get<Series>('/series', { ...params, metric: 'messages' }),
       get<Series>('/series', { ...params, metric: 'distance' }),
       get<Series>('/series', { ...params, metric: 'vessels' }),
+      get<Series>('/series', { ...params, metric: 'health' }),
     ])
     const col = (s: Series, k: string) => (s[k] as (number | null)[]) ?? []
     const times = (s: Series) => s.times.map((t) => Date.parse(t))
@@ -284,6 +361,8 @@ class ChartsView extends HTMLElement implements ViewElement {
     this.headings.get('positions')!.textContent = `Positions per ${per}`
     this.headings.get('messages')!.textContent = `Messages per ${per}`
     this.headings.get('distance')!.textContent = `Distance per ${per}`
+    this.headings.get('health')!.textContent =
+      `Message health: share of received messages per ${per}`
     this.headings.get('vessels')!.textContent =
       ves.resolution >= 86400
         ? 'Unique vessels per day'
@@ -324,6 +403,33 @@ class ChartsView extends HTMLElement implements ViewElement {
       columns: [col(ves, 'vessels')],
       format: count,
     })
+    const mix = classMix(col(pos, 'classA'), col(pos, 'classB'))
+    const pct = (v: number) => `${Math.round(v * 100)} %`
+    c.mix.update({
+      ...base,
+      times: times(pos),
+      columns: [mix.a, mix.b],
+      format: pct,
+    })
+    const received = col(hl, 'received')
+    const shares = (...kinds: HealthKind[]) =>
+      received.map((r, i) => {
+        let n = 0
+        for (const k of kinds) n += col(hl, k)[i] ?? 0
+        return r === null ? null : share(n, r)
+      })
+    c.health.update({
+      ...base,
+      times: times(hl),
+      columns: [
+        shares('decodeErrors', 'incomplete'),
+        shares('duplicates'),
+        shares('duplicatesCrossEvent'),
+        shares('positionInvalid'),
+        shares('implausibleJumps'),
+      ],
+      format: (v) => formatShare(v),
+    })
     this.source!.textContent = sourceText(pos.source, pos.historyError)
   }
 }
@@ -334,6 +440,8 @@ class SectorsView extends HTMLElement implements ViewElement {
   private source?: HTMLElement
   private longRange?: HTMLTableSectionElement
   private longRangeEmpty?: HTMLElement
+  private fastest?: SpeedTable
+  private jumps?: SpeedTable
 
   connectedCallback(): void {
     if (this.a) return
@@ -399,6 +507,17 @@ class SectorsView extends HTMLElement implements ViewElement {
         this.longRangeEmpty,
       ),
     )
+    this.fastest = new SpeedTable(
+      'Fastest vessels',
+      'The highest plausible speed of each sender per day, implied by two of its positions at least 500 m apart, beside the speed it reported.',
+      'No sender moved far enough in this window to measure its speed.',
+    )
+    this.jumps = new SpeedTable(
+      'Implausible jumps',
+      'The fastest jumps above the limit for the sender: most likely a wrong position rather than a fast craft. Kept apart so they cannot push real fast craft out of the list above.',
+      'No implausible jumps in this window.',
+    )
+    this.append(this.fastest.element, this.jumps.element)
   }
 
   async load(ctx: Context): Promise<void> {
@@ -407,7 +526,9 @@ class SectorsView extends HTMLElement implements ViewElement {
       get<SectorStats>('/sectors', { window: ctx.window, class: 'b' }),
       get<LongRange>('/longrange', {
         window: ctx.window === '1h' ? '24h' : ctx.window,
-      }).catch(() => ({ entries: [] }) as LongRange),
+      }).catch(
+        () => ({ entries: [], fastest: [], implausibleJumps: [] }) as LongRange,
+      ),
     ])
     this.a!.update(a, ctx.units.distance, ctx.offsetMin)
     this.b!.update(b, ctx.units.distance, ctx.offsetMin)
@@ -431,6 +552,69 @@ class SectorsView extends HTMLElement implements ViewElement {
       }),
     )
     this.longRangeEmpty!.hidden = lr.entries.length > 0
+    this.fastest!.update(lr.fastest ?? [], ctx)
+    this.jumps!.update(lr.implausibleJumps ?? [], ctx)
+  }
+}
+
+/** A card with a table of implied speeds (SPEC 2.8). */
+class SpeedTable {
+  readonly element: HTMLElement
+  private readonly body = el('tbody')
+  private readonly empty: HTMLElement
+
+  constructor(title: string, note: string, emptyText: string) {
+    this.empty = el('p', { class: 'muted small' }, emptyText)
+    const head = el('tr')
+    for (const [label, num] of [
+      ['Time', false],
+      ['Implied speed', true],
+      ['Reported SOG', true],
+      ['Limit', true],
+      ['Over', true],
+      ['Class', false],
+      ['Vessel', false],
+      ['From', false],
+      ['To', false],
+    ] as const)
+      head.append(el('th', num ? { class: 'num' } : {}, label))
+    this.element = el(
+      'div',
+      { class: 'sk-card' },
+      el('h2', {}, title),
+      el('p', { class: 'muted small' }, note),
+      el(
+        'div',
+        { class: 'long-range' },
+        el('table', {}, el('thead', {}, head), this.body),
+      ),
+      this.empty,
+    )
+  }
+
+  update(entries: FastEntry[], ctx: Context): void {
+    const v = ctx.units.speed
+    const cell = (text: string, num = false) =>
+      el('td', num ? { class: 'num' } : {}, text)
+    this.body.replaceChildren(
+      ...entries.map((e) =>
+        el(
+          'tr',
+          // Rows in the class colours of the sectors view.
+          { class: `cls-${e.cls.toLowerCase()}` },
+          cell(formatDateTime(Date.parse(e.time), ctx.offsetMin)),
+          cell(v.format(e.speedMps), true),
+          cell(e.sogMps === undefined ? '–' : v.format(e.sogMps), true),
+          cell(v.format(e.limitMps), true),
+          cell(`${Math.round(e.gapS)} s`, true),
+          cell(e.cls),
+          cell(e.name ? `${e.name} (${e.mmsi})` : e.mmsi),
+          cell(formatPosition(e.fromLat, e.fromLon)),
+          cell(formatPosition(e.lat, e.lon)),
+        ),
+      ),
+    )
+    this.empty.hidden = entries.length > 0
   }
 }
 
@@ -516,17 +700,23 @@ let live: LiveState = {
 let units = {
   distance: makeUnit('m', undefined),
   area: makeUnit('m2', undefined),
+  speed: makeUnit('m/s', undefined),
 }
 let unitsKnown = false
 let route: Route = parseRoute(location.hash)
 
 async function loadUnits(): Promise<void> {
   if (unitsKnown) return
-  const [d, a] = await Promise.all([
+  const [d, a, v] = await Promise.all([
     displayUnits(DISTANCE_PATH),
     displayUnits(AREA_PATH),
+    displayUnits(SPEED_PATH),
   ])
-  units = { distance: makeUnit('m', d), area: makeUnit('m2', a) }
+  units = {
+    distance: makeUnit('m', d),
+    area: makeUnit('m2', a),
+    speed: makeUnit('m/s', v),
+  }
   // The paths exist only after the first publish; ask again until then.
   unitsKnown = d !== undefined
 }
@@ -549,6 +739,9 @@ const SETTING_LABELS: Record<string, string> = {
   targetExpirySeconds: 'Target expiry (seconds)',
   ownPositionMaxAgeSeconds: 'Own position maximum age (seconds)',
   publishOverlay: 'Plotter overlay',
+  jumpSpeedLimitKnots: 'Implausible jump speed (knots)',
+  jumpSpeedLimitHighSpeedKnots: 'Jump speed, high-speed and WIG craft (knots)',
+  jumpSpeedLimitAircraftKnots: 'Jump speed, SAR aircraft (knots)',
 }
 
 function renderSettings(config: Record<string, unknown> | undefined): void {

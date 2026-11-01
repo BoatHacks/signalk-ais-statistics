@@ -12,6 +12,7 @@ import {
   type LiveSettings,
 } from './config'
 import { Coverage } from './coverage'
+import { Health, limitsFromKnots } from './health'
 import {
   connectHistory,
   nullHistoryReader,
@@ -54,6 +55,7 @@ interface Running {
   ingests: { stats: IngestStats }[]
   own: OwnPosition
   agg: Aggregator
+  health: Health
   coverage: Coverage
   longRange: LongRangeLog
   query: Query
@@ -201,6 +203,14 @@ export function createPlugin(app: ServerAPI): Plugin {
         ingests: [],
         own: new OwnPosition(config.ownPositionMaxAgeSeconds * 1000),
         agg,
+        health: new Health(
+          limitsFromKnots(
+            config.jumpSpeedLimitKnots,
+            config.jumpSpeedLimitHighSpeedKnots,
+            config.jumpSpeedLimitAircraftKnots,
+          ),
+          config.targetExpirySeconds * 1000,
+        ),
         coverage: new Coverage(
           app.getDataDirPath(),
           config.h3Resolution,
@@ -235,13 +245,41 @@ export function createPlugin(app: ServerAPI): Plugin {
       void findHistory(s)
       void setMetadata()
 
-      const onInput = (sentences: Ingest, pgns: N2kIngest, input: unknown) => {
+      const onInput = (
+        event: string,
+        sentences: Ingest,
+        pgns: N2kIngest,
+        input: unknown,
+      ) => {
         try {
           const time = Date.now()
           // Sentence events carry strings, N2KAnalyzerOut carries PGN objects.
+          const ingest = typeof input === 'string' ? sentences : pgns
+          const errors = ingest.stats.decodeErrors
+          const incomplete = ingest.stats.incompleteDropped
           const msg =
             typeof input === 'string' ? sentences.push(input) : pgns.push(input)
+          s.agg.countHealth(
+            'decodeErrors',
+            time,
+            ingest.stats.decodeErrors - errors,
+          )
+          s.agg.countHealth(
+            'incomplete',
+            time,
+            ingest.stats.incompleteDropped - incomplete,
+          )
           if (!msg) return
+          const verdict = s.health.check(
+            msg,
+            event,
+            msg.shipType ?? s.agg.vessel(msg.mmsi).shipType,
+            time,
+          )
+          if (verdict.duplicate === 'sameEvent')
+            s.agg.countHealth('duplicates', time)
+          else if (verdict.duplicate === 'crossEvent')
+            s.agg.countHealth('duplicatesCrossEvent', time)
           const located = s.agg.add(msg, s.own.at(time), time)
           if (located) {
             s.coverage.add(
@@ -251,6 +289,11 @@ export function createPlugin(app: ServerAPI): Plugin {
               located.time,
             )
             s.longRange.add(located, s.agg.vessel(located.mmsi))
+          }
+          const speed = verdict.speed
+          if (speed) {
+            if (speed.implausible) s.agg.countHealth('implausibleJumps', time)
+            s.longRange.addSpeed(speed, s.agg.vessel(speed.mmsi))
           }
         } catch (err) {
           // Never let one bad sentence or PGN escape into the server.
@@ -262,7 +305,8 @@ export function createPlugin(app: ServerAPI): Plugin {
         const sentences = new Ingest()
         const pgns = new N2kIngest()
         s.ingests.push(sentences, pgns)
-        const listener = (input: unknown) => onInput(sentences, pgns, input)
+        const listener = (input: unknown) =>
+          onInput(event, sentences, pgns, input)
         events.on(event, listener)
         s.stops.push(() => events.removeListener(event, listener))
       }

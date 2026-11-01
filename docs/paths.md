@@ -44,6 +44,13 @@ unit preferences convert them for display. A blank unit is a plain count.
 | `positions.other` | | counter | interval | Other position reports (base stations, aids to navigation, SAR aircraft) |
 | `distance.bin.<nn>` | | counter | interval | Position reports per distance bin, `00` to `31` (below) |
 | `sectors.<nnn>.<class>.count` | | counter | hourly | Position reports per bearing sector and class |
+| `health.decodeErrors` | | counter | interval | AIS sentences or PGNs that could not be decoded (bad checksum, malformed, missing a part) |
+| `health.incomplete` | | counter | interval | Multipart messages dropped because a part never arrived |
+| `health.duplicates` | | counter | interval | Messages repeated on the same event within 2 s (same MMSI, type and position) |
+| `health.duplicatesCrossEvent` | | counter | interval | Messages that arrived on two configured events within 2 s: one receiver reaching both |
+| `health.positionInvalid` | | counter | interval | Position reports without a usable position (out of range or "not available") |
+| `health.implausibleJumps` | | counter | interval | Positions implying a speed above the sender's jump limit; one bogus position counts twice (out and back) |
+| `health.noOwnPosition` | | counter | interval | Position reports received while the own position was unknown or stale |
 | `distance.avg` | m | gauge | interval | Average reception distance, last hour |
 | `distance.median` | m | gauge | interval | Median reception distance, last hour |
 | `distance.p95` | m | gauge | interval | 95th percentile reception distance, last hour |
@@ -57,6 +64,12 @@ unit preferences convert them for display. A blank unit is a plain count.
 | `vessels.byGroup.<group>.last24h` | | gauge | interval | Distinct vessels per type group, last 24 hours |
 | `coverage.cells.today` | | gauge | interval | Coverage cells today (UTC) |
 | `coverage.area.today` | m2 | gauge | interval | Area of the coverage cells today (UTC) |
+
+The `health.*` counters only count: a duplicate, a jump or a message
+received without an own position still counts everywhere else (SPEC 2.8).
+A share over a window divides a counter's rise by the rise of
+`messages.total` plus `health.decodeErrors` and `health.incomplete`, which
+is everything received.
 
 ## Placeholders
 

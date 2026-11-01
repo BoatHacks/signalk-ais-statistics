@@ -8,9 +8,11 @@ import { DAY_MS, HOUR_MS, sectorP99, type Aggregator } from './aggregate'
 import { summarize } from './histogram'
 import {
   DISTANCE_BIN_COUNT,
+  HEALTH_KINDS,
   SECTOR_CLASSES,
   SECTOR_COUNT,
   TYPE_GROUPS,
+  healthPaths,
   paths,
 } from './paths'
 
@@ -108,6 +110,7 @@ export function buildValues(
   put(paths.positionsOther, t.positions.other)
   for (let i = 0; i < DISTANCE_BIN_COUNT; i++)
     put(paths.distanceBin(i), t.distanceBins[i])
+  for (const k of HEALTH_KINDS) put(healthPaths[k], t.health[k])
   if (sectors)
     SECTOR_CLASSES.forEach((cls, c) => {
       for (let s = 0; s < SECTOR_COUNT; s++)

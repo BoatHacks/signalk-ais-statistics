@@ -15,6 +15,7 @@ describe('N2kIngest', () => {
       mmsi: '999000001',
       lat: 0.1,
       lon: 0.2,
+      sogMps: expect.closeTo(2.5, 6),
     })
     expect(ingest.push(classBPgn(999000002, -0.1, 0.3))).toEqual({
       type: 18,
@@ -66,11 +67,20 @@ describe('N2kIngest', () => {
     expect(ingest.push(classAPgn(999000008, undefined, undefined))).toEqual({
       type: 1,
       mmsi: '999000008',
+      sogMps: expect.closeTo(2.5, 6),
     })
     expect(ingest.push(classAPgn(999000009, 91, 181))).toEqual({
       type: 1,
       mmsi: '999000009',
+      sogMps: expect.closeTo(2.5, 6),
     })
+  })
+
+  it('marks the two parts of a message 24', () => {
+    const ingest = new N2kIngest()
+    const b = staticBPartBPgn(999000015, 'Pleasure')
+    expect(ingest.push(b)).toMatchObject({ type: 24, part: 'B' })
+    expect(ingest.push({ ...b, pgn: 129809 })).toMatchObject({ part: 'A' })
   })
 
   it('ignores other PGNs and anything that is not a PGN', () => {

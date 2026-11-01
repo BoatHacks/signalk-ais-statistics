@@ -31,7 +31,8 @@ plugin's data directory.
 ### 2.1 Ingest
 Subscribes to the server's raw sentence events, keeps `!AIVDM` and drops
 `!AIVDO` (SPEC 5), reassembles multipart messages, and decodes them into
-typed message objects (type, MMSI, optional position, optional ship type).
+typed message objects (type, MMSI, optional position, ship type, name,
+reported speed over ground in m/s and message 24 part).
 Any prefix before `!` (an NMEA 4.10 tag block) is ignored and any talker id
 is accepted. Multipart messages get one decoder session per talker, part
 count, sequence id and channel, because ggencoder's single session breaks
@@ -42,12 +43,15 @@ swallowed, never thrown into the server.
 NMEA 2000 input arrives on `N2KAnalyzerOut` as PGN objects already decoded
 by the server's canboatjs. `N2kIngest` (`src/n2k.ts`) keeps the AIS PGNs,
 drops those whose transceiver field marks the own transponder, and maps
-message id, MMSI, position and ship type onto the same message objects,
+message id, MMSI, position, ship type and speed over ground onto the same
+message objects,
 turning canboat lookup names back into AIS codes with a local copy of the
 canboat tables (`src/n2k-lookups.ts`, checked against `@canboat/ts-pgns` in
 a test) and padding MMSIs to nine digits as the sentence decoder does.
 Each event gets both decoders; strings go to the sentence decoder and
-objects to `N2kIngest`.
+objects to `N2kIngest`. The plugin counts the rise of each decoder's
+decode error and incomplete counts at the time of the push as message
+health (SPEC 2.8).
 
 ### 2.2 OwnPosition
 Tracks the latest self `navigation.position` and its timestamp. Exposes
@@ -68,8 +72,23 @@ the fixed log-spaced distance histogram of `histogram.ts` (average, median,
 p95 and p99 derive from it; the exact maximum is kept beside it) and a
 coarse per-sector histogram with the farthest reception per sector and its
 time. A located report comes back with its bearing, class and the own
-position, for Coverage and the long-range log. Pure and clock-injectable:
-every call takes the reception time.
+position, for Coverage and the long-range log. Every count, including
+the message health counters (SPEC 2.8), lives in the totals and in each
+bucket, so live-only windows have health figures too. The aggregator
+counts invalid positions and reports without own position itself; the
+other health kinds come in through `countHealth`. Pure and
+clock-injectable: every call takes the reception time.
+
+### 2.4a Health
+`health.ts` judges each decoded message before the aggregator counts it
+(SPEC 2.8): the duplicate detector keeps the copies of the last 2 s per
+MMSI, type and part, and the jump tracker an anchor position per sender
+(pruned after `targetExpirySeconds`, capped like the vessel registry). One
+instance serves every configured event, because only a shared detector
+sees a message arrive on two events. It returns a verdict (duplicate kind,
+implied speed sample) and keeps no counts; the plugin hands the counts to
+the aggregator and the speed sample to the long-range log. Pure and
+clock-injectable.
 
 ### 2.5a Long-range log
 `longrange.ts` keeps, per UTC day, the farthest reception of each MMSI up
@@ -78,7 +97,10 @@ that day, and writes `longrange-YYYY-MM-DD.json` beside the coverage files
 hourly, at the day change and on stop. Writes are queued so two never
 share a temporary file. Earlier days are read on first use and pruned with
 `coverageRetentionDays`. It also gives the sectors exact times for the
-sector maxima read from history.
+sector maxima read from history. The same file (version 2) holds the
+day's fastest senders by implied speed, 10 plausible and 10 implausible
+(SPEC 2.8); a version 1
+file loads with an empty list.
 
 ### 2.5 Coverage
 Maps each position to an H3 cell (`h3-js`), keeps the cells of the current
@@ -164,7 +186,10 @@ Statistics come from the REST API; a single SignalK WebSocket carries
 external CDNs for its own assets. Views per SPEC 7, each a custom element
 that builds its DOM once and then updates text and attributes only;
 charts reuse their SVG paths and rects. Pure helpers (`units.ts`,
-`time.ts`, `route.ts`, `backoff.ts`) are unit tested under `test/web`. The map has a basemap switch (OSM/OpenSeaMap or the server's chart
+`time.ts`, `route.ts`, `backoff.ts`, `health.ts`) are unit tested under
+`test/web`. The overview's health section, its good share and the
+duplicate hint come from `health.ts`; the charts derive the class A and B
+mix from the `positions` series. The map has a basemap switch (OSM/OpenSeaMap or the server's chart
 provider); its default follows the internet-status plugin's online and
 metered state when present, and a manual choice is remembered in
 `localStorage`. Toggles show or hide the coverage cells, the cells beyond
@@ -176,7 +201,8 @@ and the class A and B sectors (`layers.ts`, also remembered in
 per page load because the server rate limits it, reports security off or a
 readwrite or admin user. The sectors view draws the sector maxima as ticks with a wide invisible hover line,
 leaves a quarter more room on the scale for them, and lists `/longrange`
-in a table. The map's sector wedges
+in tables: the farthest receptions, the fastest vessels and the
+implausible jumps. The map's sector wedges
 come from the overlay GeoJSON route, and the cell and sector colours are
 imported from `src/style.ts`, which the plotter overlay uses too, so the
 app map and the plotter look the same.
@@ -264,8 +290,9 @@ src/
   classify.ts         class and type group
   ownposition.ts      own position and staleness
   aggregate.ts        counters, buckets, sectors, vessel registry
+  health.ts           duplicate detector and implausible jump tracker
   coverage.ts         H3 cells, daily files, area, GeoJSON
-  longrange.ts        daily log of the farthest receptions
+  longrange.ts        daily log of the farthest receptions and fastest senders
   publish.ts          SignalK deltas
   history.ts          HistoryReader interface and History API implementation
   query.ts            windowed queries

@@ -184,6 +184,52 @@ describe('plugin', () => {
     expect(f.app.listenerCount('nmea0183AISout')).toBe(0)
   })
 
+  it('counts message health across events and keeps every message', async () => {
+    const f = fakeApp(await mkdtemp(join(tmpdir(), 'ais-plugin-')))
+    const plugin = createPlugin(f.app as never)
+    const r = fakeRouter()
+    plugin.registerWithRouter!(r.router as never)
+    await plugin.start({}, () => undefined)
+    f.position(OWN.lat, OWN.lon)
+    const p = destination(OWN, 90, 10)
+    // One receiver reaching both default events: a cross-event copy.
+    f.app.emit('nmea0183', classA(999000001, p.lat, p.lon))
+    f.app.emit('N2KAnalyzerOut', classAPgn(999000001, p.lat, p.lon))
+    // The same sentence twice on one event.
+    f.app.emit('nmea0183', classA(999000002, p.lat, p.lon))
+    f.app.emit('nmea0183', classA(999000002, p.lat, p.lon))
+    f.app.emit('nmea0183', '!AIVDM,1,1,,A,13u?etPv2;0n:dDPwUM1U1Cb069D,0*00')
+    f.app.emit('nmea0183', classA(999000003, undefined, undefined))
+    // A vessel 50 nm away ten seconds later.
+    vi.advanceTimersByTime(10_000)
+    const q = destination(OWN, 90, 60)
+    f.app.emit('nmea0183', classA(999000002, q.lat, q.lon))
+    await vi.advanceTimersByTimeAsync(5 * 60_000)
+    const values = new Map(
+      f.deltas[0]!.delta.updates[0]!.values.map((v) => [v.path, v.value]),
+    )
+    expect(values.get(paths.messagesTotal)).toBe(6)
+    expect(values.get(paths.healthDuplicatesCrossEvent)).toBe(1)
+    expect(values.get(paths.healthDuplicates)).toBe(1)
+    expect(values.get(paths.healthDecodeErrors)).toBe(1)
+    expect(values.get(paths.healthPositionInvalid)).toBe(1)
+    expect(values.get(paths.healthImplausibleJumps)).toBe(1)
+    expect(values.get(paths.healthNoOwnPosition)).toBe(0)
+    const lr = (await r.call('/longrange', { window: '24h' })).body as {
+      fastest: unknown[]
+      implausibleJumps: { mmsi: string; implausible: boolean }[]
+    }
+    expect(lr.fastest).toEqual([])
+    expect(lr.implausibleJumps).toMatchObject([
+      { mmsi: '999000002', implausible: true },
+    ])
+    const summary = (await r.call('/summary', { window: '1h' })).body as {
+      health: { received: number }
+    }
+    expect(summary.health.received).toBe(7)
+    await plugin.stop()
+  })
+
   it('listens only on the configured sentence events', async () => {
     const f = fakeApp(await mkdtemp(join(tmpdir(), 'ais-plugin-')))
     const plugin = createPlugin(f.app as never)

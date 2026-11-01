@@ -14,89 +14,95 @@ everything). ARCHITECTURE 2.1, 2.4, 2.5a, 2.6, 2.8, 2.9, 2.11 and 7.
 
 ## Approach
 - **Health module.** A pure, clock-injectable `src/health.ts` holds the
-  health counters, the duplicate detector and the jump tracker. It is one
-  instance per plugin, not per ingest: `plugin.ts` creates one `Ingest`
-  and one `N2kIngest` per event, so only a shared detector sees the
-  copies a receiver sends to two events. `onInput` passes every decoded
-  message to `health.add(msg, shipType, time)` and then to the aggregator
-  as today; the aggregator, coverage and long-range log are unchanged in
-  what they count. The `add` signature takes an optional source label so
-  #14 can key the same counters per event later (decision 15).
-- **Duplicates (decision 13).** Key: MMSI, message type and position
-  rounded to 1e-5 degrees (about 1 m, coarser than the AIS 1/10000 minute
-  step and the canboat 1e-7 step, so both decoders key alike). Messages
-  without a position (5, 24 and others) key on MMSI and type alone. A
-  message is a duplicate when the same key was seen less than 2 s earlier
-  (fixed, not a setting). Entries older than 2 s are dropped on each add,
-  so the map stays small. Duplicates are still counted everywhere else.
-  The detector remembers which event delivered the first copy and counts
-  two kinds (maintainer, after review): same-event duplicates (one feed
-  repeating itself) and cross-event duplicates (the same transmission on
-  two events: one receiver on two events, or two receivers hearing it).
+  duplicate detector and the jump tracker. It is one instance per plugin,
+  not per ingest: `plugin.ts` creates one `Ingest` and one `N2kIngest` per
+  event, so only a shared detector sees the copies a receiver sends to two
+  events. `onInput` passes every decoded message, with the name of the
+  event it came on, to `health.check(msg, event, shipType, time)`, which
+  returns what it found; the aggregator then counts the message as today
+  and bumps the health counters from that verdict. The aggregator,
+  coverage and long-range log are unchanged in what they count.
+- **Health counts live in the aggregator.** `Counts` gains a `health`
+  record, so the totals, the minute ring and the hour ring carry it and
+  live-only windows work like every other count. Decode errors and
+  incomplete messages are taken from the ingest stats: `onInput` compares
+  them before and after each push and counts the difference at that time.
+- **Reported SOG (C4).** Both decoders already deliver it: ggencoder sets
+  `sog` in knots (types 1 to 3, 9, 18, 19, 27) and canboatjs puts `sog` in
+  metres per second in the PGN fields. `AisMessage` gains `sogMps`, filled
+  by both inputs, without the "not available" value (1023, which is 102.3
+  kn, or 1023 kn for message 9) and negative or non-finite values.
+- **Duplicates (decision 13, C1, C1a).** Key: MMSI and message type; type
+  24 adds the part (A carries a name, B a ship type) so the two halves of
+  one static report are not duplicates of each other. A message is a
+  duplicate when a message with the same key and a position within 2e-5
+  degrees (about 2 m, so the two decoders' rounding cannot split a pair)
+  was seen less than 2 s earlier, fixed. Messages without a position match
+  on the key alone. Two counters: same event (one receiver repeating
+  itself, or two receivers on one event) and cross event (the same message
+  on two configured events). Recent messages are pruned once a second, so
+  the detector holds only the last 2 s. Duplicates are still counted
+  everywhere else.
 - **Invalid positions.** A position report (types 1, 2, 3, 9, 18, 19) that
   reaches the aggregator without `lat`/`lon` had them out of range or at
   the "not available" values 91/181; both decoders already drop those
-  fields, so counting the missing fields is decoder independent and needs
-  no change in `ingest.ts` or `n2k.ts`.
-- **Own position missing.** Position reports counted while own position is
-  unknown or stale (SPEC 2.2), so a gap in distance figures is explained.
-  Taken from the aggregator's `add` path (it already knows), exposed as a
-  counter in `totals`.
-- **Implausible jumps (decision 16).** The tracker keeps the last position
-  and time per MMSI (pruned after `targetExpirySeconds`, capped at
-  `MAX_VESSELS`). For each position report it computes the implied speed
-  from the previous one, only when the two are at least 500 m apart and
-  1 s apart (constants), so GPS jitter and quantisation never count. Above
-  the sender's limit the jump counter goes up; the new position always
-  becomes the last one, so one bogus position counts as two jumps (out and
-  back), which SPEC states. Limits: message 9 uses the aircraft limit;
-  ship types 20 to 29 (WIG) and 40 to 49 (high-speed craft, including
-  hovercraft ferries) use the high-speed limit; everything else, including
-  vessels whose type is not yet known, uses the normal limit. Ship type
-  comes from the aggregator's vessel registry (`agg.vessel(mmsi)`).
-- **Reported SOG.** Both decoders also map speed over ground (messages 1,
-  2, 3, 18, 19 and 9 and the matching PGNs) onto the message, with 102.3 kn
-  (and the canboat equivalent) treated as not available.
+  fields, so counting in the aggregator is decoder independent.
+- **Own position missing.** Position reports with a valid position counted
+  while own position is unknown or stale (SPEC 2.2), so a gap in distance
+  figures is explained. Counted in the aggregator's `add`.
+- **Implausible jumps (decision 16, C5).** The tracker keeps an anchor per
+  MMSI: a position and its time (pruned after `targetExpirySeconds`, capped
+  at `MAX_VESSELS`). When a report lies at least 500 m from the anchor and
+  at least 1 s later, the implied speed is distance over time; the report
+  becomes the anchor. A report closer than 500 m replaces the anchor only
+  once the anchor is older than 60 s. So a fast vessel reporting every 2 s
+  is measured over about 500 m (the gap between two reports alone would be
+  tens of metres), GPS jitter never counts, and a bogus position is judged
+  against a position at most a minute or one reporting interval old. Above
+  the sender's limit the jump counter goes up; one bogus position counts
+  as two jumps (out and back), which SPEC states. Limits, all settings:
+  60 kn normal, 120 kn for ship types 20 to 29 (WIG) and 40 to 49
+  (high-speed craft, including hovercraft ferries), 600 kn for message 9
+  (SAR aircraft). Vessels whose type is not yet known use the normal limit.
+  Ship type comes from the aggregator's vessel registry.
 - **Fastest vessels.** Per UTC day, the highest implied speed of each MMSI
-  (same 500 m baseline), capped at the 20 fastest, kept by `LongRangeLog`
-  in the same daily file (decision 16: no new kind of state). An entry:
-  `time`, `mmsi`, `name?`, `cls`, `shipType?`, `speedMps`, `limitMps`,
-  `implausible` (speed above the limit), `sogMps?` (the reported SOG of
-  the later report, shown side by side with the implied speed so a large
-  gap points at a bad position or a bad SOG), `gapS`, `fromLat`, `fromLon`,
+  in two lists, the 10 fastest plausible and the 10 fastest implausible
+  (chosen by the maintainer, so bogus jumps cannot crowd out real fast
+  craft), kept by `LongRangeLog` in the same daily file
+  (decision 16: no new kind of state). Ranked by implied speed (chosen by
+  the maintainer), with the reported SOG of the later report beside it
+  (C4). An entry: `time`, `mmsi`, `name?`, `cls`, `shipType?`, `speedMps`,
+  `sogMps?`, `limitMps`, `implausible`, `gapS`, `fromLat`, `fromLon`,
   `lat`, `lon`. Names are filled in by the existing `enrich`. Implausible
-  entries stay in the list and are marked, so a bogus jump can be told
-  from a fast ferry, like far entries in the farthest list.
+  entries go to their own list, so a bogus jump can be told from a fast
+  ferry, like far entries in the farthest list.
 - **File schema.** `longrange-YYYY-MM-DD.json` becomes `version: 2` with a
   `fastest` array beside `entries`. A version 1 file (or one with no or a
   malformed `fastest`) loads with an empty list; each entry is checked
   with an `isFastEntry` guard like `isEntry`. Version 1 code reading a
   version 2 file uses `entries` and ignores `fastest`, so a downgrade
-  keeps the farthest list. About 4 KB more per day at the cap.
+  keeps the farthest list. About 6 KB more per day at the cap.
 - **Paths** (in `src/paths.ts` only), cumulative counters published at each
-  interval: `health.decodeErrors`, `health.incomplete`,
-  `health.duplicates.sameEvent`, `health.duplicates.crossEvent`,
-  `health.positionInvalid`, `health.implausibleJumps`,
-  `health.noOwnPosition`. `decodeErrors` and `incomplete` are the sums of
-  the ingest stats, which already exist and reset with the process like
-  every other counter. 7 more paths per interval. Shares over a window use
-  `last` and `max` differences like the other counters; the denominator is
-  `messages.total` plus `decodeErrors` and `incomplete`.
-- **REST.** `/series` gains `metric=health` (each share per hour);
-  `/summary` gains a `health` object (good-message share and each share
-  over the window); `/longrange` gains `fastest`, the 10 fastest in the
-  window, so no new route. The class A/B mix needs no paths: the web app
-  derives it from the `positions` series.
-- **Web app.** Overview: one line with the good-message share over 24 h,
-  and a hint when duplicates exceed 20 percent of messages, no
-  notification (decision 14). Same-event duplicates always count toward
-  the hint ("a feed repeats its messages"). Cross-event duplicates count
-  toward it only while `sourceStatistics` (#14) is off ("one receiver may
-  reach two configured events"); with it on they are shown as receiver
-  overlap instead.
-  Charts: a health chart of shares per hour and the class A/B mix as a
-  stacked share. Sectors page: a "Fastest vessels" table next to the
-  farthest receptions table, implausible rows marked.
+  interval: `health.decodeErrors`, `health.incomplete`, `health.duplicates`,
+  `health.duplicatesCrossEvent`, `health.positionInvalid`,
+  `health.implausibleJumps`, `health.noOwnPosition`. 7 more paths per
+  interval. Shares over a window use `last` and `max` differences like the
+  other counters; the denominator is `messages.total` plus `decodeErrors`
+  and `incomplete`.
+- **REST.** `/series` gains `metric=health` (each counter per bucket and
+  the denominator); `/summary` gains a `health` object (the counts and the
+  received total for the window); `/longrange` gains `fastest` and
+  `implausibleJumps`, 10 each in the window, so no new route. The class A/B mix needs no paths:
+  the web app derives it from the `positions` series.
+- **Web app.** Overview: one line with the good-message share, and a hint
+  when duplicates exceed 20 percent of messages ("one receiver may reach
+  two configured events"), no notification (decision 14). The hint counts
+  same-event duplicates, and cross-event ones too while per-source
+  statistics (#14) are off, which is always until #14 lands (C1a). Charts:
+  a health chart of shares per bucket and the class A/B mix as a share.
+  Sectors page: "Fastest vessels" and "Implausible jumps" tables below
+  the farthest receptions table, implied speed and reported SOG side by
+  side.
 - **Config** (server config form, basic settings per #20 decision 25):
   `jumpSpeedLimitKnots` 60, `jumpSpeedLimitHighSpeedKnots` 120 (ship types
   20 to 29 and 40 to 49), `jumpSpeedLimitAircraftKnots` 600 (message 9).
@@ -104,16 +110,21 @@ everything). ARCHITECTURE 2.1, 2.4, 2.5a, 2.6, 2.8, 2.9, 2.11 and 7.
   form, metres per second internally and in REST.
 
 Rejected: a payload hash as the duplicate key (NMEA 0183 and NMEA 2000
-copies differ in form); dropping duplicates or jumps (SPEC 2.3); reported
-SOG alone or implied speed alone for the fastest list (the maintainer
-chose both side by side).
+copies differ in form); rounding positions for the key (two decoders can
+round one position to neighbouring steps); dropping duplicates or jumps
+(SPEC 2.3); the gap between consecutive reports as the speed baseline (a
+fast vessel moves tens of metres between reports, below the jitter floor);
+ranking the fastest list by reported SOG (the implied speed is what tells a
+bogus jump apart; chosen by the maintainer).
 
 ## Test Strategy
 Unit tests, synthetic MMSIs (999xxxxxx for vessels, 111999xxx for SAR
 aircraft), positions from the existing fixtures, the in-process history
-fake. Duplicate detector: same message from an NMEA 0183 sentence and a
-canboat PGN fixture within 2 s counts once, at 2.1 s none, different type
-or position none, messages without position. Invalid positions: 91/181 and
+fake. SOG from sentences and PGNs, not-available values dropped. Duplicate
+detector: same message from an NMEA 0183 sentence and a canboat PGN
+fixture within 2 s counts once, at 2.1 s none, different type or position
+none, messages without position, type 24 parts A and B, same and cross
+event counters. Invalid positions: 91/181 and
 out-of-range sentences and PGNs. Jumps: normal, WIG, HSC, message 9 and
 unknown-type limits, jitter below 500 m, out-and-back counts two. Fastest
 list: cap, one per MMSI, names enriched, day change. File: version 1
@@ -122,21 +133,22 @@ Paths published, shares from history, `/longrange` and `/summary` shapes,
 web share and hint helpers.
 
 ## Implementation Steps
-- [ ] Paths, metadata and config options with defaults
-- [ ] `health.ts`: counters, duplicate detector, jump tracker (tests first)
-- [ ] `noOwnPosition` in aggregator totals; wiring in `plugin.ts`, publish
-- [ ] Long-range file version 2 with `fastest`, loader for version 1
-- [ ] Query: `health` series and summary; `/longrange` `fastest`
-- [ ] Web: overview line and duplicate hint, health and A/B mix charts,
+- [x] SOG in both inputs
+- [x] Paths, metadata and config options with defaults
+- [x] `health.ts`: counters, duplicate detector, jump tracker (tests first)
+- [x] `noOwnPosition` in aggregator totals; wiring in `plugin.ts`, publish
+- [x] Long-range file version 2 with `fastest`, loader for version 1
+- [x] Query: `health` series and summary; `/longrange` `fastest`
+- [x] Web: overview line and duplicate hint, health and A/B mix charts,
       fastest table on the sectors page, checked at phone width
-- [ ] Docs: SPEC 2.3, new 2.8 Message health, 2.7, 4.1, 4.2, 6.1, 6.2, 7,
+- [x] Docs: SPEC 2.3, new 2.8 Message health, 2.7, 4.1, 4.2, 6.1, 6.2, 7,
       8, 9, 10.2 (speed filter replaced by the count-only counter), 12 (new
       decision; the configurable events entry now names the duplicate
       counter); ARCHITECTURE 2.1, new 2.4a Health, 2.5a, 2.6, 2.8, 2.9,
       2.11, 7; README "What it does"; `docs/paths.md` (#20); CHANGELOG
 
 ## Files to Create/Modify
-src/health.ts (new), src/paths.ts, src/config.ts, src/aggregate.ts,
+src/health.ts (new), web/src/health.ts (new), src/paths.ts, src/config.ts, src/aggregate.ts,
 src/publish.ts, src/plugin.ts, src/longrange.ts, src/query.ts, src/api.ts,
 web/src/api.ts, web/src/main.ts, web/src/charts.ts, web/static/style.css,
 test/health.test.ts (new), test/fixtures (version 1 long-range file),
@@ -144,14 +156,14 @@ existing tests for publish, longrange, query and api, SPEC.md,
 ARCHITECTURE.md, README.md, CHANGELOG.md.
 
 ## Open Points
-- Dependencies: #14 adds per-source health on top of the source label
-  `health.add` takes; #20 documents the seven paths in `docs/paths.md`
-  (without a stability promise). The jump limits stay in the config form
-  (no live control). Neither blocks this issue.
+- Dependencies: #14 adds per-source health on top of the event label
+  `health.check` takes, and its per-source switch decides whether
+  cross-event duplicates still feed the hint (C1a); #20 documents the
+  paths in `docs/paths.md`. Neither blocks this issue.
 - A high-speed craft or WIG craft is judged by the normal limit until its
   message 5 or 24 is heard, so a few jumps can be counted early in a
   session. Accepted as a count-only artefact; documented in SPEC 2.8.
 - Whether ggencoder and canboatjs both leave out 91/181 rather than
   passing other sentinel values is assumed from the range check; the
   tests with both fixtures confirm it.
-- Default limits (60, 120, 600 kn) were confirmed by the maintainer.
+- Default limits (60, 120, 600 kn) confirmed by the maintainer (C5).

@@ -24,6 +24,21 @@ export const TYPE_GROUPS = [
 ] as const
 export type TypeGroup = (typeof TYPE_GROUPS)[number]
 
+/**
+ * Message health counters (SPEC 2.8), in the order of their paths. Each
+ * only counts; nothing is removed from the other statistics.
+ */
+export const HEALTH_KINDS = [
+  'decodeErrors',
+  'incomplete',
+  'duplicates',
+  'duplicatesCrossEvent',
+  'positionInvalid',
+  'implausibleJumps',
+  'noOwnPosition',
+] as const
+export type HealthKind = (typeof HEALTH_KINDS)[number]
+
 const p = (suffix: string): string => `${PATH_PREFIX}.${suffix}`
 
 /** Two-digit bin label, 00 to 31. */
@@ -45,6 +60,13 @@ export const paths = {
   distanceBin: (bin: number) => p(`distance.bin.${binLabel(bin)}`),
   sectorCount: (sector: number, cls: SectorClass) =>
     p(`sectors.${sectorLabel(sector)}.${cls}.count`),
+  healthDecodeErrors: p('health.decodeErrors'),
+  healthIncomplete: p('health.incomplete'),
+  healthDuplicates: p('health.duplicates'),
+  healthDuplicatesCrossEvent: p('health.duplicatesCrossEvent'),
+  healthPositionInvalid: p('health.positionInvalid'),
+  healthImplausibleJumps: p('health.implausibleJumps'),
+  healthNoOwnPosition: p('health.noOwnPosition'),
 
   // Gauges, in SI units: distances in metres, areas in square metres.
   distanceAvg: p('distance.avg'),
@@ -71,3 +93,14 @@ export const distanceBinPaths: string[] = Array.from(
   { length: DISTANCE_BIN_COUNT },
   (_, i) => paths.distanceBin(i),
 )
+
+/** The counter path of each health kind. */
+export const healthPaths: Record<HealthKind, string> = {
+  decodeErrors: paths.healthDecodeErrors,
+  incomplete: paths.healthIncomplete,
+  duplicates: paths.healthDuplicates,
+  duplicatesCrossEvent: paths.healthDuplicatesCrossEvent,
+  positionInvalid: paths.healthPositionInvalid,
+  implausibleJumps: paths.healthImplausibleJumps,
+  noOwnPosition: paths.healthNoOwnPosition,
+}

@@ -2,6 +2,7 @@
 /// <reference types="geojson" />
 export const API = '/plugins/signalk-ais-statistics'
 
+import type { Health } from './health'
 import type { WindowName } from './route'
 export type { WindowName }
 
@@ -24,6 +25,7 @@ export interface Summary {
   positions: { classA: number; classB: number; other: number }
   vessels: { total: number; byGroup: Record<string, number> } | null
   distance: Distance
+  health: Health
 }
 
 export interface SectorStats {
@@ -58,8 +60,31 @@ export interface LongRangeEntry {
   ownLon: number
 }
 
+/** The highest implied speed of one sender on one day. */
+export interface FastEntry {
+  time: string
+  mmsi: string
+  name?: string
+  cls: 'A' | 'B' | 'other'
+  shipType?: number
+  /** Speeds in m/s throughout the API. */
+  speedMps: number
+  sogMps?: number
+  limitMps: number
+  implausible: boolean
+  gapS: number
+  fromLat: number
+  fromLon: number
+  lat: number
+  lon: number
+}
+
 export interface LongRange {
   entries: LongRangeEntry[]
+  /** Plausible speeds, fastest first. */
+  fastest: FastEntry[]
+  /** Speeds above the sender's limit, fastest first. */
+  implausibleJumps: FastEntry[]
 }
 
 export interface Series {
