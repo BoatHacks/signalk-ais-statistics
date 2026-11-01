@@ -6,6 +6,7 @@ import {
   HttpError,
   exportHref,
   get,
+  type CoverageResponse,
   type FastEntry,
   type LongRange,
   type SectorStats,
@@ -29,16 +30,27 @@ import { createMap } from './map'
 import { downloadLink, setLink } from './downloads'
 import { SETTINGS_SAVED } from './settings'
 import { showLoading } from './loading'
-import { SectorChart } from './sectors'
+import { SectorChart, sectorScale } from './sectors'
 import {
+  MAX_COMPARE_DAYS,
   VIEWS,
   WINDOWS,
+  defaultCompare,
   formatRoute,
   parseRoute,
+  type CompareParams,
   type Route,
   type View,
   type WindowName,
 } from './route'
+import {
+  beforeRetention,
+  change,
+  compareWindows,
+  formatRatio,
+  signed,
+  type CompareWindow,
+} from './compare'
 import { connectLive, displayUnits, type LiveState } from './signalk'
 import { formatDateTime } from './time'
 import { formatPosition, makeUnit, type Unit } from './units'
@@ -63,6 +75,7 @@ const VIEW_LABELS: Record<View, string> = {
   charts: 'Charts',
   sectors: 'Sectors',
   map: 'Map',
+  compare: 'Compare',
 }
 const DISTANCE_PATH = 'sensors.ais.statistics.distance.p99'
 const AREA_PATH = 'sensors.ais.statistics.coverage.area.today'
@@ -80,6 +93,7 @@ const HEALTH_LABELS: Record<HealthKind, string> = {
 
 interface Context {
   window: WindowName
+  compare?: CompareParams
   offsetMin: number | undefined
   units: { distance: Unit; area: Unit; speed: Unit }
 }
@@ -715,6 +729,251 @@ class SpeedTable {
   }
 }
 
+type CompareKind = 'count' | 'distance' | 'area' | 'cells'
+
+interface CompareRow {
+  label: string
+  kind: CompareKind
+  before: HTMLElement
+  after: HTMLElement
+  change: HTMLElement
+}
+
+/**
+ * Two date windows side by side (SPEC 7), to tell whether an antenna,
+ * cable or receiver change helped. The windows are UTC days; their state
+ * lives in the hash, not in the plugin config.
+ */
+class CompareView extends HTMLElement implements ViewElement {
+  private date?: HTMLInputElement
+  private days?: HTMLSelectElement
+  private heads?: { before: HTMLElement; after: HTMLElement }
+  private rows = new Map<string, CompareRow>()
+  private charts?: { before: SectorChart; after: SectorChart }
+  private chartHeads?: { before: HTMLElement; after: HTMLElement }
+  private notes?: HTMLElement
+
+  connectedCallback(): void {
+    if (this.date) return
+    this.date = el('input', { type: 'date', id: 'compare-date' })
+    this.days = el('select', { id: 'compare-days' })
+    for (let d = 1; d <= MAX_COMPARE_DAYS; d++)
+      this.days.append(el('option', { value: String(d) }, `${d} d`))
+    const go = () => {
+      const days = Number(this.days!.value)
+      if (!this.date!.value) return
+      location.hash = formatRoute({
+        view: 'compare',
+        window: route.window,
+        compare: { date: this.date!.value, days },
+      })
+    }
+    this.date.addEventListener('change', go)
+    this.days.addEventListener('change', go)
+    this.heads = {
+      before: el('th', { class: 'num' }),
+      after: el('th', { class: 'num' }),
+    }
+    const head = el(
+      'tr',
+      {},
+      el('th', {}, ''),
+      this.heads.before,
+      this.heads.after,
+      el('th', { class: 'num' }, 'Change'),
+    )
+    const body = el('tbody')
+    const add = (key: string, label: string, kind: CompareKind) => {
+      const row: CompareRow = {
+        label,
+        kind,
+        before: el('td', { class: 'num' }),
+        after: el('td', { class: 'num' }),
+        change: el('td', { class: 'num' }),
+      }
+      this.rows.set(key, row)
+      body.append(
+        el(
+          'tr',
+          {},
+          el('th', { scope: 'row' }, label),
+          row.before,
+          row.after,
+          row.change,
+        ),
+      )
+    }
+    add('messages', 'Messages', 'count')
+    add('classA', 'Positions class A', 'count')
+    add('classB', 'Positions class B', 'count')
+    add('other', 'Positions other', 'count')
+    add('p99', 'Distance p99', 'distance')
+    add('p95', 'Distance p95', 'distance')
+    add('median', 'Distance median', 'distance')
+    add('avg', 'Distance average', 'distance')
+    add('max', 'Distance maximum (untrusted)', 'distance')
+    add('cells', 'Coverage cells', 'cells')
+    add('area', 'Coverage area', 'area')
+    this.charts = {
+      before: new SectorChart(COLORS.a),
+      after: new SectorChart(COLORS.b),
+    }
+    this.chartHeads = { before: el('h2'), after: el('h2') }
+    this.notes = el('div', { class: 'compare-notes' })
+    this.append(
+      el(
+        'p',
+        { class: 'muted small' },
+        'Two windows of whole UTC days side by side: the days before the date and the days from the date on, for example before and after an antenna, cable or receiver change. Counts are compared per hour when the after window is shorter because it reaches today.',
+      ),
+      el(
+        'div',
+        { class: 'compare-controls' },
+        el('label', { for: 'compare-date' }, 'Change on'),
+        this.date,
+        el('label', { for: 'compare-days' }, 'Days each side'),
+        this.days,
+      ),
+      el(
+        'div',
+        { class: 'sk-card long-range' },
+        el('table', { class: 'compare' }, el('thead', {}, head), body),
+      ),
+      this.notes,
+      el('h2', {}, 'Sectors, all classes'),
+      el(
+        'div',
+        { class: 'sector-charts' },
+        el(
+          'div',
+          { class: 'sk-card' },
+          this.chartHeads.before,
+          this.charts.before.element,
+        ),
+        el(
+          'div',
+          { class: 'sk-card' },
+          this.chartHeads.after,
+          this.charts.after.element,
+        ),
+      ),
+      el(
+        'p',
+        { class: 'muted small' },
+        'Both charts share one scale. Radius per 15° sector: the highest hourly p99 distance, from hours with at least 20 reports in the sector.',
+      ),
+    )
+  }
+
+  async load(ctx: Context): Promise<void> {
+    const c = ctx.compare ?? defaultCompare(Date.now())
+    const now = Date.now()
+    this.date!.value = c.date
+    this.date!.max = new Date(now).toISOString().slice(0, 10)
+    this.days!.value = String(c.days)
+    const { before, after } = compareWindows(c, now)
+    const range = (w: CompareWindow) => ({
+      from: new Date(w.from).toISOString(),
+      to: new Date(w.to).toISOString(),
+    })
+    const days = (w: CompareWindow) => ({ from: w.fromDay, to: w.toDay })
+    const [sb, sa, xb, xa, cb, ca] = await Promise.all([
+      get<Summary>('/summary', range(before)),
+      get<Summary>('/summary', range(after)),
+      get<SectorStats>('/sectors', { ...range(before), class: 'all' }),
+      get<SectorStats>('/sectors', { ...range(after), class: 'all' }),
+      get<CoverageResponse>('/coverage', days(before)),
+      get<CoverageResponse>('/coverage', days(after)),
+    ])
+    const label = (w: CompareWindow) =>
+      w.fromDay === w.toDay ? w.fromDay : `${w.fromDay} to ${w.toDay}`
+    // Two lines, so the table fits a phone.
+    this.heads!.before.replaceChildren('Before', el('br'), label(before))
+    this.heads!.after.replaceChildren('After', el('br'), label(after))
+    this.chartHeads!.before.textContent = `Before, ${label(before)}`
+    this.chartHeads!.after.textContent = `After, ${label(after)}`
+
+    const coverageKept = {
+      before: !beforeRetention(before, cb.retainedFrom),
+      after: !beforeRetention(after, ca.retainedFrom),
+    }
+    const hours = { before: before.hours, after: after.hours }
+    const values: Record<string, [number | null, number | null]> = {
+      messages: [sb.messages, sa.messages],
+      classA: [sb.positions.classA, sa.positions.classA],
+      classB: [sb.positions.classB, sa.positions.classB],
+      other: [sb.positions.other, sa.positions.other],
+      p99: [sb.distance.p99M, sa.distance.p99M],
+      p95: [sb.distance.p95M, sa.distance.p95M],
+      median: [sb.distance.medianM, sa.distance.medianM],
+      avg: [sb.distance.avgM, sa.distance.avgM],
+      max: [sb.distance.maxM, sa.distance.maxM],
+      cells: [
+        coverageKept.before ? cb.cells : null,
+        coverageKept.after ? ca.cells : null,
+      ],
+      area: [
+        coverageKept.before ? cb.areaM2 : null,
+        coverageKept.after ? ca.areaM2 : null,
+      ],
+    }
+    const u = ctx.units
+    for (const [key, row] of this.rows) {
+      const [b, a] = values[key]!
+      const fmt = (v: number | null): string => {
+        if (v === null)
+          return row.kind === 'cells' || row.kind === 'area'
+            ? 'not kept'
+            : 'no data'
+        if (row.kind === 'distance') return u.distance.format(v)
+        if (row.kind === 'area') return u.area.format(v)
+        return int(v)
+      }
+      row.before.textContent = fmt(b)
+      row.after.textContent = fmt(a)
+      const ch = change(b, a, row.kind === 'count' ? hours : undefined)
+      const abs = (v: number) =>
+        row.kind === 'distance'
+          ? u.distance.format(v)
+          : row.kind === 'area'
+            ? u.area.format(v)
+            : int(v)
+      row.change.textContent = ch
+        ? `${signed(ch.delta, abs)} (${formatRatio(ch.ratio)})`
+        : '–'
+    }
+
+    const scale = Math.max(sectorScale(xb), sectorScale(xa))
+    this.charts!.before.update(xb, u.distance, ctx.offsetMin, scale)
+    this.charts!.after.update(xa, u.distance, ctx.offsetMin, scale)
+
+    const notes: string[] = []
+    if (after.hours < before.hours)
+      notes.push(
+        `The after window reaches now, so it has ${after.hours} of ${before.hours} hours; counts are compared per hour.`,
+      )
+    for (const [name, s] of [
+      ['before', sb],
+      ['after', sa],
+    ] as const) {
+      if (s.historyError) notes.push(s.historyError)
+      else if (s.liveFrom)
+        notes.push(
+          `There is no history provider, so the ${name} window has live data only from ${formatDateTime(Date.parse(s.liveFrom), ctx.offsetMin)}.`,
+        )
+    }
+    if (!coverageKept.before || !coverageKept.after)
+      notes.push(
+        `Coverage is kept from ${cb.retainedFrom} on (Coverage retention in the plugin settings), so it is not compared for a window that starts earlier.`,
+      )
+    if (sb.source === 'history' && sa.source === 'history')
+      notes.push('From the server history.')
+    this.notes!.replaceChildren(
+      ...notes.map((n) => el('p', { class: 'muted small' }, n)),
+    )
+  }
+}
+
 const mapView = createMap()
 
 class MapViewElement extends HTMLElement implements ViewElement {
@@ -736,6 +995,7 @@ customElements.define('ais-overview', OverviewView)
 customElements.define('ais-charts', ChartsView)
 customElements.define('ais-sectors', SectorsView)
 customElements.define('ais-map', MapViewElement)
+customElements.define('ais-compare', CompareView)
 
 // Shell: header, offline banner, tabs, window selector and the views.
 const app = document.getElementById('app')!
@@ -892,9 +1152,15 @@ async function updateStatus(): Promise<void> {
 
 function renderNav(): void {
   for (const [v, a] of tabLinks) {
-    a.href = formatRoute({ view: v, window: route.window })
+    a.href = formatRoute({
+      view: v,
+      window: route.window,
+      ...(v === 'compare' && route.compare ? { compare: route.compare } : {}),
+    })
     a.toggleAttribute('aria-current', v === route.view)
   }
+  // The compare view picks its own dates.
+  windows.hidden = route.view === 'compare'
   for (const [w, a] of windowLinks) {
     const hidden = route.view === 'map' && w === '1h'
     a.hidden = hidden
@@ -913,6 +1179,7 @@ async function render(): Promise<void> {
     await loadUnits()
     await views[route.view].load({
       window: route.window,
+      compare: route.compare,
       offsetMin: live.offsetMin,
       units,
     })

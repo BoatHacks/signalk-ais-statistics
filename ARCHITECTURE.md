@@ -111,7 +111,8 @@ the `coverageDistancePercentile` cap to cells with fewer than 3 reports
 (`MIN_FAR_CELL_REPORTS`, SPEC 2.4) when building a window's
 footprint, using the distance histograms merged from the day files, so it
 needs no history provider. Computes covered area and produces the GeoJSON
-used by the map and the overlay.
+used by the map and the overlay. `footprintRange` unites any run of UTC
+days for the compare view, and `retainedFrom` names the oldest kept day.
 
 ### 2.6 Publisher
 Emits the SignalK deltas of SPEC 6.2 through the plugin API's delta handler,
@@ -160,7 +161,12 @@ and chart spans of up to an hour use the live minute buckets once the
 plugin has run for an hour, since they are exact. Without history, all
 answers come from the aggregator, and if a history read fails the answer
 falls back to them with a short `historyError` note (the provider's error
-goes to the server log). `Query.weather` reads the configured weather paths
+goes to the server log). `summary` and `sectors` also take a range of
+whole hours (`TimeRange`) for the compare view: read hourly from history
+whenever a provider is there, wherever the range lies; the sectors add the
+open hour only when the range includes it. A live answer to a range uses
+the hour buckets that start inside it and sets `liveFrom` when the range
+reaches back past them. `Query.weather` reads the configured weather paths
 hourly from the full hour with `average`; if the provider rejects it, the
 read is retried with `last`, which the query keeps for the rest of the run.
 Weather has no live fallback: a failed read answers `historyError` and no
@@ -171,7 +177,9 @@ Express router registered through the plugin API. Thin: parse and validate
 parameters, call the query layer, serialize (SPEC 6.1). Data routes reuse
 an answer for a minute per set of parameters and share in-flight
 computations; `/status` is never cached. `/weather` checks only that the
-range is at most 7 days. The one write route, `POST
+range is at most 7 days. `/summary` and `/sectors` take `from` and `to` on
+whole hours (`rangeParam`), `/coverage` takes them as UTC days
+(`dayRangeParam`), each at most 7 days and never with `window`. The one write route, `POST
 /settings`, validates live settings with `parseLiveSettings` from
 `config.ts` and hands them to the plugin, which merges them into the stored
 configuration, saves it and applies them (for example
@@ -201,7 +209,7 @@ Statistics come from the REST API; a single SignalK WebSocket carries
 external CDNs for its own assets. Views per SPEC 7, each a custom element
 that builds its DOM once and then updates text and attributes only;
 charts reuse their SVG paths and rects. Pure helpers (`units.ts`,
-`time.ts`, `route.ts`, `backoff.ts`, `health.ts`, `stats.ts`) are unit tested under
+`time.ts`, `route.ts`, `backoff.ts`, `health.ts`, `stats.ts`, `compare.ts`) are unit tested under
 `test/web`. The overview's health section, its good share and the
 duplicate hint come from `health.ts`; the charts derive the class A and B
 mix from the `positions` series. The range vs weather section
@@ -229,7 +237,11 @@ URLs from `exportHref` in `api.ts`) sit under the map and the farthest
 receptions table; the browser sends the session cookie with them. The map's sector wedges
 come from the overlay GeoJSON route, and the cell and sector colours are
 imported from `src/style.ts`, which the plotter overlay uses too, so the
-app map and the plotter look the same.
+app map and the plotter look the same. The compare view keeps its date
+and length in the hash (`route.ts`); `compare.ts` holds the window
+arithmetic and the per-hour comparison of counts, and the view asks
+`/summary`, `/sectors` and `/coverage` once per window with `from` and
+`to`. Its two sector charts share a scale (`sectorScale`).
 
 ## 3. Data Models
 

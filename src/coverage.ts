@@ -178,9 +178,43 @@ export class Coverage {
     now: number,
     percentile = this.percentile,
   ): Promise<Footprint> {
-    const today = utcDay(now)
     const dates: string[] = []
     for (let i = days - 1; i >= 0; i--) dates.push(utcDay(now - i * DAY_MS))
+    return this.footprintOf(dates, now, percentile)
+  }
+
+  /**
+   * Union of the UTC days `from` to `to`, both included, read from the day
+   * files only. Days after today have no file and are left out.
+   */
+  async footprintRange(
+    from: string,
+    to: string,
+    now: number,
+    percentile = this.percentile,
+  ): Promise<Footprint> {
+    const today = utcDay(now)
+    const dates: string[] = []
+    for (
+      let t = Date.parse(from);
+      utcDay(t) <= to && utcDay(t) <= today;
+      t += DAY_MS
+    )
+      dates.push(utcDay(t))
+    return this.footprintOf(dates, now, percentile)
+  }
+
+  /** The oldest UTC day the files are kept for. */
+  retainedFrom(now: number): string {
+    return utcDay(now - (this.retentionDays - 1) * DAY_MS)
+  }
+
+  private async footprintOf(
+    dates: string[],
+    now: number,
+    percentile: number,
+  ): Promise<Footprint> {
+    const today = utcDay(now)
     const files: DayFile[] = []
     for (const date of dates) {
       if (date === today) files.push(this.currentDay(now))
@@ -206,7 +240,7 @@ export class Coverage {
 
   /** Deletes day files older than the retention period. */
   async prune(now: number): Promise<string[]> {
-    const oldest = utcDay(now - (this.retentionDays - 1) * DAY_MS)
+    const oldest = this.retainedFrom(now)
     let names: string[]
     try {
       names = await fs.readdir(this.dir)

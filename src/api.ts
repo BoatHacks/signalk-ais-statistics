@@ -8,7 +8,7 @@
 // router.access('readwrite'), or admin-only on older servers.
 import { M_PER_NM } from './geo'
 import type { Request, RequestHandler, Response } from 'express'
-import { DAY_MS } from './aggregate'
+import { DAY_MS, HOUR_MS } from './aggregate'
 import { footprintGeoJson, utcDay, type Coverage } from './coverage'
 import {
   EXPORT_WINDOWS,
@@ -20,12 +20,14 @@ import {
   type ExportWindow,
 } from './export'
 import {
+  MAX_RANGE_MS,
   MAX_SERIES_POINTS,
   METRICS,
   WINDOWS,
   isWindow,
   type Metric,
   type Query,
+  type TimeRange,
   type WindowName,
 } from './query'
 import type { LongRangeLog } from './longrange'
@@ -106,6 +108,55 @@ function windowParam(req: Request, fallback: WindowName): WindowName {
       `window must be one of ${Object.keys(WINDOWS).join(', ')}`,
     )
   return w
+}
+
+/**
+ * A `from`/`to` range in whole hours (ISO times), as the compare view asks
+ * for it, or undefined when the request names neither. At most 7 days, and
+ * it must start before now.
+ */
+function rangeParam(req: Request, now: number): TimeRange | undefined {
+  const f = param(req, 'from')
+  const t = param(req, 'to')
+  if (f === undefined && t === undefined) return undefined
+  if (f === undefined || t === undefined)
+    throw new BadRequest('from and to go together')
+  if (param(req, 'window') !== undefined)
+    throw new BadRequest('give either window or from and to')
+  const from = Date.parse(f)
+  const to = Date.parse(t)
+  if (!Number.isFinite(from) || !Number.isFinite(to))
+    throw new BadRequest('from and to must be ISO times')
+  if (from % HOUR_MS !== 0 || to % HOUR_MS !== 0)
+    throw new BadRequest('from and to must be whole hours')
+  if (from >= to) throw new BadRequest('from must be before to')
+  if (to - from > MAX_RANGE_MS)
+    throw new BadRequest('the range is at most 7 days')
+  if (from >= now) throw new BadRequest('from must be in the past')
+  return { from, to }
+}
+
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/
+
+/** A `from`/`to` range of UTC days, both included, at most 7 days. */
+function dayRangeParam(req: Request): { from: string; to: string } | undefined {
+  const from = param(req, 'from')
+  const to = param(req, 'to')
+  if (from === undefined && to === undefined) return undefined
+  if (from === undefined || to === undefined)
+    throw new BadRequest('from and to go together')
+  if (param(req, 'window') !== undefined)
+    throw new BadRequest('give either window or from and to')
+  const valid = (d: string) => {
+    const t = Date.parse(d)
+    return DAY_RE.test(d) && Number.isFinite(t) && utcDay(t) === d
+  }
+  if (!valid(from) || !valid(to))
+    throw new BadRequest('from and to must be UTC days, YYYY-MM-DD')
+  if (from > to) throw new BadRequest('from must not be after to')
+  if (Date.parse(to) - Date.parse(from) >= MAX_RANGE_MS)
+    throw new BadRequest('the range is at most 7 days')
+  return { from, to }
 }
 
 /** A trial coverage cap percentile, within the setting's bounds. */
@@ -261,10 +312,10 @@ export function registerRoutes(router: RouterLike, deps: ApiDeps): void {
 
   r.get(
     '/summary',
-    handle(
-      (req) => query().summary(windowParam(req, '24h'), now()),
-      cachedRoute(),
-    ),
+    handle((req) => {
+      const t = now()
+      return query().summary(rangeParam(req, t) ?? windowParam(req, '24h'), t)
+    }, cachedRoute()),
   )
 
   r.get(
@@ -273,10 +324,11 @@ export function registerRoutes(router: RouterLike, deps: ApiDeps): void {
       const cls = param(req, 'class') ?? 'all'
       if (cls !== 'all' && !SECTOR_CLASSES.includes(cls as SectorClass))
         throw new BadRequest('class must be a, b or all')
+      const t = now()
       return query().sectors(
-        windowParam(req, '24h'),
+        rangeParam(req, t) ?? windowParam(req, '24h'),
         cls as SectorClass | 'all',
-        now(),
+        t,
       )
     }, cachedRoute()),
   )
@@ -316,17 +368,24 @@ export function registerRoutes(router: RouterLike, deps: ApiDeps): void {
   r.get(
     '/coverage',
     handle(async (req) => {
-      const window = windowParam(req, '24h')
-      const days = COVERAGE_DAYS[window]
-      if (!days) throw new BadRequest('coverage windows are 24h and 7d')
+      const range = dayRangeParam(req)
+      const window = range ? null : windowParam(req, '24h')
+      const days = window ? COVERAGE_DAYS[window] : undefined
+      if (window && !days)
+        throw new BadRequest('coverage windows are 24h and 7d')
       const all = param(req, 'all')
       if (all !== undefined && all !== 'true' && all !== 'false')
         throw new BadRequest('all must be true or false')
       const cov = coverage()
       const percentile = capParam(req) ?? cov.capPercentile()
-      const f = await cov.footprint(days, now(), percentile)
+      const t = now()
+      const f = range
+        ? await cov.footprintRange(range.from, range.to, t, percentile)
+        : await cov.footprint(days!, t, percentile)
       return {
         window,
+        ...(range ? { from: range.from, to: range.to } : {}),
+        retainedFrom: cov.retainedFrom(t),
         days: f.days,
         resolution: f.resolution,
         capPercentile: percentile,

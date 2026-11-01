@@ -6,6 +6,16 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Compare view (#14, `#/compare`): the days before a date next to the
+  days from it on (1 to 7 days each), with messages, positions by class,
+  distance figures, coverage cells and area, the change between them, and
+  both sector charts on one scale. `GET /summary` and `GET /sectors` take
+  `from` and `to` on whole hours instead of `window`, and `GET /coverage`
+  takes them as UTC days and reports `retainedFrom`, the oldest kept day.
+  Per-source statistics follow separately.
+
 ## [0.5.0] - 2026-11-01
 
 ### Added

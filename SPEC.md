@@ -319,11 +319,11 @@ effective live settings.
 
 | Route | Returns |
 |---|---|
-| `GET /summary?window=24h` | headline figures: messages, positions, vessels by group, distance avg, p95, p99 and max, and `health`: the health counts (2.8) and `received`, their denominator |
+| `GET /summary?window=24h` or `?from=&to=` | headline figures: messages, positions, vessels by group, distance avg, p95, p99 and max, and `health`: the health counts (2.8) and `received`, their denominator |
 | `GET /series?metric=&resolution=&from=&to=` | time series for the charts, read from history; `metric` is `messages`, `positions`, `distance`, `vessels` or `health` (each health counter and `received` per bucket), `resolution` in seconds (at least 60, at most 2000 points) |
 | `GET /weather?from=&to=` | the configured weather paths (9) read back from history as hourly averages (`aggregate` says `average`, or `last` for a provider that rejects it), buckets starting on the full hour, at most 7 days; only paths with data; `available` is false without a provider and `historyError` is set when the read fails, with no live fallback |
-| `GET /sectors?window=24h&class=a\|b\|all` | 24 sectors with count and p99 distance (the highest hourly p99 in the window, see 2.6), and the farthest reception `maxM` with its time: `maxAt` when known exactly, otherwise `maxHour`, the start of the hour it fell in |
-| `GET /coverage?window=7d&all=false&cap=` | cell ids, GeoJSON for the map, covered area in m²; windows `24h` (today) and `7d`; `all=true` adds the cells beyond the distance cap, marked `capped`; `cap` (50 to 100) tries another distance cap percentile for this answer only, and `capPercentile` gives the percentile applied |
+| `GET /sectors?window=24h&class=a\|b\|all` or `?from=&to=&class=` | 24 sectors with count and p99 distance (the highest hourly p99 in the window, see 2.6), and the farthest reception `maxM` with its time: `maxAt` when known exactly, otherwise `maxHour`, the start of the hour it fell in |
+| `GET /coverage?window=7d&all=false&cap=` or `?from=&to=` | cell ids, GeoJSON for the map, covered area in m²; windows `24h` (today) and `7d`, or `from` and `to` as UTC days (`YYYY-MM-DD`, both included, at most 7) read from the day files only; `retainedFrom` is the oldest day the files are kept for; `all=true` adds the cells beyond the distance cap, marked `capped`; `cap` (50 to 100) tries another distance cap percentile for this answer only, and `capPercentile` gives the percentile applied |
 | `GET /longrange?window=24h` | the 25 farthest entries of the long-range log (2.7) in the window, farthest first, and the two speed lists of 2.8, 10 senders each, fastest first, speeds in m/s: `fastest` (plausible) and `implausibleJumps`; windows `24h` and `7d` |
 | `GET /export/coverage.csv?window=7d&all=false` | download: one row per H3 cell, `h3_cell,resolution,reports,min_distance_m,capped`, ordered by cell id; `all=true` adds the cells beyond the distance cap with `capped` true; no polygons |
 | `GET /export/longrange.csv?window=7d&anonymise=false` | download: every long-range entry (2.7) in the window, oldest first, `time,mmsi,name,class,ship_type,distance_m,bearing_deg,lat,lon,own_lat,own_lon`; anonymised, only `time,class,ship_type,distance_m,bearing_deg` |
@@ -355,7 +355,16 @@ no MMSIs or own position, but a footprint centred on a harbour can hint at
 the berth, so the user decides whether to share that file. The fastest and
 implausible-jump lists (2.8) are not exported.
 
-Windows accept `1h`, `24h` and `7d`. Responses are JSON in SI units
+Windows accept `1h`, `24h` and `7d`. For the compare view (7, #14)
+`/summary` and `/sectors` also take a range instead of a window: `from`
+and `to` as ISO times on whole hours, `from` before `to` and before now, at
+most 7 days, never together with `window` (400 otherwise). A range that
+reaches past now ends now. A range answers with `window: null`, null
+unique vessels, and is read hourly from history whenever a provider is
+there; without one it comes from the live hour buckets, and `liveFrom`
+says where they start when the range reaches back further. The sectors of
+a range cover its closed hours from history and the open hour from live
+data when the range includes it. Responses are JSON in SI units
 named in the field (`p99M` in metres, `areaM2` in square metres); the web
 app converts them to the user's display units (section 7). Responses and say whether they came from history
 or from live data (`source`). Unique vessel counts are given for windows up
@@ -522,6 +531,21 @@ A SignalK web app, listed in the admin UI, with:
   coverage CSV downloads (6.1) for the shown window and for all retained
   days, including the cells beyond the cap while `All cells` is on, with a
   one-line note that a footprint can hint at the berth.
+- Compare (#14): two date windows side by side, to tell whether an
+  antenna, cable, splitter or receiver change helped
+  (`#/compare?date=YYYY-MM-DD&days=7`). The date is the first UTC day of
+  the after window; the before window is the same number of days (1 to 7,
+  default 7) before it. The default date puts the after window's end on
+  today, so both fit the default coverage retention. A table gives per
+  window messages, positions by class, distance p99, p95, median, average
+  and maximum (marked untrusted), coverage cells and area, and the change
+  with its percentage. An after window that reaches today is shorter;
+  counts are then compared per hour, distances and coverage as they are.
+  Below the table, both sector charts (all classes) on one scale. Notes say
+  when a window starts before the oldest kept coverage day (coverage is then
+  shown as not kept, not as a smaller area), when live data covers only
+  part of a window, and when history failed. The state is in the hash, not
+  in the plugin config. Markers for a change on the charts come later.
 - Settings: a collapsed panel at the foot of every page lists the settings
   in effect, read only, and says where to change them.
 
@@ -646,7 +670,7 @@ land. The plotter overlay always uses the saved value.
 - 24 bearing sectors per class, from per-sector p99.
 - Coverage cells and area per day.
 - SignalK path publication (6.2).
-- Web app with overview, charts, sectors and map (7).
+- Web app with overview, charts, sectors, map and compare (7).
 - Overlay resource set for chart plotters (6.3).
 
 ### 10.2 Post-MVP / Deferred
@@ -792,6 +816,13 @@ help of `max` (6.2). Verified across a plugin restart on the test server.
   one history request. Correlation is shown as the plots and Pearson's r;
   hours with fewer than 20 reports stay out of r, as for the sectors. The
   window stays at most 7 days.
+
+- **Antenna and receiver comparison starts with date windows (chosen by
+  the maintainer, #14).** Two windows side by side from data the plugin
+  already keeps, so the compare view adds no paths and no history load;
+  each window is at most 7 days, like every other window. Change markers on
+  the charts come later. Statistics per server event are opt-in and ship
+  separately; sectors and coverage stay combined.
 
 ## 13. Open Questions
 

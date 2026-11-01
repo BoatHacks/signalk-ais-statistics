@@ -63,6 +63,8 @@ describe('overlay manifest', () => {
 describe('sectorFeatures', () => {
   const stats: SectorStats = {
     window: '24h',
+    from: '2030-01-01T00:00:00.000Z',
+    to: '2030-01-02T00:00:00.000Z',
     class: 'a',
     source: 'live',
     sectors: Array.from({ length: 24 }, (_, s) => ({

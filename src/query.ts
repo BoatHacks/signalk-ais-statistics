@@ -44,6 +44,45 @@ export function isWindow(w: unknown): w is WindowName {
   return typeof w === 'string' && Object.hasOwn(WINDOWS, w)
 }
 
+/**
+ * A time range in whole hours, as the compare view asks for it. A range is
+ * at most as long as the longest window (SPEC 12) and read hourly.
+ */
+export interface TimeRange {
+  from: number
+  to: number
+}
+export const MAX_RANGE_MS = WINDOWS['7d'].ms
+const RANGE_RESOLUTION = 3600
+
+/** A named window or a range, resolved against the current time. */
+interface Span {
+  window: WindowName | null
+  from: number
+  to: number
+  /** Seconds per bucket of the counter reads. */
+  resolution: number
+}
+
+function span(w: WindowName | TimeRange, now: number): Span {
+  if (typeof w === 'string')
+    return {
+      window: w,
+      from: now - WINDOWS[w].ms,
+      to: now,
+      resolution: WINDOWS[w].resolution,
+    }
+  // A range that reaches past now ends now: nothing later is known.
+  return {
+    window: null,
+    from: w.from,
+    to: Math.max(w.from, Math.min(w.to, now)),
+    resolution: RANGE_RESOLUTION,
+  }
+}
+
+const iso = (t: number) => new Date(t).toISOString()
+
 export const METRICS = [
   'messages',
   'positions',
@@ -107,18 +146,27 @@ export interface DistanceFigures {
 }
 
 export interface Summary {
-  window: WindowName
+  /** Null for a from/to range. */
+  window: WindowName | null
   from: string
   to: string
   source: Source
   messages: number
   positions: { classA: number; classB: number; other: number }
-  /** Unique vessels; null for windows over 24 hours, which are not additive. */
+  /**
+   * Unique vessels; null for windows over 24 hours, which are not
+   * additive, and for ranges, which do not end at the live vessel list.
+   */
   vessels: { total: number; byGroup: Record<TypeGroup, number> } | null
   distance: DistanceFigures
   health: HealthFigures
   /** Set when history failed and the figures fell back to live data. */
   historyError?: string
+  /**
+   * Set for a range answered from live data that starts before the live
+   * buckets do: the figures cover only the time from here on.
+   */
+  liveFrom?: string
 }
 
 /** Message health over a window (SPEC 2.8). */
@@ -153,11 +201,16 @@ export interface SectorStat {
 }
 
 export interface SectorStats {
-  window: WindowName
+  /** Null for a from/to range. */
+  window: WindowName | null
+  from: string
+  to: string
   class: SectorClass | 'all'
   source: Source
   sectors: SectorStat[]
   historyError?: string
+  /** As for Summary: a live answer that starts later than the range. */
+  liveFrom?: string
 }
 
 export interface SeriesResult {
@@ -314,8 +367,14 @@ export class Query {
    */
   private weatherAggregate: Aggregate = 'average'
 
-  private useHistory(windowMs: number, now: number): boolean {
+  private useHistory(
+    w: number | Pick<Span, 'window' | 'from' | 'to'>,
+    now: number,
+  ): boolean {
     if (!this.history().available) return false
+    // A range always reads history: it can lie anywhere in the past.
+    if (typeof w === 'object' && w.window === null) return true
+    const windowMs = typeof w === 'number' ? w : w.to - w.from
     // The live minute buckets are exact for the last hour once the plugin
     // has been running that long.
     return !(windowMs <= HOUR_MS && now - this.agg.startedAt >= HOUR_MS)
@@ -338,19 +397,40 @@ export class Query {
     }
   }
 
-  async summary(window: WindowName, now: number): Promise<Summary> {
-    const w = WINDOWS[window]
-    const from = now - w.ms
-    const vessels = w.ms <= DAY_MS ? this.agg.uniqueVessels(now, w.ms) : null
+  /**
+   * Where the live buckets start: the plugin start or 24 hours back.
+   * Undefined when they reach back to `from`.
+   */
+  private liveFrom(from: number, now: number): string | undefined {
+    const start = Math.max(
+      this.agg.startedAt,
+      Math.floor(now / HOUR_MS) * HOUR_MS - DAY_MS,
+    )
+    return from < start ? iso(start) : undefined
+  }
+
+  /** Totals of a named window, or of a range in whole hours. */
+  async summary(window: WindowName | TimeRange, now: number): Promise<Summary> {
+    const sp = span(window, now)
+    const { from, to } = sp
+    const ms = to - from
+    const vessels =
+      sp.window !== null && ms <= DAY_MS
+        ? this.agg.uniqueVessels(now, ms)
+        : null
     const base = {
-      window,
-      from: new Date(from).toISOString(),
-      to: new Date(now).toISOString(),
+      window: sp.window,
+      from: iso(from),
+      to: iso(to),
       vessels,
     }
 
     const live = (): Summary => {
-      const b = this.liveBucket(w.ms, now)
+      const b =
+        sp.window === null
+          ? this.liveRange(from, to, now)
+          : this.liveBucket(ms, now)
+      const liveFrom = sp.window === null ? this.liveFrom(from, now) : undefined
       return {
         ...base,
         source: 'live',
@@ -362,16 +442,18 @@ export class Query {
         },
         distance: distanceFigures(b.distanceBins, b.maxNm),
         health: healthFigures(b.messages, { ...b.health }),
+        ...(liveFrom ? { liveFrom } : {}),
       }
     }
-    if (!this.useHistory(w.ms, now)) return live()
+    if (!this.useHistory(sp, now)) return live()
+    if (ms <= 0) return live()
 
     return this.withFallback(async (): Promise<Summary> => {
       const h = this.history()
-      const res = this.resolution(w.resolution)
+      const res = this.resolution(sp.resolution)
       const [counters, max] = await Promise.all([
-        counterIncrements(h, COUNTER_PATHS, from, now, res),
-        h.series([paths.distanceMax], 'max', from, now, w.ms / 1000),
+        counterIncrements(h, COUNTER_PATHS, from, to, res),
+        h.series([paths.distanceMax], 'max', from, to, ms / 1000),
       ])
       const totals = counters.increments.map(sum)
       return {
@@ -395,15 +477,17 @@ export class Query {
     }, live)
   }
 
+  /** Sector statistics of a named window, or of a range in whole hours. */
   async sectors(
-    window: WindowName,
+    window: WindowName | TimeRange,
     cls: SectorClass | 'all',
     now: number,
   ): Promise<SectorStats> {
-    const w = WINDOWS[window]
+    const sp = span(window, now)
+    const isRange = sp.window === null
     const classes = cls === 'all' ? [...SECTOR_CLASSES] : [cls]
-    const iso = (t: number | undefined) =>
-      t === undefined ? null : new Date(t).toISOString()
+    const isoOrNull = (t: number | undefined) =>
+      t === undefined ? null : iso(t)
     const result = async (
       source: Source,
       a: Accumulator,
@@ -422,12 +506,12 @@ export class Query {
         count,
         p99M: metres(p99(s)),
         maxM: a.max[s]! > 0 ? Math.round(a.max[s]! * M_PER_NM) : null,
-        maxAt: iso(a.maxAt[s]),
-        maxHour: a.maxAt[s] === undefined ? iso(a.maxHour[s]) : null,
+        maxAt: isoOrNull(a.maxAt[s]),
+        maxHour: a.maxAt[s] === undefined ? isoOrNull(a.maxHour[s]) : null,
       }))
       // A maximum known only to the hour gets its time from the log.
       if (this.longRange && sectors.some((s) => s.maxHour !== null)) {
-        const log = await this.longRange(now - w.ms, now + 1).catch(() => [])
+        const log = await this.longRange(sp.from, sp.to + 1).catch(() => [])
         for (const s of sectors) {
           if (s.maxHour === null || s.maxM === null) continue
           const hit = log.find(
@@ -442,7 +526,17 @@ export class Query {
           }
         }
       }
-      return { window, class: cls, source, sectors }
+      const liveFrom =
+        source === 'live' && isRange ? this.liveFrom(sp.from, now) : undefined
+      return {
+        window: sp.window,
+        from: iso(sp.from),
+        to: iso(sp.to),
+        class: cls,
+        source,
+        sectors,
+        ...(liveFrom ? { liveFrom } : {}),
+      }
     }
     const accumulator = (): Accumulator => {
       const a: Accumulator = {
@@ -472,16 +566,20 @@ export class Query {
     const live = (): Promise<SectorStats> => {
       const a = accumulator()
       const ci = classes.map((c) => SECTOR_CLASSES.indexOf(c))
-      const buckets =
-        w.ms <= HOUR_MS
+      const ms = sp.to - sp.from
+      const buckets = isRange
+        ? this.agg
+            .hourBuckets(now)
+            .filter((b) => b.start >= sp.from && b.start < sp.to)
+        : ms <= HOUR_MS
           ? [this.agg.lastHour(now)]
           : this.agg
               .hourBuckets(now)
-              .filter((b) => b.start + HOUR_MS > now - w.ms)
+              .filter((b) => b.start + HOUR_MS > now - ms)
       for (const b of buckets) addHour(b, ci, a)
       return result('live', a)
     }
-    if (!this.useHistory(w.ms, now)) return live()
+    if (!this.useHistory(sp, now)) return live()
 
     return this.withFallback(async () => {
       const a = accumulator()
@@ -498,15 +596,25 @@ export class Query {
         }
       // The sector paths are published once an hour, at its end, so history
       // holds the closed hours and the open hour comes from the live bucket.
+      // A window covers the open hour and the closed hours before it; a
+      // range covers the hours from its start up to its end.
       const hourStart = Math.floor(now / HOUR_MS) * HOUR_MS
-      const from = Math.min(hourStart - HOUR_MS, hourStart - w.ms + HOUR_MS)
-      const res = Math.max(HOUR_MS / 1000, this.resolution(w.resolution))
+      const from = isRange
+        ? sp.from
+        : Math.min(hourStart - HOUR_MS, hourStart - (sp.to - sp.from) + HOUR_MS)
+      const closedTo = isRange ? Math.min(sp.to, hourStart) : hourStart
+      const withOpen = !isRange || (sp.from <= hourStart && sp.to > hourStart)
+      const res = Math.max(HOUR_MS / 1000, this.resolution(sp.resolution))
+      const none = { times: [] as number[], values: [] as (number | null)[][] }
       // Hourly counts and p99s, so sparse hours can be left out of the p99.
-      const [cs, ps, ms] = await Promise.all([
-        counterIncrements(h, countPaths, from, hourStart, res),
-        h.series(p99Paths, 'max', from, hourStart, res),
-        h.series(maxPaths, 'max', from, hourStart, res),
-      ])
+      const [cs, ps, ms] =
+        closedTo > from
+          ? await Promise.all([
+              counterIncrements(h, countPaths, from, closedTo, res),
+              h.series(p99Paths, 'max', from, closedTo, res),
+              h.series(maxPaths, 'max', from, closedTo, res),
+            ])
+          : [{ times: [], increments: [] }, none, none]
       ms.values.forEach((col, i) =>
         col.forEach((v, k) => {
           // A value published at the end of an hour covers that hour.
@@ -526,7 +634,9 @@ export class Query {
           if (j !== undefined) raise(s, toNm(ps.values[i]?.[j] ?? null))
         })
       })
-      const open = this.agg.hourBuckets(now).find((b) => b.start === hourStart)
+      const open = withOpen
+        ? this.agg.hourBuckets(now).find((b) => b.start === hourStart)
+        : undefined
       if (open)
         addHour(
           open,
@@ -608,6 +718,14 @@ export class Query {
     const out = emptyBucket(now - windowMs)
     for (const b of this.agg.hourBuckets(now))
       if (b.start + HOUR_MS > now - windowMs) mergeInto(out, b)
+    return out
+  }
+
+  /** The live hour buckets that start inside a range of whole hours. */
+  private liveRange(from: number, to: number, now: number): Bucket {
+    const out = emptyBucket(from)
+    for (const b of this.agg.hourBuckets(now))
+      if (b.start >= from && b.start < to) mergeInto(out, b)
     return out
   }
 

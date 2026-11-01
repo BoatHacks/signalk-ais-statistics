@@ -19,6 +19,8 @@ function point(bearing: number, r: number): [number, number] {
   return [C + r * Math.cos(a), C + r * Math.sin(a)]
 }
 
+export { sectorScale } from './ticks'
+
 export class SectorChart {
   readonly element: HTMLElement
   private readonly root: SVGSVGElement
@@ -102,9 +104,15 @@ export class SectorChart {
     this.element.append(this.root, this.tip, this.empty)
   }
 
-  update(stats: SectorStats, unit: Unit, offsetMin?: number): void {
+  update(
+    stats: SectorStats,
+    unit: Unit,
+    offsetMin?: number,
+    /** The outer ring in metres, so charts side by side share a scale. */
+    scaleM?: number,
+  ): void {
     this.data = { stats, unit, offsetMin }
-    const { max, ticks } = sectorLayout(stats, R)
+    const { max, ticks } = sectorLayout(stats, R, scaleM)
     this.empty.hidden = max > 0
     this.root.style.visibility = max > 0 ? 'visible' : 'hidden'
     if (max === 0) return

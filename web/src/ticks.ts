@@ -24,16 +24,28 @@ export interface SectorLayout {
   ticks: (Tick | null)[]
 }
 
+/** The distance at the rim of a chart of its own, in metres. */
+export function sectorScale(stats: SectorStats): number {
+  const p99 = Math.max(0, ...stats.sectors.map((s) => s.p99M ?? 0))
+  const far = Math.max(0, ...stats.sectors.map((s) => s.maxM ?? 0))
+  return p99 > 0 ? Math.min(Math.max(p99, far), p99 * TICK_ROOM) : far
+}
+
 /**
  * The scale follows the wedges, with up to a quarter more room for the
  * ticks; ticks beyond it stop at the rim. Every sector with a reception
  * gets a tick from the centre, drawn over its wedge, so it shows even when
  * the farthest reception is at the wedge's edge.
  */
-export function sectorLayout(stats: SectorStats, rim: number): SectorLayout {
-  const p99 = Math.max(0, ...stats.sectors.map((s) => s.p99M ?? 0))
+export function sectorLayout(
+  stats: SectorStats,
+  rim: number,
+  /** A larger scale in metres, so charts side by side share one. */
+  scaleM?: number,
+): SectorLayout {
   const far = Math.max(0, ...stats.sectors.map((s) => s.maxM ?? 0))
-  const max = p99 > 0 ? Math.min(Math.max(p99, far), p99 * TICK_ROOM) : far
+  const own = sectorScale(stats)
+  const max = own > 0 && scaleM !== undefined ? Math.max(own, scaleM) : own
   if (max === 0) return { max, ticks: stats.sectors.map(() => null) }
   const scale = rim / max
   let farthestDone = false

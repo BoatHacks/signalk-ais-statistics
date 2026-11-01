@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatRoute, parseRoute } from '../../web/src/route'
+import { defaultCompare, formatRoute, parseRoute } from '../../web/src/route'
 
 describe('hash routes', () => {
   it('parses view and window', () => {
@@ -31,5 +31,33 @@ describe('hash routes', () => {
     expect(formatRoute({ view: 'charts', window: '7d' })).toBe(
       '#/charts?window=7d',
     )
+  })
+
+  it('parses the compare view with a date and days, within bounds', () => {
+    const now = Date.UTC(2030, 0, 20, 12)
+    expect(parseRoute('#/compare?date=2030-01-08&days=3', now)).toEqual({
+      view: 'compare',
+      window: '24h',
+      compare: { date: '2030-01-08', days: 3 },
+    })
+    // The default: seven days each side, the after window ending today.
+    expect(defaultCompare(now)).toEqual({ date: '2030-01-14', days: 7 })
+    for (const hash of [
+      '#/compare',
+      '#/compare?date=2030-02-30&days=0',
+      '#/compare?date=2031-01-01&days=8',
+      '#/compare?date=yesterday&days=x',
+    ])
+      expect(parseRoute(hash, now).compare, hash).toEqual(defaultCompare(now))
+  })
+
+  it('formats the compare view with its own parameters', () => {
+    expect(
+      formatRoute({
+        view: 'compare',
+        window: '7d',
+        compare: { date: '2030-01-08', days: 7 },
+      }),
+    ).toBe('#/compare?date=2030-01-08&days=7')
   })
 })

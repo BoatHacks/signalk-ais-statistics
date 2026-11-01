@@ -17,10 +17,15 @@ export interface Distance {
 }
 
 export interface Summary {
-  window: WindowName
+  /** Null for a from/to range. */
+  window: WindowName | null
+  from: string
+  to: string
   source: 'history' | 'live'
   /** Set when history failed and the answer fell back to live data. */
   historyError?: string
+  /** A live answer for a range that starts before the live data does. */
+  liveFrom?: string
   messages: number
   positions: { classA: number; classB: number; other: number }
   vessels: { total: number; byGroup: Record<string, number> } | null
@@ -32,6 +37,8 @@ export interface SectorStats {
   source: 'history' | 'live'
   /** Set when history failed and the answer fell back to live data. */
   historyError?: string
+  /** A live answer for a range that starts before the live data does. */
+  liveFrom?: string
   sectors: {
     sector: number
     fromDeg: number
@@ -108,6 +115,10 @@ export interface Weather {
 }
 
 export interface CoverageResponse {
+  /** The UTC days read. */
+  days: string[]
+  /** The oldest UTC day the coverage files are kept for. */
+  retainedFrom: string
   cells: number
   cappedCells: number
   capM: number | null
