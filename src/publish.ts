@@ -84,7 +84,7 @@ export function defaultMetadata(): PathMeta[] {
 export interface BuildOptions {
   /**
    * Include the per-sector counters and p99 distances. The plugin sends
-   * them once an hour, since the radar keeps the highest hourly p99 per
+   * them once an hour, since the sectors keep the highest hourly p99 per
    * sector, and on stop.
    */
   sectors?: boolean

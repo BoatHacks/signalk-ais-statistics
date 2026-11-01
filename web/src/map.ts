@@ -1,6 +1,6 @@
 // Coverage map with a window selector, the basemap switch and layer
-// toggles for the coverage cells and the radar. Cells and radar use the
-// plotter overlay's colours.
+// toggles for the coverage cells and the class A and B sectors. Cells and
+// sectors use the plotter overlay's colours.
 import * as L from 'leaflet'
 import { get, type CoverageResponse } from './api'
 import {
@@ -18,10 +18,10 @@ import {
   CELL_FILL_OPACITY,
   CELL_LINE_WIDTH,
   OVERLAY_OPACITY,
-  RADAR_COLOUR,
-  RADAR_LINE_WIDTH,
-  RADAR_MAX_LINE_WIDTH,
+  SECTOR_LINE_WIDTH,
+  SECTOR_MAX_LINE_WIDTH,
   cellColour,
+  sectorColour,
 } from '../../src/style'
 import { maxTime } from './time'
 import { SECTOR_WIDTH_DEG } from '../../src/paths'
@@ -77,11 +77,19 @@ export function createMap(): MapView {
   let base: L.Layer[] = []
   let cells: L.GeoJSON | undefined
   let capped: L.GeoJSON | undefined
-  let radar: L.GeoJSON | undefined
+  let sectorsA: L.GeoJSON | undefined
+  let sectorsB: L.GeoJSON | undefined
   const visible: Record<Layer, boolean> = {
     cells: layerVisible('cells'),
     capped: layerVisible('capped'),
-    radar: layerVisible('radar'),
+    sectorsA: layerVisible('sectorsA'),
+    sectorsB: layerVisible('sectorsB'),
+  }
+  // Class B on top, as in the plotter overlay: its wedges are usually the
+  // shorter ones and would otherwise hide under class A's outlines.
+  const sectorsToFront = () => {
+    sectorsA?.bringToFront()
+    sectorsB?.bringToFront()
   }
   let lastInfo: (() => void) | undefined
   let current: Basemap | undefined
@@ -117,7 +125,7 @@ export function createMap(): MapView {
     for (const l of base) l.addTo(map)
     cells?.bringToFront()
     capped?.bringToFront()
-    radar?.bringToFront()
+    sectorsToFront()
     for (const btn of switcher.querySelectorAll('button'))
       btn.setAttribute('aria-pressed', String(btn.dataset.basemap === b))
   }
@@ -140,13 +148,14 @@ export function createMap(): MapView {
     for (const [name, layer] of [
       ['cells', cells],
       ['capped', capped],
-      ['radar', radar],
+      ['sectorsA', sectorsA],
+      ['sectorsB', sectorsB],
     ] as const) {
       if (!map || !layer) continue
       if (visible[name] && !map.hasLayer(layer)) layer.addTo(map)
       if (!visible[name] && map.hasLayer(layer)) layer.remove()
     }
-    radar?.bringToFront()
+    sectorsToFront()
     for (const btn of toggles.querySelectorAll('button'))
       btn.setAttribute(
         'aria-pressed',
@@ -158,11 +167,19 @@ export function createMap(): MapView {
   for (const [name, label] of [
     ['cells', 'Cells'],
     ['capped', 'All cells'],
-    ['radar', 'Radar 24h'],
+    ['sectorsA', 'Sectors A'],
+    ['sectorsB', 'Sectors B'],
   ] as const) {
     const btn = el('button', { type: 'button', 'data-layer': name }, label)
     if (name === 'capped')
       btn.title = 'Also show sparse cells beyond the distance percentile cap'
+    if (name === 'sectorsA' || name === 'sectorsB') {
+      btn.title = `Class ${name === 'sectorsA' ? 'A' : 'B'} sectors over 24 hours`
+      // A swatch in the class colour, as on the sectors page.
+      const swatch = el('span', { class: 'swatch', 'aria-hidden': 'true' })
+      swatch.style.background = sectorColour(name === 'sectorsA' ? 'a' : 'b')
+      btn.prepend(swatch)
+    }
     btn.addEventListener('click', () => {
       visible[name] = !visible[name]
       saveLayerVisible(name, visible[name])
@@ -209,12 +226,12 @@ export function createMap(): MapView {
     dashArray: '4 3',
   })
 
-  const radarStyle = (f?: GeoJSON.Feature): L.PathOptions => ({
-    color: RADAR_COLOUR,
+  const sectorStyle = (f?: GeoJSON.Feature): L.PathOptions => ({
+    color: sectorColour(f?.properties?.cls),
     weight:
-      f?.properties?.kind === 'radar-max'
-        ? RADAR_MAX_LINE_WIDTH
-        : RADAR_LINE_WIDTH,
+      f?.properties?.kind === 'sector-max'
+        ? SECTOR_MAX_LINE_WIDTH
+        : SECTOR_LINE_WIDTH,
     opacity: OVERLAY_OPACITY,
     fill: false,
   })
@@ -222,7 +239,7 @@ export function createMap(): MapView {
   return {
     element,
     restyle() {
-      // Cell and radar colours follow the plotter overlay, not the theme.
+      // Cell and sector colours follow the plotter overlay, not the theme.
     },
     async show(window, units, offsetMin) {
       await ensureMap()
@@ -235,7 +252,8 @@ export function createMap(): MapView {
       ])
       cells?.remove()
       capped?.remove()
-      radar?.remove()
+      sectorsA?.remove()
+      sectorsB?.remove()
       const cellTip = (f: GeoJSON.Feature, layer: L.Layer) =>
         layer.bindTooltip(
           `${f.properties?.reports} reports, nearest ${units.distance.format(f.properties?.minDistanceM)}` +
@@ -255,42 +273,49 @@ export function createMap(): MapView {
         style: cappedStyle,
         onEachFeature: cellTip,
       })
-      const wedges: GeoJSON.FeatureCollection = {
-        type: 'FeatureCollection',
-        features: (overlay?.features ?? []).filter(
-          (f) =>
-            f.properties?.kind === 'radar' ||
-            f.properties?.kind === 'radar-max',
-        ),
+      const sectorTip = (f: GeoJSON.Feature, layer: L.Layer) => {
+        const p = f.properties ?? {}
+        const where = `Class ${String(p.cls).toUpperCase()}, ${bearings(Number(p.sector))}`
+        if (p.kind === 'sector-max')
+          layer.bindTooltip(
+            `${where}: farthest ${units.distance.format(p.maxM)} in 24h, ${maxTime(
+              {
+                maxAt: typeof p.maxAt === 'string' ? p.maxAt : null,
+                maxHour: typeof p.maxHour === 'string' ? p.maxHour : null,
+              },
+              offsetMin,
+            )}`,
+          )
+        else
+          layer.bindTooltip(
+            `${where}: p99 ${units.distance.format(p.p99M)} over 24h`,
+          )
       }
-      radar = L.geoJSON(wedges, {
-        style: radarStyle,
-        onEachFeature: (f, layer) => {
-          const p = f.properties ?? {}
-          const where = bearings(Number(p.sector))
-          if (p.kind === 'radar-max')
-            layer.bindTooltip(
-              `${where}: farthest ${units.distance.format(p.maxM)} in 24h, ${maxTime(
-                {
-                  maxAt: typeof p.maxAt === 'string' ? p.maxAt : null,
-                  maxHour: typeof p.maxHour === 'string' ? p.maxHour : null,
-                },
-                offsetMin,
-              )}`,
-            )
-          else
-            layer.bindTooltip(
-              `${where}: p99 ${units.distance.format(p.p99M)} over 24h`,
-            )
-        },
-      })
+      const sectorLayer = (cls: 'a' | 'b') =>
+        L.geoJSON(
+          {
+            type: 'FeatureCollection',
+            features: (overlay?.features ?? []).filter(
+              (f) =>
+                f.properties?.cls === cls &&
+                (f.properties?.kind === 'sector' ||
+                  f.properties?.kind === 'sector-max'),
+            ),
+          } as GeoJSON.FeatureCollection,
+          { style: sectorStyle, onEachFeature: sectorTip },
+        )
+      sectorsA = sectorLayer('a')
+      sectorsB = sectorLayer('b')
       applyVisibility()
-      // The first view frames the cells and the radar wedges together; the
-      // wedges reach past the cells where the p99 range exceeds them. The
-      // farthest-reception ticks can reach far beyond, so they do not count.
+      // The first view frames the cells and the sector wedges of both
+      // classes together; the wedges reach past the cells where the p99
+      // range exceeds them. The farthest-reception ticks can reach far
+      // beyond, so they do not count.
       const framed = L.geoJSON({
         type: 'FeatureCollection',
-        features: wedges.features.filter((f) => f.properties?.kind === 'radar'),
+        features: (overlay?.features ?? []).filter(
+          (f) => f.properties?.kind === 'sector',
+        ),
       } as GeoJSON.FeatureCollection)
       if (!fitted && (c.cells > 0 || framed.getLayers().length > 0)) {
         const bounds = L.latLngBounds([])

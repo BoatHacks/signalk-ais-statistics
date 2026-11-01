@@ -45,7 +45,7 @@ export const METRICS = ['messages', 'positions', 'distance', 'vessels'] as const
 export type Metric = (typeof METRICS)[number]
 export const MAX_SERIES_POINTS = 2000
 /**
- * An hour counts toward a sector's radar distance only with at least this
+ * An hour counts toward a sector's distance only with at least this
  * many reports in that sector: the p99 of a handful of reports lands at the
  * top of its distance bin, so sparse hours would set the radius by chance
  * (chosen by the maintainer).
@@ -86,7 +86,7 @@ export interface Summary {
   historyError?: string
 }
 
-export interface RadarSector {
+export interface SectorStat {
   sector: number
   fromDeg: number
   toDeg: number
@@ -100,11 +100,11 @@ export interface RadarSector {
   maxHour: string | null
 }
 
-export interface Radar {
+export interface SectorStats {
   window: WindowName
   class: SectorClass | 'all'
   source: Source
-  sectors: RadarSector[]
+  sectors: SectorStat[]
   historyError?: string
 }
 
@@ -320,17 +320,20 @@ export class Query {
     }, live)
   }
 
-  async radar(
+  async sectors(
     window: WindowName,
     cls: SectorClass | 'all',
     now: number,
-  ): Promise<Radar> {
+  ): Promise<SectorStats> {
     const w = WINDOWS[window]
     const classes = cls === 'all' ? [...SECTOR_CLASSES] : [cls]
     const iso = (t: number | undefined) =>
       t === undefined ? null : new Date(t).toISOString()
-    const result = async (source: Source, a: Accumulator): Promise<Radar> => {
-      const sectors: RadarSector[] = a.counts.map((count, s) => ({
+    const result = async (
+      source: Source,
+      a: Accumulator,
+    ): Promise<SectorStats> => {
+      const sectors: SectorStat[] = a.counts.map((count, s) => ({
         sector: s,
         fromDeg: s * SECTOR_WIDTH_DEG,
         toDeg: (s + 1) * SECTOR_WIDTH_DEG,
@@ -384,7 +387,7 @@ export class Query {
       return a
     }
 
-    const live = (): Promise<Radar> => {
+    const live = (): Promise<SectorStats> => {
       const a = accumulator()
       const ci = classes.map((c) => SECTOR_CLASSES.indexOf(c))
       const buckets =

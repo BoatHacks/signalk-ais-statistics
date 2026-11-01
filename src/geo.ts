@@ -35,7 +35,7 @@ export function sectorOf(bearing: number): number {
   return Math.min(SECTOR_COUNT - 1, Math.floor(b / SECTOR_WIDTH_DEG))
 }
 
-/** Destination point from a start, bearing and distance (used by tests and the radar polygons). */
+/** Destination point from a start, bearing and distance (used by tests and the sector polygons). */
 export function destination(
   from: LatLon,
   bearing: number,

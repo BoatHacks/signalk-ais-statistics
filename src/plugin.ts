@@ -17,10 +17,11 @@ import { N2kIngest } from './n2k'
 import { OwnPosition } from './ownposition'
 import {
   buildManifest,
-  radarFeatures,
+  sectorFeatures,
   registerOverlayProvider,
 } from './overlay'
 import { buildValues, defaultMetadata, publish } from './publish'
+import { SECTOR_CLASSES } from './paths'
 import { Query } from './query'
 
 export const PLUGIN_ID = 'signalk-ais-statistics'
@@ -158,7 +159,7 @@ export function createPlugin(app: ServerAPI): Plugin {
     id: PLUGIN_ID,
     name: 'AIS Statistics',
     description:
-      'AIS reception statistics: counts, distance percentiles, bearing radar and coverage',
+      'AIS reception statistics: counts, distance percentiles, bearing sectors and coverage',
     schema: () => configSchema,
 
     start(options) {
@@ -321,8 +322,17 @@ export function createPlugin(app: ServerAPI): Plugin {
         overlayExtras: async () => {
           const s = state
           if (!s) return []
-          const radar = await s.query.radar('24h', 'all', Date.now())
-          return radarFeatures(radar, s.own.last())
+          // One class after the other: history requests go out one at a time.
+          const own = s.own.last()
+          const out: object[] = []
+          for (const cls of SECTOR_CLASSES)
+            out.push(
+              ...sectorFeatures(
+                await s.query.sectors('24h', cls, Date.now()),
+                own,
+              ),
+            )
+          return out
         },
       })
     },

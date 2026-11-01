@@ -5,16 +5,16 @@
 // credentials, and a background page refreshes it hourly.
 import { destination, M_PER_NM } from './geo'
 import type { LatLon } from './ownposition'
-import type { Radar } from './query'
+import type { SectorStats } from './query'
 import {
   CELL_FILL_OPACITY,
   CELL_HIGH,
   CELL_LINE_WIDTH,
   CELL_LOW,
   OVERLAY_OPACITY,
-  RADAR_COLOUR,
-  RADAR_LINE_WIDTH,
-  RADAR_MAX_LINE_WIDTH,
+  SECTOR_COLOURS,
+  SECTOR_LINE_WIDTH,
+  SECTOR_MAX_LINE_WIDTH,
 } from './style'
 
 export const OVERLAY_ID = 'coverage'
@@ -35,6 +35,15 @@ export function overlayUrls(pluginId: string): OverlayUrls {
     background: `/${pluginId}/plotterext/refresh.html`,
   }
 }
+
+/** Teal for class A, orange for class B, as on the web app's sectors page. */
+const SECTOR_COLOUR = [
+  'match',
+  ['get', 'cls'],
+  'a',
+  SECTOR_COLOURS.a,
+  SECTOR_COLOURS.b,
+]
 
 const CELL_RAMP = [
   'interpolate',
@@ -68,20 +77,23 @@ export function overlayStyle(dataUrl: string): object {
         paint: { 'line-color': CELL_RAMP, 'line-width': CELL_LINE_WIDTH },
       },
       {
-        id: 'radar',
+        id: 'sectors',
         type: 'line',
         source: OVERLAY_SOURCE,
-        filter: ['==', ['get', 'kind'], 'radar'],
-        paint: { 'line-color': RADAR_COLOUR, 'line-width': RADAR_LINE_WIDTH },
+        filter: ['==', ['get', 'kind'], 'sector'],
+        paint: {
+          'line-color': SECTOR_COLOUR,
+          'line-width': SECTOR_LINE_WIDTH,
+        },
       },
       {
-        id: 'radar-max',
+        id: 'sector-max',
         type: 'line',
         source: OVERLAY_SOURCE,
-        filter: ['==', ['get', 'kind'], 'radar-max'],
+        filter: ['==', ['get', 'kind'], 'sector-max'],
         paint: {
-          'line-color': RADAR_COLOUR,
-          'line-width': RADAR_MAX_LINE_WIDTH,
+          'line-color': SECTOR_COLOUR,
+          'line-width': SECTOR_MAX_LINE_WIDTH,
         },
       },
     ],
@@ -96,7 +108,7 @@ export function buildManifest(
   return {
     name: 'AIS reception coverage',
     description:
-      'Where this vessel has received AIS positions over the last 7 days, and the 24 hour bearing radar.',
+      'Where this vessel has received AIS positions over the last 7 days, and the 24 hour bearing sectors for class A and B.',
     version,
     apiVersion: '1',
     requires: ['overlays.data'],
@@ -127,11 +139,17 @@ export function buildManifest(
  * One closed polygon per sector with a p99, from own position out to it,
  * and one line per sector with a farthest reception beyond the wedge, along
  * the sector's centre bearing from the wedge's edge out to that distance.
+ * Each feature carries the class (`cls`) of the sectors it was built from,
+ * so class A and B can be drawn in their own colours.
  */
-export function radarFeatures(radar: Radar, own: LatLon | undefined): object[] {
+export function sectorFeatures(
+  stats: SectorStats,
+  own: LatLon | undefined,
+): object[] {
   if (!own) return []
+  const cls = stats.class
   const out: object[] = []
-  for (const s of radar.sectors) {
+  for (const s of stats.sectors) {
     const inner = s.p99M ?? 0
     if (s.maxM !== null && s.maxM > inner) {
       const mid = (s.fromDeg + s.toDeg) / 2
@@ -139,9 +157,10 @@ export function radarFeatures(radar: Radar, own: LatLon | undefined): object[] {
       const b = destination(own, mid, s.maxM / M_PER_NM)
       out.push({
         type: 'Feature',
-        id: `radar-max-${s.sector}`,
+        id: `sector-max-${cls}-${s.sector}`,
         properties: {
-          kind: 'radar-max',
+          kind: 'sector-max',
+          cls,
           sector: s.sector,
           maxM: s.maxM,
           maxAt: s.maxAt,
@@ -165,9 +184,10 @@ export function radarFeatures(radar: Radar, own: LatLon | undefined): object[] {
     ring.push([own.lon, own.lat])
     out.push({
       type: 'Feature',
-      id: `radar-${s.sector}`,
+      id: `sector-${cls}-${s.sector}`,
       properties: {
-        kind: 'radar',
+        kind: 'sector',
+        cls,
         sector: s.sector,
         p99M: s.p99M,
       },

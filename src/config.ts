@@ -84,7 +84,7 @@ export const configSchema = {
       type: 'number',
       title: 'Publish interval (minutes)',
       description:
-        'How often the statistics paths are published to the server and its history provider. Counters stay exact at any interval; charts read from history are no finer than this. The radar sector distances are published once an hour regardless.',
+        'How often the statistics paths are published to the server and its history provider. Counters stay exact at any interval; charts read from history are no finer than this. The sector distances are published once an hour regardless.',
       default: DEFAULT_CONFIG.publishIntervalMinutes,
       enum: PUBLISH_INTERVALS,
     },

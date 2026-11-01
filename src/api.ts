@@ -31,7 +31,7 @@ export interface ApiDeps {
   coverage: () => Coverage | undefined
   longRange?: () => LongRangeLog | undefined
   status: () => Status
-  /** Radar polygons and other extra features for the plotter overlay. */
+  /** Sector polygons and other extra features for the plotter overlay. */
   overlayExtras?: () => Promise<object[]>
   now?: () => number
   /** How long an answer is reused; 0 disables the cache. */
@@ -165,19 +165,19 @@ export function registerRoutes(router: RouterLike, deps: ApiDeps): void {
     ),
   )
 
-  r.get(
-    '/radar',
-    handle((req) => {
-      const cls = param(req, 'class') ?? 'all'
-      if (cls !== 'all' && !SECTOR_CLASSES.includes(cls as SectorClass))
-        throw new BadRequest('class must be a, b or all')
-      return query().radar(
-        windowParam(req, '24h'),
-        cls as SectorClass | 'all',
-        now(),
-      )
-    }, cachedRoute()),
-  )
+  const sectors = handle((req) => {
+    const cls = param(req, 'class') ?? 'all'
+    if (cls !== 'all' && !SECTOR_CLASSES.includes(cls as SectorClass))
+      throw new BadRequest('class must be a, b or all')
+    return query().sectors(
+      windowParam(req, '24h'),
+      cls as SectorClass | 'all',
+      now(),
+    )
+  }, cachedRoute())
+  r.get('/sectors', sectors)
+  // The route's earlier name, kept so older links and scripts work.
+  r.get('/radar', sectors)
 
   r.get(
     '/series',
