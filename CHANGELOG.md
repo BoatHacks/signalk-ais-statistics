@@ -6,8 +6,26 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-01
+
 ### Added
 
+- Each sector draws a thin tick out to its farthest reception, with
+  the distance and time on hover. A tick beyond the scale stops at the rim
+  and is dashed. Rare far receptions, such as sporadic E or tropospheric
+  ducting, stay visible without changing the radius.
+- Farthest receptions: per UTC day the plugin logs the farthest position
+  of each vessel (up to 50 a day) with time, MMSI, vessel name when known,
+  class, distance, bearing, the vessel's position and the own position.
+  The sectors page lists the 25 farthest of the window, and `GET /longrange`
+  serves them. The log is kept in daily files and pruned with
+  `coverageRetentionDays`.
+- `sensors.ais.statistics.sectors.<deg>.<class>.max`, the farthest
+  reception per sector in the last hour, published hourly with the other
+  sector paths.
+- Map toggle "All cells" shows the cells beyond the distance cap, dashed.
+  `GET /coverage?all=true` includes them, marked `capped`.
+- The plotter overlay draws the sector maxima as thin lines.
 - A distance cap slider under the map. Moving it redraws the coverage at
   once; Save stores it in the plugin config, and Reset goes back to the
   saved value. Save is offered only to readwrite and admin users, or to
@@ -19,13 +37,12 @@ uses [Semantic Versioning](https://semver.org/).
 - `GET /coverage` takes `cap` to try another percentile and reports
   `capPercentile`.
 
-### Fixed
-
-- A distance exactly on a distance bin edge is counted in the bin above
-  it, as documented; one edge (about 0.79 nm) landed in the bin below.
-
 ### Changed
 
+- The coverage distance cap hides only cells with fewer than 3 reports.
+  Far cells with repeated reports are real reception and now stay on the
+  map, in the covered area and in the plotter overlay; single bogus
+  positions are still left out.
 - The bearing view is called "Sectors" instead of "Radar", so it is not
   mistaken for a radar overlay. The page is `#/sectors` and the REST route
   `GET /sectors`. The old `#/radar` and `GET /radar` are removed, so
@@ -38,33 +55,10 @@ uses [Semantic Versioning](https://semver.org/).
   sector features are now `kind: "sector"` and `"sector-max"` with the
   class in `cls`.
 
-## [0.4.0] - 2026-11-01
+### Fixed
 
-### Added
-
-- Each radar sector draws a thin tick out to its farthest reception, with
-  the distance and time on hover. A tick beyond the scale stops at the rim
-  and is dashed. Rare far receptions, such as sporadic E or tropospheric
-  ducting, stay visible without changing the radius.
-- Farthest receptions: per UTC day the plugin logs the farthest position
-  of each vessel (up to 50 a day) with time, MMSI, vessel name when known,
-  class, distance, bearing, the vessel's position and the own position.
-  The radar page lists the 25 farthest of the window, and `GET /longrange`
-  serves them. The log is kept in daily files and pruned with
-  `coverageRetentionDays`.
-- `sensors.ais.statistics.sectors.<deg>.<class>.max`, the farthest
-  reception per sector in the last hour, published hourly with the other
-  sector paths.
-- Map toggle "All cells" shows the cells beyond the distance cap, dashed.
-  `GET /coverage?all=true` includes them, marked `capped`.
-- The plotter overlay draws the sector maxima as thin lines.
-
-### Changed
-
-- The coverage distance cap hides only cells with fewer than 3 reports.
-  Far cells with repeated reports are real reception and now stay on the
-  map, in the covered area and in the plotter overlay; single bogus
-  positions are still left out.
+- A distance exactly on a distance bin edge is counted in the bin above
+  it, as documented; one edge (about 0.79 nm) landed in the bin below.
 
 ## [0.3.2] - 2026-11-01
 
