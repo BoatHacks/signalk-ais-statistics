@@ -35,7 +35,7 @@
   ],
   "signalk": {
     "displayName": "AIS Statistics",
-    "appIcon": "./public/icon.png",
+    "appIcon": "./icon.png",
     "screenshots": [
       "./docs/screenshots/overview.png",
       "./docs/screenshots/charts.png",

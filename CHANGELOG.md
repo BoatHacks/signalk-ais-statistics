@@ -16,6 +16,12 @@ uses [Semantic Versioning](https://semver.org/).
   radars looked alike. Sectors without such an hour show their count but
   no radius.
 
+### Fixed
+
+- The app icon shows in the App Store and the Webapps list without a
+  connection to unpkg. The server resolves `signalk.appIcon` against the
+  served `public/` folder, so the path is now `./icon.png`.
+
 ## [0.3.1] - 2026-11-01
 
 ### Fixed
