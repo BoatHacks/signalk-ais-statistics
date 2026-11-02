@@ -14,7 +14,8 @@ coverage footprint as a Freeboard-SK plotter overlay.
 **Current state: 0.7.0, the MVP (roadmap items 1 to 8) plus item 10,
 message health (#16), exports (#19), range vs weather (#15), per-source
 comparison (#14), stationary vs underway (#17) and propagation alerts (#13).**
-The remaining open point is the Freeboard-SK visual check (SPEC section 13).
+The Freeboard-SK check passed on 0.7.0; SPEC section 13 keeps only how
+displays show the propagation alert, which the maintainer chose to skip.
 The roadmap is [docs/plans/mvp-roadmap.md](docs/plans/mvp-roadmap.md).
 
 ## Read in this order

@@ -133,8 +133,8 @@ MID 999 data. Gaps found in `test/`:
 - [x] Screenshots regenerated and compressed; README rewritten, its
       configuration table checked by `test/readme.test.ts`
 - [x] Roadmap item 9 and the stale NMEA 2000 line in its spike list
-- [ ] The Freeboard-SK check with the maintainer; findings.md, SPEC 6.3,
-      remove 13.1
+- [x] The Freeboard-SK check with the maintainer; findings.md, SPEC 6.3,
+      remove 13.1 (2026-11-02, on 0.7.0)
 
 ## Files to Create/Modify
 - Create: `docs/paths.md`, `test/paths-doc.test.ts`, `docs/screenshots/*`
