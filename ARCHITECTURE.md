@@ -297,11 +297,13 @@ URLs from `exportHref` in `api.ts`) sit under the map and the farthest
 receptions table; the browser sends the session cookie with them. The map's sector wedges
 come from the overlay GeoJSON route, and the cell and sector colours are
 imported from `src/style.ts`, which the plotter overlay uses too, so the
-app map and the plotter look the same. The compare view keeps its date
-and length in the hash (`route.ts`); `compare.ts` holds the window
-arithmetic and the per-hour comparison of counts, and the view asks
-`/summary`, `/sectors` and `/coverage` once per window with `from` and
-`to`. Its two sector charts share a scale (`sectorScale`). The
+app map and the plotter look the same. The compare view keeps the hour
+of the change and the window length in hours in the hash (`route.ts`);
+`compare.ts` holds the window arithmetic, the ship time picker
+conversion, the whole UTC day check that gates the coverage rows and the
+per-hour comparison of counts, and the view asks
+`/summary` and `/sectors` once per window with `from` and `to`, and
+`/coverage` only for whole day windows. Its two sector charts share a scale (`sectorScale`). The
 propagation card at the top of the sectors view (`propagation-panel.ts`)
 loads `/propagation`, and its sliders replay the returned checks through
 `trial` in `propagation.ts`, which reuses `replay` from

@@ -4,44 +4,76 @@ import {
   change,
   compareWindows,
   formatRatio,
+  fromPicker,
   signed,
+  toPicker,
+  windowLabel,
 } from '../../web/src/compare'
 
 const H = 3_600_000
 const D = 24 * H
 
 describe('compare windows', () => {
-  it('puts the days before the date next to the days from it on', () => {
+  it('puts the hours before the change next to the hours from it on', () => {
     const now = Date.UTC(2030, 0, 20, 10, 30)
     const { before, after } = compareWindows(
-      { date: '2030-01-08', days: 7 },
+      { at: Date.UTC(2030, 0, 8, 14), hours: 6 },
       now,
     )
-    expect(before.from).toBe(Date.UTC(2030, 0, 1))
-    expect(before.to).toBe(Date.UTC(2030, 0, 8))
     expect(before).toMatchObject({
-      fromDay: '2030-01-01',
-      toDay: '2030-01-07',
-      hours: 168,
+      from: Date.UTC(2030, 0, 8, 8),
+      to: Date.UTC(2030, 0, 8, 14),
+      fromDay: '2030-01-08',
+      toDay: '2030-01-08',
+      hours: 6,
+      wholeDays: false,
     })
     expect(after).toMatchObject({
-      from: Date.UTC(2030, 0, 8),
-      to: Date.UTC(2030, 0, 15),
-      fromDay: '2030-01-08',
-      toDay: '2030-01-14',
-      hours: 168,
+      from: Date.UTC(2030, 0, 8, 14),
+      to: Date.UTC(2030, 0, 8, 20),
+      hours: 6,
+      wholeDays: false,
     })
+  })
+
+  it('knows windows of whole UTC days, which have coverage', () => {
+    const now = Date.UTC(2030, 0, 20, 10, 30)
+    const { before, after } = compareWindows(
+      { at: Date.UTC(2030, 0, 8), hours: 120 },
+      now,
+    )
+    expect(before).toMatchObject({
+      fromDay: '2030-01-03',
+      toDay: '2030-01-07',
+      wholeDays: true,
+    })
+    expect(after).toMatchObject({
+      fromDay: '2030-01-08',
+      toDay: '2030-01-12',
+      wholeDays: true,
+    })
+    const offMidnight = compareWindows(
+      { at: Date.UTC(2030, 0, 8, 1), hours: 24 },
+      now,
+    )
+    expect(offMidnight.before.wholeDays).toBe(false)
+    expect(offMidnight.after.wholeDays).toBe(false)
   })
 
   it('ends the after window at the next full hour', () => {
     const now = Date.UTC(2030, 0, 10, 10, 30)
-    const { after } = compareWindows({ date: '2030-01-08', days: 7 }, now)
+    const { after } = compareWindows(
+      { at: Date.UTC(2030, 0, 8), hours: 120 },
+      now,
+    )
     expect(after.to).toBe(Date.UTC(2030, 0, 10, 11))
     expect(after.toDay).toBe('2030-01-10')
     expect(after.hours).toBe(2 * 24 + 11)
+    // Today's coverage is kept up to now, so this still counts as days.
+    expect(after.wholeDays).toBe(true)
     // On the hour itself, the window still holds the hour that starts now.
     const onHour = compareWindows(
-      { date: '2030-01-10', days: 1 },
+      { at: Date.UTC(2030, 0, 10), hours: 24 },
       Date.UTC(2030, 0, 10),
     ).after
     expect(onHour.to - onHour.from).toBe(H)
@@ -49,11 +81,33 @@ describe('compare windows', () => {
 
   it('says when a window starts before the oldest kept coverage day', () => {
     const { before } = compareWindows(
-      { date: '2030-01-08', days: 7 },
+      { at: Date.UTC(2030, 0, 8), hours: 120 },
       Date.UTC(2030, 0, 14) + D,
     )
-    expect(beforeRetention(before, '2030-01-02')).toBe(true)
-    expect(beforeRetention(before, '2030-01-01')).toBe(false)
+    expect(beforeRetention(before, '2030-01-04')).toBe(true)
+    expect(beforeRetention(before, '2030-01-03')).toBe(false)
+  })
+
+  it('reads and writes the picker in ship time, on the full hour', () => {
+    const t = Date.UTC(2030, 0, 8, 14)
+    expect(toPicker(t, undefined)).toBe('2030-01-08T14:00')
+    expect(toPicker(t, 120)).toBe('2030-01-08T16:00')
+    expect(fromPicker('2030-01-08T16:00', 120)).toBe(t)
+    expect(fromPicker('2030-01-08T14:45', undefined)).toBe(t)
+    expect(fromPicker('2030-01-08T09:00', -300)).toBe(t)
+    expect(fromPicker('', undefined)).toBeUndefined()
+    expect(fromPicker('2030-01-08', undefined)).toBeUndefined()
+  })
+
+  it('labels a window with its start and end', () => {
+    const w = compareWindows(
+      { at: Date.UTC(2030, 0, 8, 14), hours: 6 },
+      Date.UTC(2030, 1, 1),
+    )
+    expect(windowLabel(w.after, undefined)).toBe('2030-01-08 14:00Z to 20:00Z')
+    expect(windowLabel(w.after, 300)).toBe(
+      '2030-01-08 19:00 to 2030-01-09 01:00',
+    )
   })
 })
 

@@ -1,8 +1,8 @@
 // Hash routes: #/overview, #/charts, #/sectors, #/map and #/compare, with
 // the window as a query part, for example #/charts?window=7d. The map also
 // takes the own vessel mode, for example #/map?window=7d&mode=underway. The compare
-// view takes a date and a length in days instead, for example
-// #/compare?date=2030-01-08&days=7.
+// view takes the hour of the change in UTC and a length in hours instead,
+// for example #/compare?at=2030-01-08T14:00Z&hours=24.
 export const VIEWS = [
   'overview',
   'charts',
@@ -17,15 +17,21 @@ export type WindowName = (typeof WINDOWS)[number]
 export const MAP_MODES = ['all', 'stationary', 'underway'] as const
 export type MapMode = (typeof MAP_MODES)[number]
 
-/** The longest compare window, the longest window there is (SPEC 12). */
-export const MAX_COMPARE_DAYS = 7
+/**
+ * Lengths of each compare window in hours. The longest fits twice into the
+ * default coverage retention and stays below the 7 day range limit
+ * (SPEC 12).
+ */
+export const COMPARE_HOURS = [1, 6, 12, 24, 48, 120] as const
+const HOUR_MS = 3_600_000
 const DAY_MS = 86_400_000
 
 export interface CompareParams {
-  /** UTC day the after window starts on, YYYY-MM-DD. */
-  date: string
-  /** Length of each window in days. */
-  days: number
+  /** The change: end of the before window and start of the after window,
+   * a whole UTC hour in milliseconds. */
+  at: number
+  /** Length of each window in hours, one of COMPARE_HOURS. */
+  hours: number
   /** `all`, or a source label when per-source statistics are on. */
   source: string
 }
@@ -39,22 +45,29 @@ export interface Route {
   compare?: CompareParams
 }
 
-const utcDay = (t: number) => new Date(t).toISOString().slice(0, 10)
+const hourStart = (t: number) => Math.floor(t / HOUR_MS) * HOUR_MS
 
-function validDay(d: string | null): d is string {
-  if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return false
-  const t = Date.parse(d)
-  return Number.isFinite(t) && utcDay(t) === d
+/** `2030-01-08T14:00Z`, the form of `at` in the hash. */
+export const formatAt = (t: number) =>
+  `${new Date(t).toISOString().slice(0, 13)}:00Z`
+
+function parseAt(v: string | null): number | undefined {
+  if (!v || !/^\d{4}-\d{2}-\d{2}T\d{2}:00Z$/.test(v)) return undefined
+  const t = Date.parse(v)
+  // Rejects dates such as February 30, which Date.parse rolls over.
+  return Number.isFinite(t) && formatAt(t) === v ? t : undefined
 }
 
 /**
- * The compare default: windows of the longest length, the after window
- * ending today, so both fit in the default coverage retention.
+ * The compare default: windows of the longest length, whole UTC days so
+ * coverage is compared too, the after window ending with today. Both fit
+ * in the default coverage retention.
  */
 export function defaultCompare(now: number): CompareParams {
+  const hours = 120
   return {
-    date: utcDay(now - (MAX_COMPARE_DAYS - 1) * DAY_MS),
-    days: MAX_COMPARE_DAYS,
+    at: Math.floor(now / DAY_MS) * DAY_MS - (hours / 24 - 1) * DAY_MS,
+    hours,
     source: 'all',
   }
 }
@@ -79,21 +92,19 @@ export function parseRoute(hash: string, now = Date.now()): Route {
   }
   if (view !== 'compare') return { view, window }
   const fallback = defaultCompare(now)
-  const date = q.get('date')
-  const days = Number(q.get('days'))
+  const at = parseAt(q.get('at'))
+  const hours = Number(q.get('hours'))
   const source = q.get('source') ?? ''
 
-  // A date after today has nothing to compare.
-  const today = utcDay(now)
   return {
     view,
     window,
     compare: {
-      date: validDay(date) && date <= today ? date : fallback.date,
-      days:
-        Number.isInteger(days) && days >= 1 && days <= MAX_COMPARE_DAYS
-          ? days
-          : fallback.days,
+      // A change after the current hour has nothing to compare.
+      at: at !== undefined && at <= hourStart(now) ? at : fallback.at,
+      hours: (COMPARE_HOURS as readonly number[]).includes(hours)
+        ? hours
+        : fallback.hours,
       // Labels are letters, digits and underscores (src/paths.ts).
       source: /^[A-Za-z0-9_]+$/.test(source) ? source : 'all',
     },
@@ -104,7 +115,7 @@ export function formatRoute(r: Route): string {
   if (r.view === 'compare') {
     const c = r.compare ?? defaultCompare(Date.now())
     const source = c.source === 'all' ? '' : `&source=${c.source}`
-    return `#/compare?date=${c.date}&days=${c.days}${source}`
+    return `#/compare?at=${formatAt(c.at)}&hours=${c.hours}${source}`
   }
   const mode =
     r.view === 'map' && r.mode && r.mode !== 'all' ? `&mode=${r.mode}` : ''

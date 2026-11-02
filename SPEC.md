@@ -655,16 +655,24 @@ A SignalK web app, listed in the admin UI, with:
   coverage CSV downloads (6.1) for the shown window and for all retained
   days, of the selected mode, including the cells beyond the cap while `All cells` is on, with a
   one-line note that a footprint can hint at the berth.
-- Compare (#14): two date windows side by side, to tell whether an
+- Compare (#14): two hour windows side by side, to tell whether an
   antenna, cable, splitter or receiver change helped
-  (`#/compare?date=YYYY-MM-DD&days=7`). The date is the first UTC day of
-  the after window; the before window is the same number of days (1 to 7,
-  default 7) before it. The default date puts the after window's end on
-  today, so both fit the default coverage retention. A table gives per
-  window messages, positions by class, distance p99, p95, median, average
-  and maximum (marked untrusted), coverage cells and area, and the change
-  with its percentage. An after window that reaches today is shorter;
-  counts are then compared per hour, distances and coverage as they are.
+  (`#/compare?at=YYYY-MM-DDTHH:00Z&hours=120`). `at` is the change, a
+  full UTC hour: the before window is the given number of hours up to it
+  and the after window the same number from it on. Lengths are 1, 6, 12,
+  24, 48 and 120 hours (default 120), since history is kept per hour. The
+  picker is a date and time field in ship time, or in UTC when the vessel
+  publishes no offset, like every time in the app; minutes are dropped.
+  The default change is midnight UTC four days ago, so the after window
+  ends with today and both fit the default coverage retention. A table
+  gives per window messages, positions by class, distance p99, p95,
+  median, average and maximum (marked untrusted), coverage cells and
+  area, and the change with its percentage. Coverage is kept per UTC day,
+  so its rows are compared only when both windows are whole UTC days (a
+  change at 00:00 UTC with 24, 48 or 120 hours); otherwise they read
+  "days only" and a note says why. An after window that reaches now is
+  shorter; counts are then compared per hour, distances and coverage as
+  they are.
   Below the table, both sector charts (all classes) on one scale. Notes say
   when a window starts before the oldest kept coverage day (coverage is then
   shown as not kept, not as a smaller area), when live data covers only
@@ -981,10 +989,11 @@ help of `max` (6.2). Verified across a plugin restart on the test server.
   hours with fewer than 20 reports stay out of r, as for the sectors. The
   window stays at most 7 days.
 
-- **Antenna and receiver comparison starts with date windows (chosen by
+- **Antenna and receiver comparison starts with time windows (chosen by
   the maintainer, #14).** Two windows side by side from data the plugin
   already keeps, so the compare view adds no paths and no history load;
-  each window is at most 7 days, like every other window. Change markers on
+  each window is 1 to 120 hours, picked by date and hour, within the 7
+  day limit of every other window. Change markers on
   the charts come later. Statistics per server event are opt-in, because
   each event adds about as many history rows a day as the main figures;
   they cover messages, positions, distance figures from per-source bins

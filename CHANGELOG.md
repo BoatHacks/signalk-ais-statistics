@@ -12,6 +12,12 @@ uses [Semantic Versioning](https://semver.org/).
   Stationary, Underway), so it reads as the own vessel's state when the
   reports came in rather than a property of the targets. The route values
   (`mode=all|stationary|underway`) are unchanged.
+- The compare view picks the change by date and time (ship time, on the
+  full hour) and compares windows of 1, 6, 12, 24, 48 or 120 hours each
+  side instead of 1 to 7 days. Its route is now
+  `#/compare?at=YYYY-MM-DDTHH:00Z&hours=N`; `date=` and `days=` are gone,
+  so older compare links open the default. Coverage is compared only when
+  both windows are whole UTC days, since it is kept per day.
 
 ## [0.6.0] - 2026-11-01
 

@@ -701,6 +701,9 @@ a.download[aria-disabled='true']:hover {
 .compare-notes p {
   margin: 8px 0 0;
 }
+.compare-time {
+  white-space: nowrap;
+}
 table.compare th[scope='row'] {
   font-weight: normal;
 }
