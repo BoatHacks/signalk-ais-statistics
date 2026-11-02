@@ -124,6 +124,8 @@ figure and both sector charts on one scale. Coverage is kept per day, so
 it is compared when the change is at midnight UTC and the windows are
 whole days.
 
+![Compare](docs/screenshots/compare.png)
+
 ## Live settings
 
 A few settings are easiest to judge while watching their effect, so the

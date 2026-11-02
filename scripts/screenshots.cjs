@@ -10,6 +10,26 @@ const os = require('node:os')
 const path = require('node:path')
 const { chromium } = require('playwright')
 
+// The screenshots show a fixed evening, so a run at any time of day gives
+// the same picture: "today" on the map covers most of a UTC day, and the
+// compare view has hours of data on both sides of its change. The plugin
+// runs on this clock, moving on from it in real time; the browser's clock
+// stands still at its time when the page opens.
+const FIXED_NOW = Date.parse('2026-06-15T22:00:00Z')
+const realNow = Date.now
+const shift = FIXED_NOW - realNow()
+const RealDate = Date
+global.Date = class extends RealDate {
+  constructor(...args) {
+    if (args.length === 0) super(realNow() + shift)
+    else super(...args)
+  }
+  static now() {
+    return realNow() + shift
+  }
+}
+const COMPARE = '?at=2026-06-15T06:00Z&hours=6'
+
 const root = path.join(__dirname, '..')
 const out = path.resolve(process.argv[2] ?? path.join(root, 'docs/screenshots'))
 const { Aggregator } = require(path.join(root, 'dist/aggregate'))
@@ -217,11 +237,13 @@ async function main() {
     ['charts', 1280, 1500, 'day'],
     ['sectors', 1280, 900, 'day'],
     ['map', 1280, 900, 'day'],
+    ['compare', 1280, 900, 'day'],
     ['overview-phone', 390, 844, 'night'],
   ]
   for (const [name, width, height, mode] of shots) {
     const view = name.replace('-phone', '')
     const page = await browser.newPage({ viewport: { width, height } })
+    await page.clock.setFixedTime(Date.now())
     await page.addInitScript(() =>
       localStorage.setItem('signalk-ais-statistics.basemap', 'charts'),
     )
@@ -242,7 +264,8 @@ async function main() {
         ),
       )
     })
-    await page.goto(`http://localhost:${port}${APP}/#/${view}?window=24h`)
+    const query = view === 'compare' ? COMPARE : '?window=24h'
+    await page.goto(`http://localhost:${port}${APP}/#/${view}${query}`)
     await page.waitForTimeout(1500)
     await page.screenshot({
       path: path.join(out, `${name}.png`),
