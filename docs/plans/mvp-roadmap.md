@@ -87,7 +87,7 @@ remains.
 
 ## 7. Web app
 
-- [x] Overview, charts, radar and map views (SPEC 7)
+- [x] Overview, charts, sectors (then called radar) and map views (SPEC 7)
 - [x] Basemap switch with the online and metered default, remembered choice
 - [x] Works at phone width and offline, no CDN assets
 - [x] SignalK visual guideline: tactical theme with day and night, custom
@@ -119,7 +119,8 @@ remains.
 
 ## 10. After the MVP
 
-- [x] Long-range receptions: sector maxima as radar ticks, a daily log of
+- [x] Long-range receptions: sector maxima (first as ticks, since 0.6.0 a
+      farthest dot and a bolder outline), a daily log of
       the farthest receptions with names and both positions, and an "All
       cells" map toggle for the cells beyond the distance cap
       ([item-10](item-10-long-range-receptions.md), 0.4.0)

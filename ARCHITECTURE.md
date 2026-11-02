@@ -266,8 +266,9 @@ propagation notification, which drives the alert banner. No
 external CDNs for its own assets. Views per SPEC 7, each a custom element
 that builds its DOM once and then updates text and attributes only;
 charts reuse their SVG paths and rects. Pure helpers (`units.ts`,
-`time.ts`, `route.ts`, `backoff.ts`, `health.ts`, `stats.ts`, `compare.ts`) are unit tested under
-`test/web`. The overview's health section, its good share and the
+`time.ts`, `route.ts`, `backoff.ts`, `health.ts`, `stats.ts`, `compare.ts`,
+`loading.ts`, `layers.ts`, `basemap.ts`, `sector-layout.ts`, `settings.ts`,
+`propagation.ts`) are unit tested under `test/web`. The overview's health section, its good share and the
 duplicate hint come from `health.ts`; the charts derive the class A and B
 mix from the `positions` series. The range vs weather section
 (`weather.ts`) pairs the hourly `distance` series the charts view already
@@ -308,6 +309,11 @@ propagation card at the top of the sectors view (`propagation-panel.ts`)
 loads `/propagation`, and its sliders replay the returned checks through
 `trial` in `propagation.ts`, which reuses `replay` from
 `src/propagation.ts`; it saves through `POST /settings` like the cap.
+Views build their DOM with the small `el` and `svg` helpers and format
+counts with `int` (`format.ts`). A click that starts a load marks its
+button through `showLoading` (`loading.ts`), which sets the `loading` class
+only after 200 ms, so quick answers do not flicker; the stylesheet fades
+the button while the class is set (SPEC 7).
 
 ## 3. Data Models
 
@@ -422,6 +428,7 @@ test/                 unit tests; fixtures/ holds the synthetic sentence
                       builder and fakes of the server app, router and
                       History API
 scripts/smoke.cjs     loads the built package with require()
+scripts/screenshots.cjs  screenshots from synthetic data on a fixed clock
 docs/plans/           per-item implementation plans
 ```
 
