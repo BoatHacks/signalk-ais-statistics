@@ -424,7 +424,8 @@ effective live settings.
 | `GET /export/coverage.csv?window=7d&all=false&mode=all` | download: one row per H3 cell, `h3_cell,resolution,reports,min_distance_m,capped`, ordered by cell id; `all=true` adds the cells beyond the distance cap with `capped` true; `mode` as on `/coverage`; no polygons |
 | `GET /export/longrange.csv?window=7d&anonymise=false` | download: every long-range entry (2.7) in the window, oldest first, `time,mmsi,name,class,ship_type,distance_m,bearing_deg,lat,lon,own_lat,own_lon`; anonymised, only `time,class,ship_type,distance_m,bearing_deg` |
 | `GET /export/longrange.geojson?window=7d` | download: the same entries as GeoJSON points at the reported position, the other fields as properties; full detail only, `anonymise=true` answers 400 |
-| `GET /overlay/coverage.geojson` | the plotter overlay's GeoJSON: the 7 day footprint and the 24 hour sector wedges of class A and B |
+| `GET /overlay/cells.geojson` | the plotter's cells overlay (6.3): the 7 day footprint |
+| `GET /overlay/sectors.geojson` | the plotter's sectors overlay (6.3): the 24 hour sector wedges and farthest points of class A and B; the web app map draws its sectors from it too |
 | `GET /sources` | the sources counted on their own, `{ label, event }` each; empty while `sourceStatistics` is off |
 | `GET /status` | live state: tracked targets, own position age, the own vessel `mode` (`stationary`, `underway` or `unknown`, 2.9) and `modeSource` (`state`, `drift` or null), history reachable or not, and per source its messages and health counts since the start |
 | `GET /propagation` | the propagation alert (2.10): `{ enabled: false }` while off; otherwise `state` (`unarmed`, `normal`, `alert` or `suppressed`), `ratio`, `p99M`, `baselineM`, `baselineHours`, `vessels` beyond normal, their `sectors`, `since`, the own `mode`, the `rule` in effect and the last 60 `checks` (time, armed, ratio, vessels), from which the web app replays trial settings |
@@ -564,27 +565,34 @@ button:
   on. The server cannot unregister a provider, so it is registered once and
   answers empty while the plugin is stopped.
 - The manifest declares `apiVersion: "1"`, requires `overlays.data`, and
-  lists one data overlay (`type: "data"`, band `aboveCharts`) whose `style`
-  is an inline MapLibre version 8 style. The style has one GeoJSON source,
-  `/plugins/signalk-ais-statistics/overlay/coverage.geojson`, which the
-  plotter fetches with the user's credentials: H3 cell polygons for the last
-  7 days (`kind: "cell"`, with `id`, a coverage `intensity` from 0 to 1 and
-  the report count), plus the 24 hour sectors of class A and B as wedges
-  from the last known own position (`kind: "sector"`), and per class one
+  lists two data overlays (`type: "data"`, band `aboveCharts`, both shown
+  at first), so the plotter user can show the cells, the sectors or both
+  from the plotter's layer settings (chosen by the maintainer). Each has
+  an inline MapLibre version 8 style with one GeoJSON source of the
+  overlay's id, which the plotter fetches with the user's credentials:
+  - "AIS coverage cells" (`cells`), from
+    `/plugins/signalk-ais-statistics/overlay/cells.geojson`: H3 cell
+    polygons for the last 7 days (`kind: "cell"`, with `id`, a coverage
+    `intensity` from 0 to 1 and the report count).
+  - "AIS sectors" (`sectors`), from
+    `/plugins/signalk-ais-statistics/overlay/sectors.geojson`: the 24 hour
+    sectors of class A and B as wedges from the last known own position
+    (`kind: "sector"`), and per class one
   point at the farthest reception, on its sector's centre bearing
   (`kind: "sector-max"`, with `sector`, `maxM` and its time); that sector's
   wedge carries `farthest: true`. Each sector
   feature carries its class in `cls` (`a` or `b`). A fill layer colours
   cells by `intensity` on a magenta to purple ramp, which contrasts with
-  chart water and land, a line layer outlines each cell in the same ramp,
-  another line layer outlines the sectors, teal for class A and orange for
-  class B as on the web app's sectors page, bolder for the `farthest` one,
-  and a circle layer draws the farthest dots in the same class colours.
+  chart water and land, and a line layer outlines each cell in the same
+  ramp. In the sectors overlay a line layer outlines the sectors, teal for
+  class A and orange for class B as on the web app's sectors page, bolder
+  for the `farthest` one, and a circle layer draws the farthest dots in the
+  same class colours.
 - Live updates need a context that calls `overlay.refresh`, so the manifest
   also declares an optional `background.iframe` page,
   `/signalk-ais-statistics/plotterext/refresh.html` (part of the web app
-  bundle), that does so hourly. Without it the overlay still shows, and
-  refreshes when the plotter reloads it.
+  bundle), that does so hourly for both overlays. Without it the overlays
+  still show, and refresh when the plotter reloads them.
 - On the test server the GeoJSON for a few hours of traffic was about 8 KB
   (12 cells, 15 sector wedges), and all overlay routes answered without
   authentication on a server that allows read-only access.
@@ -649,7 +657,8 @@ A SignalK web app, listed in the admin UI, with:
   Underway, 2.4) shows the cells recorded in one own vessel mode, so it
   cannot be read as a property of the targets; it is part of the hash route
   (`#/map?window=7d&mode=underway`), not saved, and the info line says
-  that the sectors are not split. The plotter overlay stays combined.
+  that the sectors are not split. The plotter's cells overlay shows all
+  modes.
   Below it, a distance cap slider (50th percentile to off) redraws the
   cells at once and offers save and reset (live settings, 9.1). Below it,
   coverage CSV downloads (6.1) for the shown window and for all retained
@@ -789,7 +798,7 @@ same order, which a test checks. The defaults were reviewed for 1.0.0 on
 | `ownPositionMaxAgeSeconds` | 60 | staleness limit for own position |
 | `coverageRetentionDays` | 14 | how long daily cell-set and long-range log files are kept; the map and the overlay show up to 7 days, so two weeks leaves room (chosen by the maintainer); also the reach of an `all` download |
 | `publishIntervalMinutes` | 5 | how often the statistics paths are published; a divisor of 60; sector paths go out hourly regardless |
-| `publishOverlay` | true | register the plotter extension overlay |
+| `publishOverlay` | true | register the plotter extension overlays, cells and sectors |
 | `sentenceEvents` | `nmea0183`, `N2KAnalyzerOut` | server events to read AIS from: raw sentences or canboat PGNs; any event names |
 | `sourceStatistics` | false | also count each server event on its own (5); 43 more counter paths per event at every interval, about 12,400 history rows a day each at 5 minutes, so two events about double the history load |
 | `jumpSpeedLimitKnots` | 60 | implied speed above which a position counts as an implausible jump (2.8) |
@@ -965,6 +974,10 @@ help of `max` (6.2). Verified across a plugin restart on the test server.
   use "sectors". The old `GET /radar` and `#/radar` are gone rather than
   kept as aliases, so no compatibility code is carried into 1.0.0. On the map and in the plotter the sectors are drawn per
   class, in the same colours as the sectors view.
+- **The plotter overlay is two layers (chosen by the maintainer).** The
+  coverage cells and the sectors are separate data overlays, each with its
+  own route, so a plotter user shows either or both. The combined
+  `/overlay/coverage.geojson` route is gone rather than kept as an alias.
 
 - **Message health only counts (chosen by the maintainer).** Duplicates,
   implausible jumps and invalid positions are counters (2.8), and nothing
@@ -1010,7 +1023,7 @@ help of `max` (6.2). Verified across a plugin restart on the test server.
   at reception and not revised, accepting that a boat that has just
   stopped counts as underway for the first minutes. There is no footprint
   per mooring spot (the #14 date compare covers a change of berth), and
-  the plotter overlay stays one combined footprint.
+  the plotter's cells overlay shows one footprint of all modes.
 - **Propagation alerts compare against a 7 day median (chosen by the
   maintainer, #13).** Normal is the median hourly p99 of 7 days, without a
   time-of-day baseline; an opening is 2 times that, with 3 vessels beyond
@@ -1035,7 +1048,9 @@ unverified.
    small, but nobody has yet looked at it in the plotter, and how large a
    GeoJSON source it handles smoothly (hundreds of cells over 7 days) is
    untested. Whether the class A teal and class B orange sector outlines
-   read well on chart water and land there is also unchecked.
+   read well on chart water and land there, and whether Freeboard-SK lists
+   the cells and sectors overlays as two layers to toggle, is also
+   unchecked.
 
 2. **How displays show the propagation alert.** How the notification
    (2.10) appears in the admin UI, Freeboard-SK and KIP, and whether

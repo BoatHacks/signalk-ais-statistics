@@ -158,9 +158,9 @@ export const configSchema = {
     },
     publishOverlay: {
       type: 'boolean',
-      title: 'Offer the coverage overlay to chart plotters',
+      title: 'Offer the coverage and sector overlays to chart plotters',
       description:
-        'Registers a Plotter Extensions overlay, for example for Freeboard-SK.',
+        'Registers two Plotter Extensions overlays, coverage cells and sectors, for example for Freeboard-SK.',
       default: DEFAULT_CONFIG.publishOverlay,
     },
     sentenceEvents: {

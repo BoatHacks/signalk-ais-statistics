@@ -8,6 +8,10 @@ uses [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- The plotter overlay is split into two layers, "AIS coverage cells" and
+  "AIS sectors", so Freeboard-SK can show either or both. Their data comes
+  from `/overlay/cells.geojson` and `/overlay/sectors.geojson`; the
+  combined `/overlay/coverage.geojson` is gone.
 - The compare view has a screenshot in the README and the App Store
   listing, and all screenshots are taken on a fixed clock, so they look
   the same whatever time of day they are made.
