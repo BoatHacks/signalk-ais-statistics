@@ -47,7 +47,7 @@ listed in the [CHANGELOG](CHANGELOG.md).
   your range is well above normal.
 - **Range vs weather**: hourly range against pressure, temperatures or
   humidity from your own sensors, with a scatter and its correlation.
-- **Compare** two date windows side by side, such as before and after an
+- **Compare** two time windows side by side, such as before and after an
   antenna change, and optionally each input source on its own.
 - **Downloads**: coverage cells (H3 ids) and farthest receptions as CSV or
   GeoJSON, with an anonymise switch for sharing.
@@ -118,8 +118,11 @@ cells.
 
 ![Map](docs/screenshots/map.png)
 
-**Compare**: two date windows of 1 to 7 days side by side, with the change
-in each figure and both sector charts on one scale.
+**Compare**: the hours before a change you pick by date and time next to
+the hours after it (1, 6, 12, 24, 48 or 120 each), with the change in each
+figure and both sector charts on one scale. Coverage is kept per day, so
+it is compared when the change is at midnight UTC and the windows are
+whole days.
 
 ## Live settings
 
