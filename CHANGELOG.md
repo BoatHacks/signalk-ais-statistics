@@ -6,6 +6,11 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-11-02
+
+The first npm release since 0.5.0: 0.6.0 was tagged but not published,
+so this release also brings everything listed under 0.6.0.
+
 ### Changed
 
 - The map's "Cells from" selector is now "Recorded while" (Any time,
@@ -309,7 +314,8 @@ First release.
 - A dark tactical web app theme following day and night mode, with
   distances in the server's display units and the plugin's app icon.
 
-[Unreleased]: https://github.com/BoatHacks/signalk-ais-statistics/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/BoatHacks/signalk-ais-statistics/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/BoatHacks/signalk-ais-statistics/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/BoatHacks/signalk-ais-statistics/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/BoatHacks/signalk-ais-statistics/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/BoatHacks/signalk-ais-statistics/compare/v0.3.2...v0.4.0
