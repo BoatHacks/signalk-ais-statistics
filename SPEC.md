@@ -596,6 +596,10 @@ button:
 - On the test server the GeoJSON for a few hours of traffic was about 8 KB
   (12 cells, 15 sector wedges), and all overlay routes answered without
   authentication on a server that allows read-only access.
+- The maintainer checked 0.7.0 in Freeboard-SK on a boat on 2026-11-02:
+  both overlays are listed under the layers button and toggle on their
+  own, the cells and the class A and B sectors read well over the charts,
+  and the plotter stays usable with about 160 cells over 7 days.
 - The overlay is a plotter feature, so it works wherever the plotter
   supports Plotter Extensions; other plotters (for example OpenCPN) are not
   covered.
@@ -1040,19 +1044,12 @@ help of `max` (6.2). Verified across a plugin restart on the test server.
 ## 13. Open Questions
 
 Checked on 2026-10-30 against a test server (SignalK server 2.35.1) with
-the plugin installed. Resolved findings are recorded in 4.1, 6.1, 6.2, 6.3
-5, 8 and 12 and in ARCHITECTURE.md; the points below are what is still
-unverified.
+the plugin installed, and the plotter overlays on 2026-11-02 by the
+maintainer in Freeboard-SK. Resolved findings are recorded in 4.1, 6.1,
+6.2, 6.3, 5, 8 and 12 and in ARCHITECTURE.md; the point below is what is
+still unverified.
 
-1. **Overlay smoothness in Freeboard-SK.** The overlay is served and
-   small, but nobody has yet looked at it in the plotter, and how large a
-   GeoJSON source it handles smoothly (hundreds of cells over 7 days) is
-   untested. Whether the class A teal and class B orange sector outlines
-   read well on chart water and land there, and whether Freeboard-SK lists
-   the cells and sectors overlays as two layers to toggle, is also
-   unchecked.
-
-2. **How displays show the propagation alert.** How the notification
+1. **How displays show the propagation alert.** How the notification
    (2.10) appears in the admin UI, Freeboard-SK and KIP, and whether
    `method: ["visual"]` keeps each of them silent, is unchecked (the
    maintainer chose to skip the check for now). Check on a development

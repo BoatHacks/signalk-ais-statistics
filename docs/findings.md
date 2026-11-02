@@ -122,6 +122,12 @@ curl -s -b cookies -X POST -H 'Content-Type: application/json' \
 - Live updates need a context that calls `overlay.refresh` or
   `overlay.setData`. The documentation describes no server-only way, so a
   background iframe page is needed.
+- One manifest can list several data overlays; each has its own style and
+  sources (ids are scoped to the overlay), and the user shows or hides each
+  one under the layers button. Checked by the maintainer with 0.7.0 in
+  Freeboard-SK on 2026-11-02: the cells and sectors overlays appear as two
+  layers, toggle on their own and look right over the charts, with about
+  160 cells and 25 sector features.
 - Documentation: the Plotter Extensions API page in the Freeboard-SK
   repository, `docs/api/plotter-extensions-api.md`.
 

@@ -12,8 +12,8 @@ Small throwaway experiments, each ending in an update to section 13 and, if
 the answer differs from the assumption, to SPEC.md or ARCHITECTURE.md.
 Items 1 to 8 are implemented, each with a plan in this directory
 (`item-<n>-<slug>.md`); the counter reset spike ran against the
-development server; the Freeboard-SK check
-remains.
+development server, and the maintainer checked the overlays in
+Freeboard-SK (2026-11-02).
 
 - [x] **`nmea0183` event payload.** The event delivers the raw sentence as a
       plain string with no source or timestamp (checked in an existing
@@ -28,8 +28,8 @@ remains.
       defined schema key (SPEC section 12).
 - [x] **Counter reset.** The restart shows as a plain drop; a restart
       inside a bucket needed `max` as well as `last` (SPEC 6.2).
-- [ ] **Overlay size.** The overlay is served and small (SPEC 6.3); whether
-      it stays smooth in Freeboard-SK needs a look in the plotter. (13.1)
+- [x] **Overlay size.** The overlays are served and small (SPEC 6.3) and
+      stay smooth in Freeboard-SK with about 160 cells (checked 2026-11-02).
 - [x] **NMEA 2000 AIS.** Read directly from `N2KAnalyzerOut` since 0.2.0;
       before that it needed a converter plugin's `nmea0183AISout`. The
       events are configurable (SPEC 5).
@@ -100,7 +100,7 @@ remains.
       (ARCHITECTURE 2.10)
 - [x] MapLibre style (inline in the manifest) and GeoJSON route,
       background page calling `overlay.refresh`
-- [ ] Checked in Freeboard-SK
+- [x] Checked in Freeboard-SK (2026-11-02, as two layers since 0.7.0)
 
 ## 9. First release
 
@@ -112,8 +112,9 @@ remains.
 - [x] README with install, configuration and screenshots that contain no
       real vessel data (#20)
 - [x] Review SPEC.md and ARCHITECTURE.md against the code (#20)
-- [ ] Resolve SPEC section 13: the Freeboard-SK look (13.1) and how
-      displays show the propagation alert (13.2) need the maintainer
+- [x] Resolve SPEC section 13 for 1.0: the Freeboard-SK look is checked;
+      how displays show the propagation alert (13.1) stays open, the
+      maintainer chose to skip that check for now
 - [x] Privacy pass over the repository and its history, before it was
       made public and again for #20
 
@@ -139,4 +140,4 @@ use "sectors" for the bearing view, following the maintainer's rename of
 - [x] Message health (#16, [plan](issue-16-message-health.md))
 - [x] Stationary vs underway coverage (#17, [plan](issue-17-stationary-underway.md))
 - [x] Export (#19, [plan](issue-19-export.md))
-- [ ] 1.0 basics: settings, README, tests, path docs (#20, [plan](issue-20-basics.md))
+- [x] 1.0 basics: settings, README, tests, path docs (#20, [plan](issue-20-basics.md))
