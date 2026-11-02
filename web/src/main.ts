@@ -33,7 +33,7 @@ import { SETTINGS_SAVED } from './settings'
 import { showLoading } from './loading'
 import { SectorChart, sectorScale } from './sectors'
 import {
-  MAX_COMPARE_DAYS,
+  COMPARE_HOURS,
   VIEWS,
   WINDOWS,
   defaultCompare,
@@ -50,7 +50,10 @@ import {
   change,
   compareWindows,
   formatRatio,
+  fromPicker,
   signed,
+  toPicker,
+  windowLabel,
   type CompareWindow,
 } from './compare'
 import { connectLive, displayUnits, type LiveState } from './signalk'
@@ -752,13 +755,16 @@ interface CompareRow {
 }
 
 /**
- * Two date windows side by side (SPEC 7), to tell whether an antenna,
- * cable or receiver change helped. The windows are UTC days; their state
+ * Two hour windows side by side (SPEC 7), before and after a change, to
+ * tell whether an antenna, cable or receiver change helped. Their state
  * lives in the hash, not in the plugin config.
  */
 class CompareView extends HTMLElement implements ViewElement {
-  private date?: HTMLInputElement
-  private days?: HTMLSelectElement
+  private at?: HTMLInputElement
+  private atLabel?: HTMLElement
+  private hours?: HTMLSelectElement
+  /** The offset the picker shows, from the last load. */
+  private offsetMin: number | undefined
   private source?: HTMLSelectElement
   private sourceControl?: HTMLElement
   private sourceList = ''
@@ -769,26 +775,33 @@ class CompareView extends HTMLElement implements ViewElement {
   private notes?: HTMLElement
 
   connectedCallback(): void {
-    if (this.date) return
-    this.date = el('input', { type: 'date', id: 'compare-date' })
-    this.days = el('select', { id: 'compare-days' })
-    for (let d = 1; d <= MAX_COMPARE_DAYS; d++)
-      this.days.append(el('option', { value: String(d) }, `${d} d`))
+    if (this.at) return
+    // Whole hours only where the browser honours the step; minutes are
+    // dropped anyway (fromPicker).
+    this.at = el('input', {
+      type: 'datetime-local',
+      id: 'compare-at',
+      step: '3600',
+    })
+    this.atLabel = el('label', { for: 'compare-at' }, 'Change at')
+    this.hours = el('select', { id: 'compare-hours' })
+    for (const h of COMPARE_HOURS)
+      this.hours.append(el('option', { value: String(h) }, `${h}h`))
     const go = () => {
-      const days = Number(this.days!.value)
-      if (!this.date!.value) return
+      const at = fromPicker(this.at!.value, this.offsetMin)
+      if (at === undefined) return
       location.hash = formatRoute({
         view: 'compare',
         window: route.window,
         compare: {
-          date: this.date!.value,
-          days,
+          at,
+          hours: Number(this.hours!.value),
           source: this.source!.value || 'all',
         },
       })
     }
-    this.date.addEventListener('change', go)
-    this.days.addEventListener('change', go)
+    this.at.addEventListener('change', go)
+    this.hours.addEventListener('change', go)
     this.source = el('select', { id: 'compare-source' })
     this.source.addEventListener('change', go)
     // Shown only while per-source statistics are on.
@@ -852,15 +865,15 @@ class CompareView extends HTMLElement implements ViewElement {
       el(
         'p',
         { class: 'muted small' },
-        'Two windows of whole UTC days side by side: the days before the date and the days from the date on, for example before and after an antenna, cable or receiver change. Counts are compared per hour when the after window is shorter because it reaches today.',
+        'Two windows of whole hours side by side: the hours before the change and the hours from it on, for example before and after an antenna, cable or receiver change. Counts are compared per hour when the after window is shorter because it reaches now.',
       ),
       el(
         'div',
         { class: 'compare-controls' },
-        el('label', { for: 'compare-date' }, 'Change on'),
-        this.date,
-        el('label', { for: 'compare-days' }, 'Days each side'),
-        this.days,
+        this.atLabel,
+        this.at,
+        el('label', { for: 'compare-hours' }, 'Hours each side'),
+        this.hours,
         this.sourceControl,
       ),
       el(
@@ -913,9 +926,12 @@ class CompareView extends HTMLElement implements ViewElement {
   async load(ctx: Context): Promise<void> {
     const c = ctx.compare ?? defaultCompare(Date.now())
     const now = Date.now()
-    this.date!.value = c.date
-    this.date!.max = new Date(now).toISOString().slice(0, 10)
-    this.days!.value = String(c.days)
+    this.offsetMin = ctx.offsetMin
+    this.at!.value = toPicker(c.at, ctx.offsetMin)
+    this.at!.max = toPicker(now, ctx.offsetMin)
+    this.atLabel!.textContent =
+      ctx.offsetMin === undefined ? 'Change at (UTC)' : 'Change at'
+    this.hours!.value = String(c.hours)
     const { before, after } = compareWindows(c, now)
     const { sources } = await get<{ sources: SourceInfo[] }>('/sources')
     this.renderSources(sources, c.source)
@@ -926,17 +942,22 @@ class CompareView extends HTMLElement implements ViewElement {
       to: new Date(w.to).toISOString(),
     })
     const bySource: Record<string, string> = source === 'all' ? {} : { source }
-    const days = (w: CompareWindow) => ({ from: w.fromDay, to: w.toDay })
+    // Coverage is kept per UTC day, so only whole day windows have their
+    // own footprint.
+    const wholeDays = before.wholeDays && after.wholeDays
+    const coverage = (w: CompareWindow) =>
+      wholeDays
+        ? get<CoverageResponse>('/coverage', { from: w.fromDay, to: w.toDay })
+        : Promise.resolve(null)
     const [sb, sa, xb, xa, cb, ca] = await Promise.all([
       get<Summary>('/summary', { ...range(before), ...bySource }),
       get<Summary>('/summary', { ...range(after), ...bySource }),
       get<SectorStats>('/sectors', { ...range(before), class: 'all' }),
       get<SectorStats>('/sectors', { ...range(after), class: 'all' }),
-      get<CoverageResponse>('/coverage', days(before)),
-      get<CoverageResponse>('/coverage', days(after)),
+      coverage(before),
+      coverage(after),
     ])
-    const label = (w: CompareWindow) =>
-      w.fromDay === w.toDay ? w.fromDay : `${w.fromDay} to ${w.toDay}`
+    const label = (w: CompareWindow) => windowLabel(w, ctx.offsetMin)
     // Two lines, so the table fits a phone.
     this.heads!.before.replaceChildren('Before', el('br'), label(before))
     this.heads!.after.replaceChildren('After', el('br'), label(after))
@@ -944,8 +965,8 @@ class CompareView extends HTMLElement implements ViewElement {
     this.chartHeads!.after.textContent = `After, ${label(after)}`
 
     const coverageKept = {
-      before: !beforeRetention(before, cb.retainedFrom),
-      after: !beforeRetention(after, ca.retainedFrom),
+      before: cb !== null && !beforeRetention(before, cb.retainedFrom),
+      after: ca !== null && !beforeRetention(after, ca.retainedFrom),
     }
     const hours = { before: before.hours, after: after.hours }
     const values: Record<string, [number | null, number | null]> = {
@@ -959,12 +980,12 @@ class CompareView extends HTMLElement implements ViewElement {
       avg: [sb.distance.avgM, sa.distance.avgM],
       max: [sb.distance.maxM, sa.distance.maxM],
       cells: [
-        coverageKept.before ? cb.cells : null,
-        coverageKept.after ? ca.cells : null,
+        coverageKept.before ? cb!.cells : null,
+        coverageKept.after ? ca!.cells : null,
       ],
       area: [
-        coverageKept.before ? cb.areaM2 : null,
-        coverageKept.after ? ca.areaM2 : null,
+        coverageKept.before ? cb!.areaM2 : null,
+        coverageKept.after ? ca!.areaM2 : null,
       ],
     }
     const u = ctx.units
@@ -973,7 +994,9 @@ class CompareView extends HTMLElement implements ViewElement {
       const fmt = (v: number | null): string => {
         if (v === null)
           return row.kind === 'cells' || row.kind === 'area'
-            ? 'not kept'
+            ? wholeDays
+              ? 'not kept'
+              : 'days only'
             : 'no data'
         if (row.kind === 'distance') return u.distance.format(v)
         if (row.kind === 'area') return u.area.format(v)
@@ -1012,9 +1035,13 @@ class CompareView extends HTMLElement implements ViewElement {
           `There is no history provider, so the ${name} window has live data only from ${formatDateTime(Date.parse(s.liveFrom), ctx.offsetMin)}.`,
         )
     }
-    if (!coverageKept.before || !coverageKept.after)
+    if (!wholeDays)
       notes.push(
-        `Coverage is kept from ${cb.retainedFrom} on (Coverage retention in the plugin settings), so it is not compared for a window that starts earlier.`,
+        'Coverage is kept per UTC day, so it is compared only for windows of whole UTC days: a change at 00:00 UTC with 24, 48 or 120 hours each side.',
+      )
+    else if (!coverageKept.before || !coverageKept.after)
+      notes.push(
+        `Coverage is kept from ${cb!.retainedFrom} on (Coverage retention in the plugin settings), so it is not compared for a window that starts earlier.`,
       )
     if (source !== 'all')
       notes.push(

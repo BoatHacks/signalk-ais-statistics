@@ -1,9 +1,11 @@
-// Compare view helpers (SPEC 7): the two date windows and the change
-// between them. Kept free of the DOM so they can be tested.
+// Compare view helpers (SPEC 7): the two hour windows around a change and
+// the difference between them. Kept free of the DOM so they can be tested.
 import type { CompareParams } from './route'
+import { formatDate, formatDateTime, formatTime } from './time'
 
 const HOUR_MS = 3_600_000
 const DAY_MS = 86_400_000
+const MINUTE_MS = 60_000
 
 const utcDay = (t: number) => new Date(t).toISOString().slice(0, 10)
 
@@ -15,6 +17,8 @@ export interface CompareWindow {
   fromDay: string
   toDay: string
   hours: number
+  /** True when the window is whole UTC days, the unit coverage is kept in. */
+  wholeDays: boolean
 }
 
 function window(from: number, to: number): CompareWindow {
@@ -24,25 +28,53 @@ function window(from: number, to: number): CompareWindow {
     fromDay: utcDay(from),
     toDay: utcDay(to - 1),
     hours: Math.round((to - from) / HOUR_MS),
+    wholeDays: from % DAY_MS === 0 && to % DAY_MS === 0,
   }
 }
 
 /**
- * The window of `days` before the date and the one from the date on. The
- * after window ends at the next full hour at the latest, so a date close
- * to today gives a shorter after window.
+ * The `hours` before the change and the `hours` from it on. The after
+ * window ends at the next full hour at the latest, so a change close to
+ * now gives a shorter after window. Its `wholeDays` follows the full
+ * length, since today's coverage is kept up to now.
  */
 export function compareWindows(
-  c: Pick<CompareParams, 'date' | 'days'>,
+  c: Pick<CompareParams, 'at' | 'hours'>,
   now: number,
 ): { before: CompareWindow; after: CompareWindow } {
-  const start = Date.parse(c.date)
-  const length = c.days * DAY_MS
+  const length = c.hours * HOUR_MS
   const nextHour = Math.ceil((now + 1) / HOUR_MS) * HOUR_MS
+  const after = window(c.at, Math.min(c.at + length, nextHour))
   return {
-    before: window(start - length, start),
-    after: window(start, Math.min(start + length, nextHour)),
+    before: window(c.at - length, c.at),
+    after: {
+      ...after,
+      wholeDays: c.at % DAY_MS === 0 && length % DAY_MS === 0,
+    },
   }
+}
+
+/**
+ * The value of a datetime-local input for a time, in ship time when the
+ * offset is known and in UTC otherwise, as all times in the app are.
+ */
+export function toPicker(t: number, offsetMin: number | undefined): string {
+  return new Date(t + (offsetMin ?? 0) * MINUTE_MS).toISOString().slice(0, 16)
+}
+
+/**
+ * The full UTC hour a datetime-local value falls in; minutes are dropped
+ * because history is kept per hour. Undefined for an empty or bad value.
+ */
+export function fromPicker(
+  v: string,
+  offsetMin: number | undefined,
+): number | undefined {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(v))
+    return undefined
+  const t = Date.parse(`${v}Z`)
+  if (!Number.isFinite(t)) return undefined
+  return Math.floor((t - (offsetMin ?? 0) * MINUTE_MS) / HOUR_MS) * HOUR_MS
 }
 
 export interface Change {
@@ -88,4 +120,20 @@ export function beforeRetention(
   retainedFrom: string,
 ): boolean {
   return w.fromDay < retainedFrom
+}
+
+/**
+ * "2030-01-08 14:00 to 20:00", or with the end date when the window ends
+ * on another day. The end is exclusive: a 24 hour window from 14:00 ends
+ * at 14:00 the next day.
+ */
+export function windowLabel(
+  w: CompareWindow,
+  offsetMin: number | undefined,
+): string {
+  const end =
+    formatDate(w.from, offsetMin) === formatDate(w.to, offsetMin)
+      ? formatTime(w.to, offsetMin)
+      : formatDateTime(w.to, offsetMin)
+  return `${formatDateTime(w.from, offsetMin)} to ${end}`
 }
