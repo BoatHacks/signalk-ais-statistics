@@ -19,7 +19,7 @@ const FIXED_NOW = Date.parse('2026-06-15T22:00:00Z')
 const realNow = Date.now
 const shift = FIXED_NOW - realNow()
 const RealDate = Date
-global.Date = class extends RealDate {
+globalThis.Date = class extends RealDate {
   constructor(...args) {
     if (args.length === 0) super(realNow() + shift)
     else super(...args)
