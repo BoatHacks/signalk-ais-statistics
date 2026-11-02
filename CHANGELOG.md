@@ -6,6 +6,13 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- The map's "Cells from" selector is now "Recorded while" (Any time,
+  Stationary, Underway), so it reads as the own vessel's state when the
+  reports came in rather than a property of the targets. The route values
+  (`mode=all|stationary|underway`) are unchanged.
+
 ## [0.6.0] - 2026-11-01
 
 ### Added

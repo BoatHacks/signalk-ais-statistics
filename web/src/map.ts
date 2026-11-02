@@ -87,11 +87,13 @@ export function createMap(): MapView {
   const mapEl = el('div', { class: 'map' })
   const card = el('div', { class: 'map-card sk-card' }, mapEl, controls)
 
-  // Cells by own vessel mode, below the map next to the cap slider.
+  // Cells by the own vessel's mode when the reports were recorded, below
+  // the map next to the cap slider. The label names the own vessel's state
+  // so it does not read as a property of the targets.
   const modes = el(
     'div',
-    { class: 'cap-control', role: 'group', 'aria-label': 'Cells from' },
-    el('span', { class: 'label' }, 'Cells from'),
+    { class: 'cap-control', role: 'group', 'aria-label': 'Recorded while' },
+    el('span', { class: 'label' }, 'Recorded while'),
   )
   // Distance cap: the slider changes this view only, save stores it.
   const capInput = el('input', {
@@ -141,7 +143,7 @@ export function createMap(): MapView {
 
   // The mode is part of the route, so a link keeps it; it is never saved.
   const MODE_LABELS: Record<MapMode, string> = {
-    all: 'All',
+    all: 'Any time',
     stationary: 'Stationary',
     underway: 'Underway',
   }
@@ -149,8 +151,8 @@ export function createMap(): MapView {
     const btn = el('button', { type: 'button', 'data-mode': m }, MODE_LABELS[m])
     btn.title =
       m === 'all'
-        ? 'Cells from all reports'
-        : `Only cells from reports received while ${m}`
+        ? 'Cells from all reports, whatever your vessel was doing'
+        : `Only cells from reports recorded while your vessel was ${m}`
     btn.addEventListener('click', () => {
       location.hash = formatRoute({ view: 'map', window: shownWindow, mode: m })
     })
@@ -550,12 +552,12 @@ export function createMap(): MapView {
         const which =
           mode === 'all'
             ? ''
-            : ` Only cells from reports received while ${mode}; the sectors are for all reports.`
+            : ` Only cells from reports recorded while your vessel was ${mode}; the sectors are for all reports.`
         info.textContent =
           c.cells + c.cappedCells === 0
             ? mode === 'all'
               ? 'No coverage recorded in this window yet.'
-              : `No coverage recorded while ${mode} in this window yet.`
+              : `No coverage recorded while your vessel was ${mode} in this window yet.`
             : `${c.cells.toLocaleString()} cells, about ${units.area.format(c.areaM2)} covered.` +
               which +
               beyond +
