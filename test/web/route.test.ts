@@ -60,34 +60,45 @@ describe('hash routes', () => {
     )
   })
 
-  it('parses the compare view with a date and days, within bounds', () => {
-    const now = Date.UTC(2030, 0, 20, 12)
-    expect(parseRoute('#/compare?date=2030-01-08&days=3', now)).toEqual({
+  it('parses the compare view with an hour and a length, within bounds', () => {
+    const now = Date.UTC(2030, 0, 20, 12, 30)
+    expect(parseRoute('#/compare?at=2030-01-08T14:00Z&hours=6', now)).toEqual({
       view: 'compare',
       window: '24h',
-      compare: { date: '2030-01-08', days: 3, source: 'all' },
+      compare: { at: Date.UTC(2030, 0, 8, 14), hours: 6, source: 'all' },
     })
     expect(
-      parseRoute('#/compare?date=2030-01-08&days=3&source=nmea0183', now)
+      parseRoute('#/compare?at=2030-01-08T14:00Z&hours=6&source=nmea0183', now)
         .compare?.source,
     ).toBe('nmea0183')
     expect(
-      parseRoute('#/compare?date=2030-01-08&days=3&source=a.b', now).compare
-        ?.source,
+      parseRoute('#/compare?at=2030-01-08T14:00Z&hours=6&source=a.b', now)
+        .compare?.source,
     ).toBe('all')
-    // The default: seven days each side, the after window ending today.
+    // The current hour is the latest change there is.
+    expect(
+      parseRoute('#/compare?at=2030-01-20T12:00Z&hours=1', now).compare?.at,
+    ).toBe(Date.UTC(2030, 0, 20, 12))
+    // The default: 120 hours each side from midnight UTC, the after
+    // window ending with today.
     expect(defaultCompare(now)).toEqual({
-      date: '2030-01-14',
-      days: 7,
+      at: Date.UTC(2030, 0, 16),
+      hours: 120,
       source: 'all',
     })
     for (const hash of [
       '#/compare',
-      '#/compare?date=2030-02-30&days=0',
-      '#/compare?date=2031-01-01&days=8',
-      '#/compare?date=yesterday&days=x',
+      '#/compare?at=2030-01-20T13:00Z&hours=9',
+      '#/compare?at=2030-02-30T10:00Z&hours=0',
+      '#/compare?at=2030-01-08T14:30Z&hours=7',
+      '#/compare?at=2030-01-08&hours=x',
+      '#/compare?date=2030-01-08&days=3',
     ])
       expect(parseRoute(hash, now).compare, hash).toEqual(defaultCompare(now))
+    // An unknown length alone falls back to the default length.
+    expect(
+      parseRoute('#/compare?at=2030-01-08T14:00Z&hours=7', now).compare,
+    ).toEqual({ at: Date.UTC(2030, 0, 8, 14), hours: 120, source: 'all' })
   })
 
   it('formats the compare view with its own parameters', () => {
@@ -95,15 +106,19 @@ describe('hash routes', () => {
       formatRoute({
         view: 'compare',
         window: '7d',
-        compare: { date: '2030-01-08', days: 7, source: 'all' },
+        compare: { at: Date.UTC(2030, 0, 8, 14), hours: 24, source: 'all' },
       }),
-    ).toBe('#/compare?date=2030-01-08&days=7')
+    ).toBe('#/compare?at=2030-01-08T14:00Z&hours=24')
     expect(
       formatRoute({
         view: 'compare',
         window: '7d',
-        compare: { date: '2030-01-08', days: 7, source: 'N2KAnalyzerOut' },
+        compare: {
+          at: Date.UTC(2030, 0, 8, 14),
+          hours: 48,
+          source: 'N2KAnalyzerOut',
+        },
       }),
-    ).toBe('#/compare?date=2030-01-08&days=7&source=N2KAnalyzerOut')
+    ).toBe('#/compare?at=2030-01-08T14:00Z&hours=48&source=N2KAnalyzerOut')
   })
 })
