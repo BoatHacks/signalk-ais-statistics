@@ -958,9 +958,27 @@ class CompareView extends HTMLElement implements ViewElement {
       coverage(after),
     ])
     const label = (w: CompareWindow) => windowLabel(w, ctx.offsetMin)
-    // Two lines, so the table fits a phone.
-    this.heads!.before.replaceChildren('Before', el('br'), label(before))
-    this.heads!.after.replaceChildren('After', el('br'), label(after))
+    // Start and end on lines of their own, and a date never broken at its
+    // hyphens, so the table fits a phone.
+    const words = (text: string) =>
+      text
+        .split(' ')
+        .flatMap((w, i) => [
+          ...(i > 0 ? [' '] : []),
+          el('span', { class: 'compare-time' }, w),
+        ])
+    const head = (name: string, w: CompareWindow) => {
+      const [start, end] = label(w).split(' to ')
+      return [
+        name,
+        el('br'),
+        ...words(start!),
+        el('br'),
+        ...words(`to ${end!}`),
+      ]
+    }
+    this.heads!.before.replaceChildren(...head('Before', before))
+    this.heads!.after.replaceChildren(...head('After', after))
     this.chartHeads!.before.textContent = `Before, ${label(before)}`
     this.chartHeads!.after.textContent = `After, ${label(after)}`
 
