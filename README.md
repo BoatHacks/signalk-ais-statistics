@@ -111,8 +111,9 @@ the top shows the alert state.
 **Map**: the coverage cells and the 24 hour sectors on OpenStreetMap with
 OpenSeaMap, or on the server's own charts when offline or on a metered
 connection. Toggles show or hide the cells, the sparse cells beyond the
-distance cap and each class's sectors. Under the map you pick the cells of
-all modes, stationary or underway, try the distance cap, and download the
+distance cap and each class's sectors. Under the map, "Recorded while" picks the
+cells recorded at any time or only while your own boat was stationary or
+underway; you can also try the distance cap, and download the
 cells.
 
 ![Map](docs/screenshots/map.png)

@@ -645,8 +645,9 @@ A SignalK web app, listed in the admin UI, with:
   and the user has not chosen otherwise. When the server has no charts, the
   server charts button is greyed out with a short note under it and the map
   uses OSM/OpenSeaMap, since the chart basemap would stay blank.
-  Under the map, a `Cells from` selector (All, Stationary, Underway, 2.4)
-  shows the cells of one own vessel mode; it is part of the hash route
+  Under the map, a `Recorded while` selector (Any time, Stationary,
+  Underway, 2.4) shows the cells recorded in one own vessel mode, so it
+  cannot be read as a property of the targets; it is part of the hash route
   (`#/map?window=7d&mode=underway`), not saved, and the info line says
   that the sectors are not split. The plotter overlay stays combined.
   Below it, a distance cap slider (50th percentile to off) redraws the

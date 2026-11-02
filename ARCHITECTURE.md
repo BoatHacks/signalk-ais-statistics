@@ -282,8 +282,8 @@ metered state when present, and a manual choice is remembered in
 `localStorage`. Toggles show or hide the coverage cells, the cells beyond
 the distance cap (fetched with `all=true`, drawn dashed, off by default)
 and the class A and B sectors (`layers.ts`, also remembered in
-`localStorage`). A `Cells from` row under the map picks the own vessel
-mode; it sets the hash route (`#/map?mode=underway`, parsed in `route.ts`),
+`localStorage`). A `Recorded while` row under the map (Any time, Stationary,
+Underway) picks the own vessel mode at the time of reception; it sets the hash route (`#/map?mode=underway`, parsed in `route.ts`),
 so it is not stored, and the coverage downloads follow it. The distance cap slider under the map refetches
 `/coverage` with `cap` and, through `settings.ts`, saves with `POST
 /settings`; the save button shows when `/skServer/loginStatus`, read once
