@@ -1,61 +1,90 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
-  OVERLAY_ID,
-  OVERLAY_SOURCE,
+  OVERLAY_CELLS,
+  OVERLAY_SECTORS,
   buildManifest,
   sectorFeatures,
 } from '../src/overlay'
 import type { SectorStats } from '../src/query'
 
-describe('overlay manifest', () => {
-  it('declares a version 1 data overlay with an inline version 8 style', () => {
-    const m = buildManifest('plugin-id', '1.2.3') as {
-      apiVersion: string
-      requires: string[]
-      background: { url: string }[]
-      overlays: {
-        id: string
-        type: string
-        band: string
-        style: {
-          version: number
-          sources: Record<string, { data: string }>
-          layers: { source: string }[]
-        }
-      }[]
+interface Manifest {
+  apiVersion: string
+  requires: string[]
+  background: { url: string }[]
+  overlays: {
+    id: string
+    title: string
+    type: string
+    band: string
+    visible: boolean
+    style: {
+      version: number
+      sources: Record<string, { type: string; data: string }>
+      layers: { id: string; type: string; source: string; filter: unknown[] }[]
     }
+  }[]
+}
+
+describe('overlay manifest', () => {
+  const m = buildManifest('plugin-id', '1.2.3') as Manifest
+
+  it('declares two version 1 data overlays, cells and sectors', () => {
     expect(m.apiVersion).toBe('1')
     expect(m.requires).toEqual(['overlays.data'])
-    const o = m.overlays[0]!
-    expect(o).toMatchObject({
-      id: OVERLAY_ID,
-      type: 'data',
-      band: 'aboveCharts',
-    })
-    expect(o.style.version).toBe(8)
-    expect(o.style.sources[OVERLAY_SOURCE]!.data).toBe(
-      '/plugins/plugin-id/overlay/coverage.geojson',
-    )
-    for (const l of o.style.layers) expect(l.source).toBe(OVERLAY_SOURCE)
+    expect(m.overlays.map((o) => [o.id, o.title])).toEqual([
+      [OVERLAY_CELLS, 'AIS coverage cells'],
+      [OVERLAY_SECTORS, 'AIS sectors'],
+    ])
+    for (const o of m.overlays)
+      expect(o).toMatchObject({
+        type: 'data',
+        band: 'aboveCharts',
+        visible: true,
+      })
     expect(m.background[0]!.url).toBe('/plugin-id/plotterext/refresh.html')
   })
 
-  it('fills and outlines cells, and outlines the sectors', () => {
-    const m = buildManifest('plugin-id', '1.2.3') as {
-      overlays: {
-        style: { layers: { id: string; type: string; filter: unknown[] }[] }
-      }[]
+  it('gives each overlay its own inline style and GeoJSON route', () => {
+    const [cells, sectors] = m.overlays
+    for (const [o, route] of [
+      [cells!, '/plugins/plugin-id/overlay/cells.geojson'],
+      [sectors!, '/plugins/plugin-id/overlay/sectors.geojson'],
+    ] as const) {
+      expect(o.style.version).toBe(8)
+      // The refresh page reloads each overlay by a source of the same id.
+      expect(o.style.sources).toEqual({
+        [o.id]: { type: 'geojson', data: route },
+      })
+      for (const l of o.style.layers) expect(l.source).toBe(o.id)
     }
-    const layers = m.overlays[0]!.style.layers.map((l) => [
-      l.id,
-      l.type,
-      l.filter[2],
-    ])
+  })
+
+  it('has the refresh page reload every overlay', () => {
+    const page = readFileSync(
+      join(__dirname, '../web/static/plotterext/refresh.html'),
+      'utf8',
+    )
+    const ids = /var OVERLAYS = \[([^\]]*)\]/.exec(page)?.[1]
+    expect(ids?.split(',').map((x) => x.trim().replace(/'/g, ''))).toEqual(
+      m.overlays.map((o) => o.id),
+    )
+  })
+
+  it('fills and outlines cells in one overlay, sectors in the other', () => {
+    const layers = m.overlays.map((o) =>
+      o.style.layers.map((l) => [l.id, l.type, l.filter[2]]),
+    )
     expect(layers).toEqual([
-      ['cells', 'fill', 'cell'],
-      ['cell-outlines', 'line', 'cell'],
-      ['sectors', 'line', 'sector'],
-      ['sector-max', 'circle', 'sector-max'],
+      [
+        ['cells', 'fill', 'cell'],
+        ['cell-outlines', 'line', 'cell'],
+      ],
+      [
+        ['sectors', 'line', 'sector'],
+        ['sector-max', 'circle', 'sector-max'],
+      ],
     ])
   })
 })

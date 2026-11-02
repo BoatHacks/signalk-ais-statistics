@@ -250,12 +250,14 @@ which the plugin passes in as `retentionDays`.
 Registers a read-only `plotterExtensions` resource provider through
 `app.registerResourceProvider`, serving the overlay manifest only while the
 plugin runs (the pattern `@meri-imperiumi/signalk-internet` uses). The
-MapLibre style is inline in the manifest; its GeoJSON source is the
-read-only route `/overlay/coverage.geojson`, built on request from Coverage
-and the class A and B sectors (`sector` wedges and one `sector-max` point
-per class,
-each with its class in `cls`). A static background page in the web app bundle calls
-`overlay.refresh` hourly through the plotter extension bus (SPEC 6.3).
+manifest lists two data overlays, `cells` and `sectors`, so the plotter
+user can show either or both. Each MapLibre style is inline in the
+manifest, with one GeoJSON source of the overlay's id: the read-only route
+`/overlay/cells.geojson`, built on request from Coverage, and
+`/overlay/sectors.geojson`, the class A and B sectors (`sector` wedges and
+one `sector-max` point per class, each with its class in `cls`). A static
+background page in the web app bundle calls `overlay.refresh` hourly for
+both overlays through the plotter extension bus (SPEC 6.3).
 Nothing is written into the package directory at run time.
 
 ### 2.11 Web app
@@ -296,7 +298,7 @@ in tables: the farthest receptions, the fastest vessels and the
 implausible jumps. Plain `<a download>` links to the export routes (`downloads.ts`,
 URLs from `exportHref` in `api.ts`) sit under the map and the farthest
 receptions table; the browser sends the session cookie with them. The map's sector wedges
-come from the overlay GeoJSON route, and the cell and sector colours are
+come from the plotter's sectors route (`/overlay/sectors.geojson`), and the cell and sector colours are
 imported from `src/style.ts`, which the plotter overlay uses too, so the
 app map and the plotter look the same. The compare view keeps the hour
 of the change and the window length in hours in the hash (`route.ts`);

@@ -9,7 +9,7 @@ Everything is computed on the boat and works offline.
 ![Overview](docs/screenshots/overview.png)
 
 **Status:** working toward 1.0.0. The plugin, its web app and the plotter
-overlay run on real boats. Paths, the REST API, the overlay and the export
+overlays run on real boats. Paths, the REST API, the overlays and the export
 formats may still change before user feedback settles them; changes are
 listed in the [CHANGELOG](CHANGELOG.md).
 
@@ -53,8 +53,8 @@ listed in the [CHANGELOG](CHANGELOG.md).
   GeoJSON, with an anonymise switch for sharing.
 - **Published paths** under `sensors.ais.statistics.*`, so any history
   provider records them.
-- **Plotter overlay**: the coverage footprint and the sectors as a layer
-  in Freeboard-SK 3.4.0 or later.
+- **Plotter overlays**: the coverage cells and the sectors as two layers
+  in Freeboard-SK 3.4.0 or later, to show either or both.
 
 ## Requirements
 
@@ -66,7 +66,7 @@ listed in the [CHANGELOG](CHANGELOG.md).
 - Recommended: a History API provider such as `signalk-questdb`, for
   windows longer than the plugin has been running and for range vs weather.
 - Optional: `@meri-imperiumi/signalk-internet` tells the map when the
-  connection is metered, and Freeboard-SK 3.4.0 or later shows the overlay.
+  connection is metered, and Freeboard-SK 3.4.0 or later shows the overlays.
 
 ## Install
 
@@ -155,7 +155,7 @@ order. The defaults are meant to fit a typical cruising boat.
 | `targetExpirySeconds` | 3600 | A vessel silent for this long is no longer tracked |
 | **Publishing** | | |
 | `publishIntervalMinutes` | 5 | How often the paths are published to the server and its history provider; a divisor of 60. Sector paths go out hourly |
-| `publishOverlay` | on | Offer the coverage overlay to chart plotters |
+| `publishOverlay` | on | Offer the coverage cells and sectors overlays to chart plotters |
 | **Coverage** | | |
 | `h3Resolution` | 6 | Size of the coverage cells: 6 is about 7 km across, 5 about 20 km, 7 about 3 km |
 | `coverageDistancePercentile` | 99 | Leave out cells with fewer than 3 reports beyond this percentile of the window's distances; 100 turns the cap off. Live setting |
@@ -197,11 +197,16 @@ what the plugin has seen since it started, and says so.
 
 ## Chart plotter overlay
 
-With `publishOverlay` on, Freeboard-SK 3.4.0 or later lists the overlay as
-"AIS coverage" under its layers button: the 7 day coverage cells and the 24
-hour sectors of both classes. It refreshes hourly. If it is missing after a
-server update, reload the Freeboard page: a tab opened on an older
-Freeboard skips the overlay without a message.
+With `publishOverlay` on, Freeboard-SK 3.4.0 or later lists two overlays
+under its layers button, to show either or both:
+
+- **AIS coverage cells**: the coverage cells of the last 7 days.
+- **AIS sectors**: the 24 hour sectors of class A and B, with the farthest
+  reception of each class as a dot.
+
+Both refresh hourly. If they are missing after a server update, reload the
+Freeboard page: a tab opened on an older Freeboard skips them without a
+message.
 
 ## Troubleshooting
 
@@ -222,8 +227,8 @@ Freeboard skips the overlay without a message.
   all.
 - **The server charts button is greyed out**: the server has no chart
   provider with tiles, so the map uses OpenStreetMap.
-- **The plotter overlay is missing**: you need Freeboard-SK 3.4.0 or later
-  and `publishOverlay` on; reload Freeboard after a server update.
+- **The plotter overlays are missing**: you need Freeboard-SK 3.4.0 or
+  later and `publishOverlay` on; reload Freeboard after a server update.
 
 ## Published paths and API
 

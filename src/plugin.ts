@@ -601,7 +601,7 @@ export function createPlugin(app: ServerAPI): Plugin {
             ),
           }
         },
-        overlayExtras: async () => {
+        overlaySectors: async () => {
           const s = state
           if (!s) return []
           // One class after the other: history requests go out one at a time.

@@ -128,7 +128,7 @@ function serve({ agg, cov, log }) {
       coverage: () => cov,
       longRange: () => log,
       retentionDays: () => DEFAULT_CONFIG.coverageRetentionDays,
-      overlayExtras: async () => [
+      overlaySectors: async () => [
         ...sectorFeatures(await query.sectors('24h', 'a', Date.now()), OWN),
         ...sectorFeatures(await query.sectors('24h', 'b', Date.now()), OWN),
       ],

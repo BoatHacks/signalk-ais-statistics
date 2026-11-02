@@ -75,13 +75,14 @@ describe('plugin', () => {
       messages: number
     }
     expect(summary.messages).toBe(2)
-    const overlay = (await r.call('/overlay/coverage.geojson')).body as {
-      features: { properties: { kind: string } }[]
-    }
-    const kinds = overlay.features.map((x) => x.properties.kind).sort()
-    expect(kinds.filter((k) => k === 'cell')).toHaveLength(2)
+    type Overlay = { features: { properties: { kind: string } }[] }
+    const kinds = async (path: string) =>
+      ((await r.call(path)).body as Overlay).features.map(
+        (x) => x.properties.kind,
+      )
+    expect(await kinds('/overlay/cells.geojson')).toEqual(['cell', 'cell'])
     // One report per sector is too sparse for a sector wedge.
-    expect(kinds).not.toContain('sector')
+    expect(await kinds('/overlay/sectors.geojson')).not.toContain('sector')
 
     await plugin.stop()
     expect(f.app.listenerCount('nmea0183')).toBe(0)

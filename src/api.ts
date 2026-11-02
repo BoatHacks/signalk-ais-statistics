@@ -60,8 +60,8 @@ export interface ApiDeps {
   coverage: () => Coverage | undefined
   longRange?: () => LongRangeLog | undefined
   status: () => Status
-  /** Sector polygons and other extra features for the plotter overlay. */
-  overlayExtras?: () => Promise<object[]>
+  /** Sector wedges and farthest points for the plotter's sectors overlay. */
+  overlaySectors?: () => Promise<object[]>
   /**
    * Saves validated live settings to the plugin config and applies them;
    * answers the effective live settings. Undefined while stopped.
@@ -543,12 +543,20 @@ export function registerRoutes(router: RouterLike, deps: ApiDeps): void {
   )
 
   r.get(
-    '/overlay/coverage.geojson',
+    '/overlay/cells.geojson',
     handle(async () => {
       const f = await coverage().footprint(OVERLAY_DAYS, now())
-      const g = footprintGeoJson(f)
-      const extras = deps.overlayExtras ? await deps.overlayExtras() : []
-      return { ...g, features: [...g.features, ...extras] }
+      return footprintGeoJson(f)
+    }, cachedRoute()),
+  )
+
+  r.get(
+    '/overlay/sectors.geojson',
+    handle(async () => {
+      // Answers 503 while stopped, like the cells.
+      coverage()
+      const features = deps.overlaySectors ? await deps.overlaySectors() : []
+      return { type: 'FeatureCollection', features }
     }, cachedRoute()),
   )
 

@@ -56,6 +56,9 @@ async function setup(withAccess = true, running = true) {
     coverage: () => coverage,
     longRange: () => longRange,
     status: () => ({ history: false }),
+    overlaySectors: async () => [
+      { type: 'Feature', properties: { kind: 'sector', cls: 'a' } },
+    ],
     propagation: () => (running ? { enabled: false } : undefined),
     saveSettings: async (values) => {
       saved.push(values)
@@ -141,7 +144,8 @@ describe('REST API', () => {
       '/export/longrange.csv',
       '/export/longrange.geojson',
       '/longrange',
-      '/overlay/coverage.geojson',
+      '/overlay/cells.geojson',
+      '/overlay/sectors.geojson',
       '/propagation',
       '/sectors',
       '/series',
@@ -155,6 +159,21 @@ describe('REST API', () => {
       expect(r.access, key).toBe(
         key === 'POST /settings' ? 'readwrite' : 'readonly',
       )
+  })
+
+  it('serves the plotter cells and sectors on their own routes', async () => {
+    const { call } = await setup()
+    const kinds = async (path: string) =>
+      (
+        (await call(path)).body as {
+          type: string
+          features: { properties: { kind: string } }[]
+        }
+      ).features.map((f) => f.properties.kind)
+    const cells = await kinds('/overlay/cells.geojson')
+    expect(cells.length).toBeGreaterThan(0)
+    expect(new Set(cells)).toEqual(new Set(['cell']))
+    expect(await kinds('/overlay/sectors.geojson')).toEqual(['sector'])
   })
 
   it('includes the cells beyond the cap when asked', async () => {

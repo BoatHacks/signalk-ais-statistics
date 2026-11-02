@@ -2,14 +2,14 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>AIS coverage refresh</title>
+    <title>AIS statistics overlay refresh</title>
   </head>
   <body>
     <script>
       // Background runtime of the plotter extension: asks the host to fetch
-      // the coverage GeoJSON again every hour (Plotter Extensions API,
-      // data overlays, overlay.refresh). Speaks JSON-RPC 2.0 inside the
-      // plotterExt/1 envelope over postMessage.
+      // the GeoJSON of both overlays, cells and sectors, again every hour
+      // (Plotter Extensions API, data overlays, overlay.refresh). Speaks
+      // JSON-RPC 2.0 inside the plotterExt/1 envelope over postMessage.
       ;(function () {
         var BUS = 'plotterExt/1'
         var REFRESH_MS = 3600 * 1000
@@ -20,12 +20,17 @@
           window.parent.postMessage({ bus: BUS, msg: msg }, '*')
         }
 
+        // Overlay ids; each overlay's source has the same id.
+        var OVERLAYS = ['cells', 'sectors']
+
         function refresh() {
-          send({
-            jsonrpc: '2.0',
-            id: 'refresh-' + nextId++,
-            method: 'overlay.refresh',
-            params: { overlayId: 'coverage', source: 'coverage' },
+          OVERLAYS.forEach(function (id) {
+            send({
+              jsonrpc: '2.0',
+              id: 'refresh-' + nextId++,
+              method: 'overlay.refresh',
+              params: { overlayId: id, source: id },
+            })
           })
         }
 
