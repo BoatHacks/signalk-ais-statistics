@@ -38,6 +38,9 @@ in the repository:
       version in a trailing comment, never to a branch. Bump the pin to the
       latest server release before each release; it also runs the format
       check on Windows, which is why `.gitattributes` forces LF
+- [ ] `test.yml` and `publish.yml` use the same `actions/checkout` and
+      `actions/setup-node` major versions as the pinned plugin CI, so they
+      stay on a Node runtime GitHub still supports
 - [ ] **Install, load, activate, schema, tests (80):** run in the registry's
       own harness; the plugin must install cleanly, load, activate with the
       default configuration, expose a valid config schema, and pass `npm test`.

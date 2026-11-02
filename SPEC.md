@@ -911,7 +911,7 @@ help of `max` (6.2). Verified across a plugin restart on the test server.
   hour" reading, over a median of hourly p99s, a lower percentile, or 768
   per-sector bin counters. A sector with no hour of 20 reports shows its
   count but no radius.
-- **Far receptions as a tick and a log, not in the radius (chosen by the
+- **Far receptions as a dot and a log, not in the radius (chosen by the
   maintainer).** The 20 report minimum keeps rare far receptions out of
   the radius, but they can be real propagation worth seeing. The sectors
   view marks the chart's farthest reception with a dot and a bolder sector

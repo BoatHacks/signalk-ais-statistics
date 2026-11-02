@@ -61,7 +61,7 @@ function synthetic() {
     if (t <= quiet && quiet < t + 20e3) {
       // Two far receptions in the quietest hour: a bogus position and one
       // carried by ducting (SPEC 2.3). That hour has too few reports to set
-      // a radius, so they show as ticks and in the long-range table.
+      // a radius, so they show as the farthest dot and in the long-range table.
       for (const [mmsi, type, bearing, d] of [
         [999000901, 1, 300, 2500],
         [999000902, 18, 250, 160],

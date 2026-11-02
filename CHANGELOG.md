@@ -6,6 +6,15 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- The compare view has a screenshot in the README and the App Store
+  listing, and all screenshots are taken on a fixed clock, so they look
+  the same whatever time of day they are made.
+- The Test and Publish workflows use `actions/checkout` and
+  `actions/setup-node` v7, as SignalK's plugin CI does, leaving the
+  Node 20 runtime GitHub is retiring.
+
 ## [0.6.1] - 2026-11-02
 
 The first npm release since 0.5.0: 0.6.0 was tagged but not published,
