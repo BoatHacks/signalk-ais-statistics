@@ -456,7 +456,7 @@ export function createMap(): MapView {
           ...(mode === 'all' ? {} : { mode }),
           ...(trial === undefined ? {} : { cap: String(trial) }),
         }),
-        get<GeoJSON.FeatureCollection>('/overlay/coverage.geojson').catch(
+        get<GeoJSON.FeatureCollection>('/overlay/sectors.geojson').catch(
           () => undefined,
         ),
       ])

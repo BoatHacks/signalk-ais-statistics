@@ -1,8 +1,10 @@
 // Chart plotter overlay (SPEC 6.3, ARCHITECTURE 2.10): a read-only
 // `plotterExtensions` resource provider serving one manifest while the
-// plugin runs. The data overlay's MapLibre style is inline in the manifest;
-// its GeoJSON source is a read-only plugin route fetched with the user's
-// credentials, and a background page refreshes it hourly.
+// plugin runs. The manifest lists two data overlays, the coverage cells and
+// the sectors, so the plotter user can show either or both. Each overlay's
+// MapLibre style is inline in the manifest; its GeoJSON source is a
+// read-only plugin route fetched with the user's credentials, and a
+// background page refreshes both hourly.
 import { destination, M_PER_NM } from './geo'
 import type { LatLon } from './ownposition'
 import type { SectorStats } from './query'
@@ -18,21 +20,25 @@ import {
   SECTOR_MAX_RADIUS,
 } from './style'
 
-export const OVERLAY_ID = 'coverage'
-export const OVERLAY_SOURCE = 'coverage'
+/** Overlay ids; each overlay's GeoJSON source has the same id. */
+export const OVERLAY_CELLS = 'cells'
+export const OVERLAY_SECTORS = 'sectors'
 /** Footprint window shown on the plotter, in days. */
 export const OVERLAY_DAYS = 7
 
 export interface OverlayUrls {
-  /** Server-relative URL of the GeoJSON route. */
-  data: string
+  /** Server-relative URL of the coverage cells GeoJSON route. */
+  cells: string
+  /** Server-relative URL of the sectors GeoJSON route. */
+  sectors: string
   /** Server-relative URL of the background refresh page. */
   background: string
 }
 
 export function overlayUrls(pluginId: string): OverlayUrls {
   return {
-    data: `/plugins/${pluginId}/overlay/coverage.geojson`,
+    cells: `/plugins/${pluginId}/overlay/cells.geojson`,
+    sectors: `/plugins/${pluginId}/overlay/sectors.geojson`,
     background: `/${pluginId}/plotterext/refresh.html`,
   }
 }
@@ -56,31 +62,42 @@ const CELL_RAMP = [
   CELL_HIGH,
 ]
 
-export function overlayStyle(dataUrl: string): object {
+export function cellsStyle(dataUrl: string): object {
   return {
     version: 8,
     sources: {
-      [OVERLAY_SOURCE]: { type: 'geojson', data: dataUrl },
+      [OVERLAY_CELLS]: { type: 'geojson', data: dataUrl },
     },
     layers: [
       {
         id: 'cells',
         type: 'fill',
-        source: OVERLAY_SOURCE,
+        source: OVERLAY_CELLS,
         filter: ['==', ['get', 'kind'], 'cell'],
         paint: { 'fill-color': CELL_RAMP, 'fill-opacity': CELL_FILL_OPACITY },
       },
       {
         id: 'cell-outlines',
         type: 'line',
-        source: OVERLAY_SOURCE,
+        source: OVERLAY_CELLS,
         filter: ['==', ['get', 'kind'], 'cell'],
         paint: { 'line-color': CELL_RAMP, 'line-width': CELL_LINE_WIDTH },
       },
+    ],
+  }
+}
+
+export function sectorsStyle(dataUrl: string): object {
+  return {
+    version: 8,
+    sources: {
+      [OVERLAY_SECTORS]: { type: 'geojson', data: dataUrl },
+    },
+    layers: [
       {
         id: 'sectors',
         type: 'line',
-        source: OVERLAY_SOURCE,
+        source: OVERLAY_SECTORS,
         filter: ['==', ['get', 'kind'], 'sector'],
         paint: {
           'line-color': SECTOR_COLOUR,
@@ -95,7 +112,7 @@ export function overlayStyle(dataUrl: string): object {
       {
         id: 'sector-max',
         type: 'circle',
-        source: OVERLAY_SOURCE,
+        source: OVERLAY_SECTORS,
         filter: ['==', ['get', 'kind'], 'sector-max'],
         paint: {
           'circle-color': SECTOR_COLOUR,
@@ -112,9 +129,9 @@ export function buildManifest(
   urls: OverlayUrls = overlayUrls(pluginId),
 ): object {
   return {
-    name: 'AIS reception coverage',
+    name: 'AIS reception statistics',
     description:
-      'Where this vessel has received AIS positions over the last 7 days, and the 24 hour bearing sectors for class A and B.',
+      'Where this vessel has received AIS positions over the last 7 days, and the 24 hour bearing sectors for class A and B, as two layers.',
     version,
     apiVersion: '1',
     requires: ['overlays.data'],
@@ -129,13 +146,22 @@ export function buildManifest(
     ],
     overlays: [
       {
-        id: OVERLAY_ID,
-        title: 'AIS coverage',
+        id: OVERLAY_CELLS,
+        title: 'AIS coverage cells',
         type: 'data',
         band: 'aboveCharts',
         visible: true,
         opacity: OVERLAY_OPACITY,
-        style: overlayStyle(urls.data),
+        style: cellsStyle(urls.cells),
+      },
+      {
+        id: OVERLAY_SECTORS,
+        title: 'AIS sectors',
+        type: 'data',
+        band: 'aboveCharts',
+        visible: true,
+        opacity: OVERLAY_OPACITY,
+        style: sectorsStyle(urls.sectors),
       },
     ],
   }
