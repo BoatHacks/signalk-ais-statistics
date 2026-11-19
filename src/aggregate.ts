@@ -18,6 +18,7 @@ import {
   sectorPercentileNm,
 } from './histogram'
 import type { AisMessage } from './ingest'
+import { COUNTRY_NAMES, flagOf } from './mid'
 import type { LatLon } from './ownposition'
 import {
   HEALTH_KINDS,
@@ -68,6 +69,16 @@ export interface Located {
   own: LatLon
   bearingDeg: number
   cls: 'A' | 'B' | 'other'
+}
+
+/** Unique vessels of one flag state, by AIS class. */
+export interface FlagCount {
+  /** ISO 3166-1 alpha-2 code from the MMSI's MID, or 'unknown'. */
+  code: string
+  name: string
+  total: number
+  classA: number
+  classB: number
 }
 
 export interface VesselInfo {
@@ -161,6 +172,8 @@ const floorTo = (t: number, step: number) => Math.floor(t / step) * step
 
 interface VesselEntry {
   lastSeen: number
+  /** From the last class A or B message of this MMSI. */
+  cls?: 'A' | 'B'
   shipType?: number
   name?: string
 }
@@ -303,16 +316,42 @@ export class Aggregator {
   uniqueVessels(
     time: number,
     windowMs: number,
-  ): { total: number; byGroup: Record<TypeGroup, number> } {
+  ): {
+    total: number
+    byGroup: Record<TypeGroup, number>
+    byFlag: FlagCount[]
+  } {
     const byGroup = emptyGroups()
+    const flags = new Map<string, FlagCount>()
     let total = 0
     const from = time - windowMs
-    for (const v of this.vessels.values()) {
+    for (const [mmsi, v] of this.vessels) {
       if (v.lastSeen < from) continue
       total++
       byGroup[typeGroup(v.shipType)]++
+      const code = flagOf(mmsi)
+      let f = flags.get(code)
+      if (!f) {
+        f = {
+          code,
+          name: COUNTRY_NAMES[code] ?? 'Unknown flag',
+          total: 0,
+          classA: 0,
+          classB: 0,
+        }
+        flags.set(code, f)
+      }
+      f.total++
+      if (v.cls === 'A') f.classA++
+      else if (v.cls === 'B') f.classB++
     }
-    return { total, byGroup }
+    const byFlag = [...flags.values()].sort(
+      (a, b) =>
+        Number(a.code === 'unknown') - Number(b.code === 'unknown') ||
+        b.total - a.total ||
+        a.name.localeCompare(b.name),
+    )
+    return { total, byGroup, byFlag }
   }
 
   /** Vessels heard within `expiryMs`: the live tracked targets (SPEC 3). */
@@ -347,8 +386,10 @@ export class Aggregator {
       const oldest = this.vessels.keys().next()
       if (!oldest.done) this.vessels.delete(oldest.value)
     }
+    const cls = classOf(msg.type)
     this.vessels.set(msg.mmsi, {
       lastSeen: time,
+      cls: cls === 'other' ? prev?.cls : cls,
       shipType: msg.shipType ?? prev?.shipType,
       name: msg.name ?? prev?.name,
     })

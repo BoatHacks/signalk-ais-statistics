@@ -28,7 +28,17 @@ export interface Summary {
   liveFrom?: string
   messages: number
   positions: { classA: number; classB: number; other: number }
-  vessels: { total: number; byGroup: Record<string, number> } | null
+  vessels: {
+    total: number
+    byGroup: Record<string, number>
+    byFlag?: {
+      code: string
+      name: string
+      total: number
+      classA: number
+      classB: number
+    }[]
+  } | null
   distance: Distance
   health: Health
 }

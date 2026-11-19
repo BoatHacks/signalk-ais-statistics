@@ -73,6 +73,7 @@ const GROUP_LABELS: Record<string, string> = {
   tanker: 'Tanker',
   passenger: 'Passenger',
   fishing: 'Fishing',
+  sailing: 'Sailing vessel',
   pleasureCraft: 'Pleasure craft',
   other: 'Other',
   unknown: 'Type not yet known',
@@ -168,6 +169,8 @@ class OverviewView extends HTMLElement implements ViewElement {
     { row: HTMLElement; value: HTMLElement }
   >()
   private groupsEmpty?: HTMLElement
+  private flags?: HTMLElement
+  private flagsTitle?: HTMLElement
   private source?: HTMLElement
   private healthLine?: HTMLElement
   private healthHint?: HTMLElement
@@ -223,6 +226,8 @@ class OverviewView extends HTMLElement implements ViewElement {
       el('h2', {}, 'Vessels by type'),
       groups,
       this.groupsEmpty,
+      (this.flagsTitle = el('h2', {}, 'Vessels by flag')),
+      (this.flags = el('div', { class: 'groups flags sk-card' })),
       el('h2', {}, 'Message health'),
       this.healthLine,
       this.healthHint,
@@ -261,6 +266,38 @@ class OverviewView extends HTMLElement implements ViewElement {
       value.textContent = int(n)
     }
     this.groupsEmpty!.hidden = any || !s.vessels
+    // Flag state from the MMSI (its MID), not from any vessel database.
+    const flags = s.vessels?.byFlag ?? []
+    this.flags!.replaceChildren(
+      ...(flags.length
+        ? [
+            el(
+              'div',
+              { class: 'group-row flag-head muted small' },
+              el('span', {}, 'Flag'),
+              el('span', { class: 'num' }, 'Class A'),
+              el('span', { class: 'num' }, 'Class B'),
+              el('span', { class: 'num' }, 'Vessels'),
+            ),
+          ]
+        : []),
+      ...flags.map((f) =>
+        el(
+          'div',
+          { class: 'group-row' },
+          el(
+            'span',
+            {},
+            f.code === 'unknown' ? f.name : `${f.name} (${f.code})`,
+          ),
+          el('span', { class: 'num muted' }, int(f.classA)),
+          el('span', { class: 'num muted' }, int(f.classB)),
+          el('span', { class: 'num' }, int(f.total)),
+        ),
+      ),
+    )
+    this.flags!.hidden = flags.length === 0
+    this.flagsTitle!.hidden = flags.length === 0
     ;(this.querySelector('.groups') as HTMLElement).hidden = !any
     const h = s.health
     this.healthLine!.textContent =

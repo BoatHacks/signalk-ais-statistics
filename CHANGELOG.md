@@ -6,6 +6,21 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Vessels by flag state on the overview: unique vessels per country, by
+  class, from the MID of their MMSI (ITU-R M.585), for the 1 hour and
+  24 hour windows. `/summary` returns them as `vessels.byFlag`.
+
+### Changed
+
+- Sailing vessels (AIS ship type 36) are a type group of their own,
+  `sailing`, apart from pleasure craft (37). ITU-R M.1371 defines 36 as
+  sailing and 37 as pleasure craft, so sailing yachts belong in 36 and
+  motor pleasure craft in 37. This adds the paths
+  `vessels.byGroup.sailing.last1h` and `.last24h`; history recorded
+  before this change has sailing vessels in `pleasureCraft`.
+
 ## [0.7.0] - 2026-11-02
 
 ### Changed
