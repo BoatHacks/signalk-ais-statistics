@@ -113,6 +113,33 @@ describe('Aggregator', () => {
     expect(agg.uniqueVessels(now + DAY_MS + 1, DAY_MS).total).toBe(0)
   })
 
+  it('counts sailing vessels apart from other pleasure craft', () => {
+    const agg = new Aggregator(T0)
+    agg.add({ type: 24, mmsi: '999000001', shipType: 36 }, OWN, T0)
+    agg.add({ type: 24, mmsi: '999000002', shipType: 37 }, OWN, T0)
+    const v = agg.uniqueVessels(T0, HOUR_MS)
+    expect(v.byGroup.sailing).toBe(1)
+    expect(v.byGroup.pleasureCraft).toBe(1)
+  })
+
+  it('counts unique vessels by flag state from the MID, by class', () => {
+    const agg = new Aggregator(T0)
+    // Synthetic MMSIs: 261 Poland, 224 and 225 Spain, 98 + MID for craft
+    // associated with a parent ship, 999 has no country.
+    agg.add(at('261000001', 0, 5), OWN, T0)
+    agg.add({ type: 18, mmsi: '224000001', lat: 0, lon: 0.1 }, OWN, T0)
+    agg.add({ type: 1, mmsi: '225000001', lat: 0, lon: 0.1 }, OWN, T0)
+    agg.add({ type: 18, mmsi: '982610001', lat: 0, lon: 0.1 }, OWN, T0)
+    agg.add(at('999000001', 0, 5), OWN, T0)
+    const flags = agg.uniqueVessels(T0, HOUR_MS).byFlag
+    expect(flags.map((f) => [f.code, f.total, f.classA, f.classB])).toEqual([
+      ['PL', 2, 1, 1],
+      ['ES', 2, 1, 1],
+      ['unknown', 1, 1, 0],
+    ])
+    expect(flags[1]?.name).toBe('Spain')
+  })
+
   it('learns the type group after the first position', () => {
     const agg = new Aggregator(T0)
     agg.add(at('999000001', 0, 5), OWN, T0)

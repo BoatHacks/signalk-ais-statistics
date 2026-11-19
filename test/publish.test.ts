@@ -18,8 +18,8 @@ describe('buildValues', () => {
     expect(byPath.has(paths.distanceP99)).toBe(false)
     expect(byPath.has(paths.coverageCellsToday)).toBe(false)
     expect(byPath.get(paths.healthDuplicatesCrossEvent)).toBe(0)
-    // 4 counters + 32 bins + 7 health + 48 sectors + 2 + 14 vessel gauges
-    expect(values).toHaveLength(4 + 32 + 7 + 48 + 2 + 14)
+    // 4 counters + 32 bins + 7 health + 48 sectors + 2 + 16 vessel gauges
+    expect(values).toHaveLength(4 + 32 + 7 + 48 + 2 + 16)
   })
 
   it('leaves the sector paths out when asked', () => {
@@ -27,7 +27,7 @@ describe('buildValues', () => {
       sectors: false,
     })
     expect(values.some((v) => v.path.includes('.sectors.'))).toBe(false)
-    expect(values).toHaveLength(4 + 32 + 7 + 2 + 14)
+    expect(values).toHaveLength(4 + 32 + 7 + 2 + 16)
   })
 
   it('publishes the farthest reception per sector with the sector paths', () => {
