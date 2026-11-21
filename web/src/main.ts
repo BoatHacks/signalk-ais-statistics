@@ -227,7 +227,7 @@ class OverviewView extends HTMLElement implements ViewElement {
       groups,
       this.groupsEmpty,
       (this.flagsTitle = el('h2', {}, 'Vessels by flag')),
-      (this.flags = el('div', { class: 'groups flags sk-card' })),
+      (this.flags = el('div', { class: 'flags sk-card' })),
       el('h2', {}, 'Message health'),
       this.healthLine,
       this.healthHint,
@@ -273,7 +273,7 @@ class OverviewView extends HTMLElement implements ViewElement {
         ? [
             el(
               'div',
-              { class: 'group-row flag-head muted small' },
+              { class: 'flag-row flag-head muted small' },
               el('span', {}, 'Flag'),
               el('span', { class: 'num' }, 'Class A'),
               el('span', { class: 'num' }, 'Class B'),
@@ -284,7 +284,7 @@ class OverviewView extends HTMLElement implements ViewElement {
       ...flags.map((f) =>
         el(
           'div',
-          { class: 'group-row' },
+          { class: 'flag-row' },
           el(
             'span',
             {},
