@@ -31,3 +31,18 @@ describe('flagOf', () => {
     expect(flagOf('002610001')).toBe('unknown')
   })
 })
+
+describe('COUNTRY_NAMES', () => {
+  it.each([
+    ['KR', 'South Korea'],
+    ['KP', 'North Korea'],
+    ['GF', 'French Guiana'],
+    ['US', 'United States'],
+    ['CI', "Côte d'Ivoire"],
+    ['TR', 'Türkiye'],
+    ['CW', 'Antilles'],
+    ['CZ', 'Czech Republic'],
+  ])('names %s %s', (code, name) => {
+    expect(COUNTRY_NAMES[code]).toBe(name)
+  })
+})
