@@ -35,7 +35,7 @@ describe('typeGroup', () => {
   it.each([
     [undefined, 'unknown'],
     [30, 'fishing'],
-    [36, 'pleasureCraft'],
+    [36, 'sailing'],
     [37, 'pleasureCraft'],
     [60, 'passenger'],
     [69, 'passenger'],

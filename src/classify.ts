@@ -33,7 +33,8 @@ export function isVesselMessage(messageType: number): boolean {
 export function typeGroup(shipType: number | undefined): TypeGroup {
   if (shipType === undefined) return 'unknown'
   if (shipType === 30) return 'fishing'
-  if (shipType === 36 || shipType === 37) return 'pleasureCraft'
+  if (shipType === 36) return 'sailing'
+  if (shipType === 37) return 'pleasureCraft'
   if (shipType >= 60 && shipType <= 69) return 'passenger'
   if (shipType >= 70 && shipType <= 79) return 'cargo'
   if (shipType >= 80 && shipType <= 89) return 'tanker'

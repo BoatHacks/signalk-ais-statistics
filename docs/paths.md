@@ -119,11 +119,11 @@ is everything received.
   letters and digits replaced by `_`, for example `nmea0183` or
   `N2KAnalyzerOut`. Two events that map to the same label get `_2`, `_3`
   in the order they are configured.
-- `<group>`: `cargo`, `tanker`, `passenger`, `fishing`, `pleasureCraft`,
-  `other` or `unknown`, from the AIS ship type.
+- `<group>`: `cargo`, `tanker`, `passenger`, `fishing`, `sailing`,
+  `pleasureCraft`, `other` or `unknown`, from the AIS ship type.
 
 That makes 32 bin paths, 48 paths each for sector counts, p99 and maximum,
-and 14 per type group paths, plus 43 per server event with
+and 16 per type group paths, plus 43 per server event with
 `sourceStatistics` on.
 
 ## History provider setup

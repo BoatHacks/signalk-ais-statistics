@@ -720,3 +720,16 @@ table.compare th[scope='row'] {
 .compare-source[hidden] {
   display: none;
 }
+
+/* Vessels by flag: name, class A, class B, total. */
+.flags .group-row {
+  display: grid;
+  grid-template-columns: 1fr 5rem 5rem 5rem;
+  gap: 0.5rem;
+}
+.flags {
+  max-width: 560px;
+}
+.flags .num {
+  text-align: right;
+}

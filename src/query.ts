@@ -14,6 +14,7 @@ import {
   sectorP99,
   type Aggregator,
   type Bucket,
+  type FlagCount,
 } from './aggregate'
 import { sectorOf } from './geo'
 import { increments, type Aggregate, type HistoryReader } from './history'
@@ -158,7 +159,12 @@ export interface Summary {
    * Unique vessels; null for windows over 24 hours, which are not
    * additive, and for ranges, which do not end at the live vessel list.
    */
-  vessels: { total: number; byGroup: Record<TypeGroup, number> } | null
+  vessels: {
+    total: number
+    byGroup: Record<TypeGroup, number>
+    /** Unique vessels by flag state from the MMSI, most first. */
+    byFlag: FlagCount[]
+  } | null
   distance: DistanceFigures
   health: HealthFigures
   /** Set when history failed and the figures fell back to live data. */

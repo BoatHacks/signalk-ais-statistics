@@ -57,8 +57,8 @@ service.
   statistics are aggregated into.
 - **Sector**: a 15 degree wedge of bearing from own position, numbered
   clockwise from true north (24 sectors).
-- **Type group**: one of cargo, tanker, passenger, fishing, pleasure craft,
-  other, derived from the AIS ship type code.
+- **Type group**: one of cargo, tanker, passenger, fishing, sailing,
+  pleasure craft, other, derived from the AIS ship type code.
 - **Cell**: an H3 hexagon used to express coverage.
 
 ## 2. Domain Rules
@@ -67,9 +67,17 @@ service.
 
 - Class is derived from the message type, not from a vessel database.
 - Type group is derived from the AIS ship type code (message 5/24), using the
-  standard ranges: 30 fishing, 36/37 pleasure craft, 60-69 passenger,
-  70-79 cargo, 80-89 tanker, everything else other. Targets whose type is
-  not yet known are counted as "unknown" for that bucket.
+  standard ranges: 30 fishing, 36 sailing, 37 pleasure craft, 60-69
+  passenger, 70-79 cargo, 80-89 tanker, everything else other. ITU-R
+  M.1371 defines 36 as sailing and 37 as pleasure craft, so sailing yachts
+  belong in 36 and motor pleasure craft in 37; keeping them apart shows
+  how many of the pleasure craft heard are under sail. Targets whose type
+  is not yet known are counted as "unknown" for that bucket.
+- Flag state is derived from the MMSI, not from a vessel database: the
+  Maritime Identification Digits (MID) of a ship station (first three
+  digits, first digit 2 to 7) or of craft associated with a parent ship
+  (`98MIDxxxx`), mapped to an ISO 3166-1 alpha-2 code with the ITU MID
+  list. Other MMSIs, and MIDs not in the list, count as unknown.
 - A target counts once per bucket in "vessels", however many messages it
   sent. Vessels are the senders of class A and class B messages; base
   stations, aids to navigation and SAR aircraft are not counted as vessels.
@@ -415,7 +423,7 @@ effective live settings.
 
 | Route | Returns |
 |---|---|
-| `GET /summary?window=24h` or `?from=&to=`, and `&source=` | headline figures (of one source with `source=<label>`, 5): messages, positions, vessels by group, distance avg, p95, p99 and max, and `health`: the health counts (2.8) and `received`, their denominator |
+| `GET /summary?window=24h` or `?from=&to=`, and `&source=` | headline figures (of one source with `source=<label>`, 5): messages, positions, vessels by group and by flag state (2.1, live windows of up to 24 hours), distance avg, p95, p99 and max, and `health`: the health counts (2.8) and `received`, their denominator |
 | `GET /series?metric=&resolution=&from=&to=` | time series for the charts, read from history; `metric` is `messages`, `positions`, `distance`, `vessels` or `health` (each health counter and `received` per bucket), `resolution` in seconds (at least 60, at most 2000 points) |
 | `GET /weather?from=&to=` | the configured weather paths (9) read back from history as hourly averages (`aggregate` says `average`, or `last` for a provider that rejects it), buckets starting on the full hour, at most 7 days; only paths with data; `available` is false without a provider and `historyError` is set when the read fails, with no live fallback |
 | `GET /sectors?window=24h&class=a\|b\|all` or `?from=&to=&class=` | 24 sectors with count and p99 distance (the highest hourly p99 in the window, see 2.6), and the farthest reception `maxM` with its time: `maxAt` when known exactly, otherwise `maxHour`, the start of the hour it fell in |

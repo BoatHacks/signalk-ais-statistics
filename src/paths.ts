@@ -18,6 +18,7 @@ export const TYPE_GROUPS = [
   'tanker',
   'passenger',
   'fishing',
+  'sailing',
   'pleasureCraft',
   'other',
   'unknown',

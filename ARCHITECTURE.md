@@ -407,6 +407,7 @@ src/
   n2k.ts              NMEA 2000 AIS PGN field mapping
   n2k-lookups.ts      canboat lookup names to AIS codes
   classify.ts         class and type group
+  mid.ts              flag state from the MMSI (ITU MID list)
   ownposition.ts      own position and staleness
   mode.ts             own vessel mode, stationary or underway
   aggregate.ts        counters, buckets, sectors, vessel registry
