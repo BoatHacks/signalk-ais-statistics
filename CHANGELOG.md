@@ -8,7 +8,7 @@ uses [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- A setting, `skipImplausibleJumps` (on by default), leaves positions the
+- A setting, `skipImplausibleJumps` (off by default), leaves positions the
   jump tracker counts as implausible jumps out of distance, sectors,
   coverage, the long-range log and propagation alerts. They still count
   as messages and positions (#44).

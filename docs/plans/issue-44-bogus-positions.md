@@ -28,7 +28,7 @@ counts). ARCHITECTURE 2.4 (aggregator) and 2.4a (health).
   for distance anyway. A longitude of exactly 0 alone is a real place
   (the Greenwich meridian runs through busy waters) and is not judged.
 - **Implausible jumps (option 3).** A setting, `skipImplausibleJumps`
-  (default on), in the message health group of the config form. When on,
+  (default off, chosen by the maintainer), in the message health group of the config form. When on,
   a position report whose health verdict is an implausible jump still
   counts as a message and a position, but the aggregator does not use it
   for distance, so it reaches neither the histogram, the sectors, the

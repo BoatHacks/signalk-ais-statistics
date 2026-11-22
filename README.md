@@ -168,7 +168,7 @@ order. The defaults are meant to fit a typical cruising boat.
 | `jumpSpeedLimitKnots` | 60 | A position implying a faster speed counts as an implausible jump |
 | `jumpSpeedLimitHighSpeedKnots` | 120 | The same for high-speed craft and wing in ground craft |
 | `jumpSpeedLimitAircraftKnots` | 600 | The same for SAR aircraft |
-| `skipImplausibleJumps` | on | Leave implausible jumps out of distance, coverage and the long-range log; they still count as messages and positions |
+| `skipImplausibleJumps` | off | Leave implausible jumps out of distance, coverage and the long-range log; they still count as messages and positions |
 | **Range vs weather** | | |
 | `weatherPaths` | outside pressure, temperature and humidity, water temperature | Up to 8 numeric paths of your vessel to chart against range. An empty list hides the section |
 | **Propagation alerts** | | |

@@ -112,8 +112,8 @@ propagation detector skip three kinds of report:
   judged. These count as invalid positions (2.8) like out-of-range ones,
   and the jump tracker does not see them. A longitude of exactly 0 is not
   judged: the Greenwich meridian runs through busy waters.
-- **Implausible jumps**, while `skipImplausibleJumps` is on (the default,
-  9): a report the jump tracker (2.8) judges above the sender's speed
+- **Implausible jumps**, while `skipImplausibleJumps` is on (off by
+  default, 9): a report the jump tracker (2.8) judges above the sender's speed
   limit. One bogus position is two jumps, out and back, so the real report
   after it is left out too, one good sample per glitch. A sender's first
   position has no anchor and is never a jump; the latitude 0 rule above
@@ -834,7 +834,7 @@ same order, which a test checks. The defaults were reviewed for 1.0.0 on
 | `jumpSpeedLimitKnots` | 60 | implied speed above which a position counts as an implausible jump (2.8) |
 | `jumpSpeedLimitHighSpeedKnots` | 120 | the same for ship types 20 to 29 (WIG) and 40 to 49 (high-speed craft) |
 | `jumpSpeedLimitAircraftKnots` | 600 | the same for message 9 (SAR aircraft) |
-| `skipImplausibleJumps` | true | leave implausible jumps out of distance, sectors, coverage, the long-range log and propagation alerts (2.3); they still count as messages and positions (chosen by the maintainer, #44) |
+| `skipImplausibleJumps` | false | leave implausible jumps out of distance, sectors, coverage, the long-range log and propagation alerts (2.3); they still count as messages and positions (chosen by the maintainer, #44) |
 | `modeDriftRadiusMeters` | 200 | without a recognised `navigation.state`, stationary while the own position stays within this distance (2.9); 50 to 2000 |
 | `modeDriftMinutes` | 10 | for this long; 2 to 60 |
 | `propagationAlerts` | false | raise the propagation alert (2.10) and publish `propagation.ratio` (chosen by the maintainer) |

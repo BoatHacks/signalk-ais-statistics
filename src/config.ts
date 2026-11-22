@@ -53,7 +53,7 @@ export const DEFAULT_CONFIG: Config = {
   jumpSpeedLimitKnots: 60,
   jumpSpeedLimitHighSpeedKnots: 120,
   jumpSpeedLimitAircraftKnots: 600,
-  skipImplausibleJumps: true,
+  skipImplausibleJumps: false,
   weatherPaths: [
     'environment.outside.pressure',
     'environment.outside.temperature',
