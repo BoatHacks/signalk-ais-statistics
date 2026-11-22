@@ -15,6 +15,7 @@ export interface Config {
   jumpSpeedLimitKnots: number
   jumpSpeedLimitHighSpeedKnots: number
   jumpSpeedLimitAircraftKnots: number
+  skipImplausibleJumps: boolean
   weatherPaths: string[]
   modeDriftRadiusMeters: number
   modeDriftMinutes: number
@@ -52,6 +53,7 @@ export const DEFAULT_CONFIG: Config = {
   jumpSpeedLimitKnots: 60,
   jumpSpeedLimitHighSpeedKnots: 120,
   jumpSpeedLimitAircraftKnots: 600,
+  skipImplausibleJumps: false,
   weatherPaths: [
     'environment.outside.pressure',
     'environment.outside.temperature',
@@ -183,7 +185,7 @@ export const configSchema = {
       type: 'number',
       title: 'Implausible jump speed (knots)',
       description:
-        'A position that implies a faster speed from the previous one counts as an implausible jump in the message health figures. Nothing is dropped.',
+        'A position that implies a faster speed from the previous one counts as an implausible jump in the message health figures.',
       default: DEFAULT_CONFIG.jumpSpeedLimitKnots,
       minimum: 10,
     },
@@ -201,6 +203,13 @@ export const configSchema = {
       description: 'The same for SAR aircraft (message 9).',
       default: DEFAULT_CONFIG.jumpSpeedLimitAircraftKnots,
       minimum: 10,
+    },
+    skipImplausibleJumps: {
+      type: 'boolean',
+      title: 'Leave implausible jumps out of distance and the long-range log',
+      description:
+        "A position counted as an implausible jump still counts as a message and a position, but not toward distance, sectors, coverage, the long-range log or propagation alerts. One bogus position is two jumps, out and back, so the real position after it is left out too. A vessel's first position is never a jump.",
+      default: DEFAULT_CONFIG.skipImplausibleJumps,
     },
     weatherPaths: {
       type: 'array',
@@ -320,6 +329,7 @@ export const CONFIG_ORDER: (keyof Config)[] = [
   'jumpSpeedLimitKnots',
   'jumpSpeedLimitHighSpeedKnots',
   'jumpSpeedLimitAircraftKnots',
+  'skipImplausibleJumps',
   'weatherPaths',
   'propagationAlerts',
   'propagationFactor',
@@ -434,6 +444,10 @@ export function resolveConfig(options: unknown): Config {
           (o.propagationNotificationMethods as unknown[]).includes(m),
         )
       : [...d.propagationNotificationMethods],
+    skipImplausibleJumps:
+      typeof o.skipImplausibleJumps === 'boolean'
+        ? o.skipImplausibleJumps
+        : d.skipImplausibleJumps,
     propagationSuppressUnderway:
       typeof o.propagationSuppressUnderway === 'boolean'
         ? o.propagationSuppressUnderway

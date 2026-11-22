@@ -96,13 +96,30 @@ service.
 
 ### 2.3 Bogus positions
 
-No position report is dropped or flagged. Every report with a valid
-latitude and longitude counts toward every statistic, so the numbers always
-reflect everything the receiver decoded. Reports with latitude or longitude
-out of range cannot be used for distance and are skipped for distance only.
-The message health counters (2.8) count such reports and implausible
-position jumps, but only count: nothing they find is removed from any
-other statistic.
+Every position report counts toward the message and position counts and
+the vessel counts, so these always reflect everything the receiver
+decoded. Distance, sectors, coverage, the long-range log and the
+propagation detector skip three kinds of report:
+
+- **Out of range**: latitude or longitude out of range or "not available"
+  (91, 181). These cannot be used for distance.
+- **Latitude 0 far from the equator**: a latitude of exactly 0 while the
+  own position is at least 5 degrees (about 300 nm) from the equator. On
+  one NMEA 2000 install, ordinary local vessels each sent a single such
+  position a few seconds before their next real one (#44). A receiver
+  that far away cannot hear a real position on the equator, and one
+  nearer keeps them. Without a known own position the report is not
+  judged. These count as invalid positions (2.8) like out-of-range ones,
+  and the jump tracker does not see them. A longitude of exactly 0 is not
+  judged: the Greenwich meridian runs through busy waters.
+- **Implausible jumps**, while `skipImplausibleJumps` is on (off by
+  default, 9): a report the jump tracker (2.8) judges above the sender's speed
+  limit. One bogus position is two jumps, out and back, so the real report
+  after it is left out too, one good sample per glitch. A sender's first
+  position has no anchor and is never a jump; the latitude 0 rule above
+  catches that case for the most common glitch.
+
+The message health counters (2.8) count all three.
 
 Distance statistics are made robust by reporting percentiles instead of
 trusting the maximum:
@@ -186,8 +203,9 @@ The same daily file keeps the fastest senders of the day (2.8).
 ### 2.8 Message health
 
 What the receiver decodes is judged as well as counted. Each finding is a
-cumulative counter (6.2), and none removes a message from any other
-statistic (2.3):
+cumulative counter (6.2). Invalid positions, and implausible jumps while
+`skipImplausibleJumps` is on, are left out of distance and what is built
+on it (2.3); nothing removes a message from the counts:
 
 - **Decode errors and incomplete messages**: sentences or PGNs that could
   not be decoded, and multipart messages dropped because a part never
@@ -202,7 +220,7 @@ statistic (2.3):
   cross-event duplicates (the same message on two configured events, the
   likely cause being one receiver reaching both).
 - **Invalid positions**: position reports whose position was out of range
-  or "not available" (91, 181).
+  or "not available" (91, 181), or a latitude 0 glitch (2.3).
 - **No own position**: position reports with a usable position received
   while the own position was unknown or stale (2.2), which explains a gap
   in the distance figures.
@@ -816,6 +834,7 @@ same order, which a test checks. The defaults were reviewed for 1.0.0 on
 | `jumpSpeedLimitKnots` | 60 | implied speed above which a position counts as an implausible jump (2.8) |
 | `jumpSpeedLimitHighSpeedKnots` | 120 | the same for ship types 20 to 29 (WIG) and 40 to 49 (high-speed craft) |
 | `jumpSpeedLimitAircraftKnots` | 600 | the same for message 9 (SAR aircraft) |
+| `skipImplausibleJumps` | false | leave implausible jumps out of distance, sectors, coverage, the long-range log and propagation alerts (2.3); they still count as messages and positions (chosen by the maintainer, #44) |
 | `modeDriftRadiusMeters` | 200 | without a recognised `navigation.state`, stationary while the own position stays within this distance (2.9); 50 to 2000 |
 | `modeDriftMinutes` | 10 | for this long; 2 to 60 |
 | `propagationAlerts` | false | raise the propagation alert (2.10) and publish `propagation.ratio` (chosen by the maintainer) |
@@ -870,10 +889,9 @@ plotter overlay always uses the saved coverage cap.
 - Availability, gaps and last-signal age: not in the MVP; the definition
   needs care (see 1.2) and the data needed for it (gap tracking with an
   injectable clock) is separable.
-- Optional rejection of bogus positions (range cap, speed filter): not
-  needed while percentiles carry the distance figures and coverage has its
-  own percentile cap. The implausible jump counter (2.8) counts what a
-  speed filter would catch without dropping anything.
+- A range cap for bogus positions: not needed while percentiles carry the
+  distance figures, coverage has its own percentile cap, and implausible
+  jumps and latitude 0 glitches are left out of distance (2.3).
 - Per-MMSI history. The long-range log (2.7) covers the "best catches".
 
 ## 11. References
@@ -991,9 +1009,14 @@ help of `max` (6.2). Verified across a plugin restart on the test server.
   own route, so a plotter user shows either or both. The combined
   `/overlay/coverage.geojson` route is gone rather than kept as an alias.
 
-- **Message health only counts (chosen by the maintainer).** Duplicates,
-  implausible jumps and invalid positions are counters (2.8), and nothing
-  is dropped (2.3). The duplicate key is MMSI, type and near-identical
+- **Message health counts, and bogus positions stay out of distance
+  (chosen by the maintainer, #44).** Duplicates, implausible jumps and
+  invalid positions are counters (2.8). Latitude 0 far from the equator
+  is an invalid position, and implausible jumps are left out of distance
+  and the long-range log while `skipImplausibleJumps` is on (2.3): on a
+  test install they made the maximum and the long-range log mostly noise,
+  and the jump tracker catches other mangled positions too. Counts never
+  lose a message. The duplicate key is MMSI, type and near-identical
   position within a fixed 2 s, so it works across both decoders; a payload
   hash was rejected because NMEA 0183 and NMEA 2000 copies differ in form.
   The jump limits allow for SAR aircraft and high-speed and WIG craft. The

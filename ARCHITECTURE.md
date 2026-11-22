@@ -87,7 +87,10 @@ position, for Coverage and the long-range log. Every count, including
 the message health counters (SPEC 2.8), lives in the totals and in each
 bucket, so live-only windows have health figures too. The aggregator
 counts invalid positions and reports without own position itself; the
-other health kinds come in through `countHealth`. Pure and
+other health kinds come in through `countHealth`. The plugin takes the
+position away from a latitude 0 glitch before the health check, and passes
+`forDistance` false for an implausible jump while `skipImplausibleJumps`
+is on, so the report counts but is not located (SPEC 2.3). Pure and
 clock-injectable: every call takes the reception time.
 
 ### 2.4a Health

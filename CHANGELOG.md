@@ -8,12 +8,21 @@ uses [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- A setting, `skipImplausibleJumps` (off by default), leaves positions the
+  jump tracker counts as implausible jumps out of distance, sectors,
+  coverage, the long-range log and propagation alerts. They still count
+  as messages and positions (#44).
 - Vessels by flag state on the overview: unique vessels per country, by
   class, from the MID of their MMSI (ITU-R M.585), for the 1 hour and
   24 hour windows. `/summary` returns them as `vessels.byFlag`.
 
 ### Changed
 
+- A position with latitude exactly 0, heard while the own position is at
+  least 5 degrees from the equator, counts as an invalid position and is
+  skipped for distance, like an out-of-range one. On one NMEA 2000 install
+  such glitches made the hourly maximum and the long-range log mostly
+  noise (#44).
 - Sailing vessels (AIS ship type 36) are a type group of their own,
   `sailing`, apart from pleasure craft (37). ITU-R M.1371 defines 36 as
   sailing and 37 as pleasure craft, so sailing yachts belong in 36 and

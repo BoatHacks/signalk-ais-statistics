@@ -276,6 +276,100 @@ describe('plugin', () => {
     await plugin.stop()
   })
 
+  describe('bogus positions (#44)', () => {
+    // An own position well away from the equator, so latitude 0 is a glitch.
+    const NORTH = { lat: 40, lon: -30 }
+
+    async function started(options: Record<string, unknown> = {}) {
+      const f = fakeApp(await mkdtemp(join(tmpdir(), 'ais-plugin-')))
+      const plugin = createPlugin(f.app as never)
+      const r = fakeRouter()
+      plugin.registerWithRouter!(r.router as never)
+      await plugin.start(options, () => undefined)
+      f.position(NORTH.lat, NORTH.lon)
+      return { f, plugin, r }
+    }
+
+    function sendAt(
+      f: Awaited<ReturnType<typeof started>>['f'],
+      mmsi: number,
+      nm: number,
+    ) {
+      const p = destination(NORTH, 90, nm)
+      f.app.emit('nmea0183', classA(mmsi, p.lat, p.lon))
+    }
+
+    async function published(f: Awaited<ReturnType<typeof started>>['f']) {
+      await vi.advanceTimersByTimeAsync(5 * 60_000)
+      return new Map(
+        f.deltas[0]!.delta.updates[0]!.values.map((v) => [v.path, v.value]),
+      )
+    }
+
+    async function longRange(r: ReturnType<typeof fakeRouter>) {
+      return (await r.call('/longrange', { window: '24h' })).body as {
+        entries: { mmsi: string; distanceM: number }[]
+        implausibleJumps: { mmsi: string }[]
+      }
+    }
+
+    it('counts latitude 0 as an invalid position and not as a jump', async () => {
+      const { f, plugin, r } = await started()
+      sendAt(f, 999000011, 10)
+      vi.advanceTimersByTime(10_000)
+      const p = destination(NORTH, 90, 10)
+      f.app.emit('nmea0183', classA(999000011, 0, p.lon))
+      vi.advanceTimersByTime(10_000)
+      sendAt(f, 999000011, 10.01)
+      const values = await published(f)
+      expect(values.get(paths.messagesTotal)).toBe(3)
+      expect(values.get(paths.positionsClassA)).toBe(3)
+      expect(values.get(paths.healthPositionInvalid)).toBe(1)
+      expect(values.get(paths.healthImplausibleJumps)).toBe(0)
+      expect(values.get(paths.distanceMax)).toBeCloseTo(10.01 * 1852, -1)
+      const lr = await longRange(r)
+      expect(lr.implausibleJumps).toEqual([])
+      expect(lr.entries.map((e) => e.mmsi)).toEqual(['999000011'])
+      expect(lr.entries[0]!.distanceM).toBeLessThan(20 * 1852)
+      await plugin.stop()
+    })
+
+    it('leaves implausible jumps out of distance and the long-range log', async () => {
+      const { f, plugin, r } = await started({ skipImplausibleJumps: true })
+      sendAt(f, 999000012, 10)
+      vi.advanceTimersByTime(10_000)
+      sendAt(f, 999000012, 2000)
+      vi.advanceTimersByTime(10_000)
+      sendAt(f, 999000012, 10.01)
+      const values = await published(f)
+      expect(values.get(paths.messagesTotal)).toBe(3)
+      expect(values.get(paths.positionsClassA)).toBe(3)
+      // Out and back: two jumps, and the real report after the glitch is
+      // left out too.
+      expect(values.get(paths.healthImplausibleJumps)).toBe(2)
+      expect(values.get(paths.healthPositionInvalid)).toBe(0)
+      expect(values.get(paths.distanceMax)).toBeCloseTo(10 * 1852, -1)
+      const lr = await longRange(r)
+      expect(lr.entries).toHaveLength(1)
+      expect(lr.entries[0]!.distanceM).toBeLessThan(20 * 1852)
+      expect(lr.implausibleJumps.map((e) => e.mmsi)).toEqual(['999000012'])
+      await plugin.stop()
+    })
+
+    it('keeps implausible jumps in distance with the setting off, the default', async () => {
+      const { f, plugin, r } = await started()
+      sendAt(f, 999000013, 10)
+      vi.advanceTimersByTime(10_000)
+      sendAt(f, 999000013, 2000)
+      const values = await published(f)
+      expect(values.get(paths.healthImplausibleJumps)).toBe(1)
+      expect(values.get(paths.distanceMax)).toBeCloseTo(2000 * 1852, -3)
+      const lr = await longRange(r)
+      expect(lr.entries[0]!.distanceM).toBeCloseTo(2000 * 1852, -3)
+      await plugin.stop()
+    })
+  })
+
   it('listens only on the configured sentence events', async () => {
     const f = fakeApp(await mkdtemp(join(tmpdir(), 'ais-plugin-')))
     const plugin = createPlugin(f.app as never)

@@ -46,8 +46,9 @@ The roadmap is [docs/plans/mvp-roadmap.md](docs/plans/mvp-roadmap.md).
   the README status in the same change that alters what they describe.
   Resolved items leave SPEC section 13 and move into the relevant section.
 - **Design constraints that are easy to break:**
-  - Nothing is filtered or dropped in the aggregator; only coverage has a
-    percentile cap (SPEC 2.3, 2.4).
+  - Every message counts. Only invalid positions, latitude 0 glitches and
+    (with `skipImplausibleJumps`) implausible jumps are left out of
+    distance, and coverage has a percentile cap (SPEC 2.3, 2.4).
   - Published values are numeric only. Counts are cumulative counters because
     the History API has no `sum` or `count` aggregate (SPEC 4.1, 8).
   - The plugin reads history only through the History API and uses only the

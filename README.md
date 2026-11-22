@@ -42,7 +42,8 @@ listed in the [CHANGELOG](CHANGELOG.md).
   for a moving boat, kept apart for stationary and underway.
 - **Message health**: undecodable, incomplete and duplicate messages,
   invalid positions, implausible position jumps and the class A/B mix.
-  Nothing is dropped; these only count.
+  Implausible jumps are left out of distance and the long-range log
+  (a setting); every message still counts.
 - **Propagation alerts** (off by default): a SignalK notification while
   your range is well above normal.
 - **Range vs weather**: hourly range against pressure, temperatures or
@@ -167,6 +168,7 @@ order. The defaults are meant to fit a typical cruising boat.
 | `jumpSpeedLimitKnots` | 60 | A position implying a faster speed counts as an implausible jump |
 | `jumpSpeedLimitHighSpeedKnots` | 120 | The same for high-speed craft and wing in ground craft |
 | `jumpSpeedLimitAircraftKnots` | 600 | The same for SAR aircraft |
+| `skipImplausibleJumps` | off | Leave implausible jumps out of distance, coverage and the long-range log; they still count as messages and positions |
 | **Range vs weather** | | |
 | `weatherPaths` | outside pressure, temperature and humidity, water temperature | Up to 8 numeric paths of your vessel to chart against range. An empty list hides the section |
 | **Propagation alerts** | | |
