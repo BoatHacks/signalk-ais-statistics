@@ -206,15 +206,15 @@ describe('propagation alert options', () => {
     expect(LIVE_SETTINGS).not.toContain('propagationWindowMinutes')
   })
 
-  it('leaves implausible jumps out of distance by default', () => {
-    expect(DEFAULT_CONFIG.skipImplausibleJumps).toBe(true)
-    expect(resolveConfig({}).skipImplausibleJumps).toBe(true)
+  it('keeps implausible jumps in distance by default', () => {
+    expect(DEFAULT_CONFIG.skipImplausibleJumps).toBe(false)
+    expect(resolveConfig({}).skipImplausibleJumps).toBe(false)
     expect(
-      resolveConfig({ skipImplausibleJumps: false }).skipImplausibleJumps,
-    ).toBe(false)
-    expect(
-      resolveConfig({ skipImplausibleJumps: 'no' }).skipImplausibleJumps,
+      resolveConfig({ skipImplausibleJumps: true }).skipImplausibleJumps,
     ).toBe(true)
+    expect(
+      resolveConfig({ skipImplausibleJumps: 'yes' }).skipImplausibleJumps,
+    ).toBe(false)
   })
 
   it('places the jump setting in the message health group', () => {

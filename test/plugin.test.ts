@@ -335,7 +335,7 @@ describe('plugin', () => {
     })
 
     it('leaves implausible jumps out of distance and the long-range log', async () => {
-      const { f, plugin, r } = await started()
+      const { f, plugin, r } = await started({ skipImplausibleJumps: true })
       sendAt(f, 999000012, 10)
       vi.advanceTimersByTime(10_000)
       sendAt(f, 999000012, 2000)
@@ -356,8 +356,8 @@ describe('plugin', () => {
       await plugin.stop()
     })
 
-    it('keeps implausible jumps in distance with the setting off', async () => {
-      const { f, plugin, r } = await started({ skipImplausibleJumps: false })
+    it('keeps implausible jumps in distance with the setting off, the default', async () => {
+      const { f, plugin, r } = await started()
       sendAt(f, 999000013, 10)
       vi.advanceTimersByTime(10_000)
       sendAt(f, 999000013, 2000)
