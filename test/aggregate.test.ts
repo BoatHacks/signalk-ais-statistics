@@ -68,6 +68,19 @@ describe('Aggregator', () => {
     expect(agg.lastHour(T0).maxNm).toBeCloseTo(3000, 3)
   })
 
+  it('counts a report not for distance as a message and a position only', () => {
+    const agg = new Aggregator(T0)
+    const located = agg.add(at('999000001', 45, 300), OWN, T0, false)
+    expect(located).toBeUndefined()
+    const t = agg.totals
+    expect(t.messages).toBe(1)
+    expect(t.positions.A).toBe(1)
+    expect(t.distanceBins.reduce((a, b) => a + b)).toBe(0)
+    expect(t.sectorCounts.flat().reduce((a, b) => a + b)).toBe(0)
+    expect(agg.lastHour(T0).maxNm).toBeUndefined()
+    expect(agg.totals.health.positionInvalid).toBe(0)
+  })
+
   it('rolls minute buckets and drops them after an hour', () => {
     const agg = new Aggregator(T0)
     agg.add(at('999000001', 10, 5), OWN, T0)

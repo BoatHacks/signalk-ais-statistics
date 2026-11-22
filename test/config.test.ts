@@ -206,6 +206,22 @@ describe('propagation alert options', () => {
     expect(LIVE_SETTINGS).not.toContain('propagationWindowMinutes')
   })
 
+  it('leaves implausible jumps out of distance by default', () => {
+    expect(DEFAULT_CONFIG.skipImplausibleJumps).toBe(true)
+    expect(resolveConfig({}).skipImplausibleJumps).toBe(true)
+    expect(
+      resolveConfig({ skipImplausibleJumps: false }).skipImplausibleJumps,
+    ).toBe(false)
+    expect(
+      resolveConfig({ skipImplausibleJumps: 'no' }).skipImplausibleJumps,
+    ).toBe(true)
+  })
+
+  it('places the jump setting in the message health group', () => {
+    const at = CONFIG_ORDER.indexOf('skipImplausibleJumps')
+    expect(CONFIG_ORDER[at - 1]).toBe('jumpSpeedLimitAircraftKnots')
+  })
+
   it('orders every option in the config form exactly once', () => {
     expect([...CONFIG_ORDER].sort()).toEqual(
       Object.keys(configSchema.properties).sort(),
