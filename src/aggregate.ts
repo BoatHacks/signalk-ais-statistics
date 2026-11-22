@@ -199,12 +199,16 @@ export class Aggregator {
   /**
    * Counts one decoded message received at `time`, with the own position at
    * that time (undefined when unknown or stale). Returns the located
-   * position for coverage, when distance could be computed.
+   * position for coverage, when distance could be computed. With
+   * `forDistance` false the report counts as a message and a position but
+   * is not used for distance: an implausible jump while
+   * `skipImplausibleJumps` is on (SPEC 2.3).
    */
   add(
     msg: AisMessage,
     own: LatLon | undefined,
     time: number,
+    forDistance = true,
   ): Located | undefined {
     this.roll(time)
     this.lastMessageAt = time
@@ -223,6 +227,7 @@ export class Aggregator {
       this.bump((b) => b.health.noOwnPosition++)
       return undefined
     }
+    if (!forDistance) return undefined
 
     const target = { lat: msg.lat, lon: msg.lon }
     const d = distanceNm(own, target)

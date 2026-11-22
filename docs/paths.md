@@ -48,7 +48,7 @@ unit preferences convert them for display. A blank unit is a plain count.
 | `health.incomplete` | | counter | interval | Multipart messages dropped because a part never arrived |
 | `health.duplicates` | | counter | interval | Messages repeated on the same event within 2 s (same MMSI, type and position) |
 | `health.duplicatesCrossEvent` | | counter | interval | Messages that arrived on two configured events within 2 s: one receiver reaching both |
-| `health.positionInvalid` | | counter | interval | Position reports without a usable position (out of range or "not available") |
+| `health.positionInvalid` | | counter | interval | Position reports without a usable position (out of range, "not available", or latitude 0 far from the equator) |
 | `health.implausibleJumps` | | counter | interval | Positions implying a speed above the sender's jump limit; one bogus position counts twice (out and back) |
 | `health.noOwnPosition` | | counter | interval | Position reports received while the own position was unknown or stale |
 | `distance.avg` | m | gauge | interval | Average reception distance, last hour |

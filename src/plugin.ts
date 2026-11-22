@@ -13,13 +13,14 @@ import {
   type LiveSettings,
 } from './config'
 import { Coverage } from './coverage'
+import { zeroLatitudeGlitch } from './geo'
 import { Health, limitsFromKnots } from './health'
 import {
   connectHistory,
   nullHistoryReader,
   type HistoryReader,
 } from './history'
-import { Ingest, type IngestStats } from './ingest'
+import { Ingest, type AisMessage, type IngestStats } from './ingest'
 import { LongRangeLog, MAX_PER_DAY } from './longrange'
 import { VesselMode } from './mode'
 import { N2kIngest } from './n2k'
@@ -45,6 +46,14 @@ import {
 } from './propagation'
 import { Query } from './query'
 import { Sources } from './sources'
+
+/** The message without its position, as for an out-of-range one. */
+function withoutPosition(msg: AisMessage): AisMessage {
+  const rest = { ...msg }
+  delete rest.lat
+  delete rest.lon
+  return rest
+}
 
 export const PLUGIN_ID = 'signalk-ais-statistics'
 /**
@@ -422,7 +431,7 @@ export function createPlugin(app: ServerAPI): Plugin {
           const ingest = typeof input === 'string' ? sentences : pgns
           const errors = ingest.stats.decodeErrors
           const incomplete = ingest.stats.incompleteDropped
-          const msg =
+          const decoded =
             typeof input === 'string' ? sentences.push(input) : pgns.push(input)
           // The main figures and, when on, the event's own source.
           const src = s.sources?.event(event)?.agg
@@ -435,7 +444,13 @@ export function createPlugin(app: ServerAPI): Plugin {
           }
           count('decodeErrors', ingest.stats.decodeErrors - errors)
           count('incomplete', ingest.stats.incompleteDropped - incomplete)
-          if (!msg) return
+          if (!decoded) return
+          const own = s.own.at(time)
+          // Latitude 0 far from the equator is a decoding glitch: an invalid
+          // position, like an out-of-range one, and no anchor for jumps.
+          const msg = zeroLatitudeGlitch(decoded.lat, own)
+            ? withoutPosition(decoded)
+            : decoded
           const verdict = s.health.check(
             msg,
             event,
@@ -445,9 +460,11 @@ export function createPlugin(app: ServerAPI): Plugin {
           if (verdict.duplicate === 'sameEvent') count('duplicates')
           else if (verdict.duplicate === 'crossEvent')
             count('duplicatesCrossEvent')
-          const own = s.own.at(time)
-          src?.add(msg, own, time)
-          const located = s.agg.add(msg, own, time)
+          const forDistance = !(
+            s.config.skipImplausibleJumps && verdict.speed?.implausible
+          )
+          src?.add(msg, own, time, forDistance)
+          const located = s.agg.add(msg, own, time, forDistance)
           if (located) {
             s.coverage.add(
               located.lat,

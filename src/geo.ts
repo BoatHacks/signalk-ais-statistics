@@ -59,3 +59,23 @@ export function destination(
 
 /** Metres per nautical mile. Statistics are kept in nm and served in SI. */
 export const M_PER_NM = 1852
+
+/**
+ * Own latitude, in degrees from the equator, from which a reported latitude
+ * of exactly 0 is taken for a decoding glitch (SPEC 2.3). 5 degrees is about
+ * 300 nm, far beyond VHF range, so a receiver this far away cannot hear a
+ * real position on the equator.
+ */
+export const ZERO_LATITUDE_MIN_OWN_DEG = 5
+
+/** Whether `lat` is a latitude 0 glitch as heard from `own` (SPEC 2.3). */
+export function zeroLatitudeGlitch(
+  lat: number | undefined,
+  own: LatLon | undefined,
+): boolean {
+  return (
+    lat === 0 &&
+    own !== undefined &&
+    Math.abs(own.lat) >= ZERO_LATITUDE_MIN_OWN_DEG
+  )
+}
